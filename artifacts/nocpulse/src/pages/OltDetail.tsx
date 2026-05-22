@@ -89,22 +89,28 @@ export default function OltDetail() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg">
+        <button
+          onClick={() => navigate(`/onus?olt=${olt.id}&status=Online`)}
+          className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg text-left hover:border-green-500/40 hover:bg-green-500/5 transition-colors group"
+        >
           <div className="flex items-start justify-between">
             <p className="text-sm text-muted-foreground">Online ONUs</p>
-            <div className="p-2 rounded-lg bg-green-500/10"><Wifi className="h-4 w-4 text-green-400" /></div>
+            <div className="p-2 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors"><Wifi className="h-4 w-4 text-green-400" /></div>
           </div>
           <p className="text-3xl font-bold text-green-400">{onlineOnus.length}</p>
-          <p className="text-xs text-muted-foreground">of {connectedOnus.length} total</p>
-        </div>
-        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg">
+          <p className="text-xs text-muted-foreground group-hover:text-green-400/70 transition-colors">of {connectedOnus.length} total · click to filter</p>
+        </button>
+        <button
+          onClick={() => navigate(`/onus?olt=${olt.id}&status=Offline`)}
+          className={`rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg text-left transition-colors group ${offlineOnus.length > 0 ? 'hover:border-red-500/40 hover:bg-red-500/5' : 'hover:border-muted hover:bg-muted/5'}`}
+        >
           <div className="flex items-start justify-between">
             <p className="text-sm text-muted-foreground">Offline ONUs</p>
-            <div className="p-2 rounded-lg bg-red-500/10"><WifiOff className="h-4 w-4 text-red-400" /></div>
+            <div className="p-2 rounded-lg bg-red-500/10 group-hover:bg-red-500/20 transition-colors"><WifiOff className="h-4 w-4 text-red-400" /></div>
           </div>
           <p className={`text-3xl font-bold ${offlineOnus.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{offlineOnus.length}</p>
-          <p className="text-xs text-muted-foreground">{offlineOnus.length > 0 ? 'Require attention' : 'All nominal'}</p>
-        </div>
+          <p className="text-xs text-muted-foreground group-hover:text-red-400/70 transition-colors">{offlineOnus.length > 0 ? 'Require attention · click to filter' : 'All nominal'}</p>
+        </button>
         <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg">
           <div className="flex items-start justify-between">
             <p className="text-sm text-muted-foreground">PON Ports</p>
@@ -265,7 +271,12 @@ export default function OltDetail() {
                     <TableCell className="font-mono text-xs text-red-400">{port.offline}</TableCell>
                     <TableCell className="font-mono text-xs">{port.avgRx} dBm</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => navigate('/onus')} className="h-8 text-xs">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/onus?olt=${olt.id}&pon=PON-${port.id}`)}
+                        className="h-8 text-xs"
+                      >
                         View ONUs
                       </Button>
                     </TableCell>
@@ -276,7 +287,12 @@ export default function OltDetail() {
           </Card>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold">Connected ONUs ({connectedOnus.length})</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold">Connected ONUs ({connectedOnus.length})</h3>
+              <Button variant="ghost" size="sm" className="text-xs h-7 text-primary hover:text-primary" onClick={() => navigate(`/onus?olt=${olt.id}`)}>
+                View All <ChevronRight className="h-3 w-3 ml-1" />
+              </Button>
+            </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {connectedOnus.slice(0, 8).map(onu => (
                 <div key={onu.id} onClick={() => navigate(`/onus/${onu.id}`)} className="rounded-lg border border-border/60 bg-card/50 p-3 hover:bg-card cursor-pointer transition-colors space-y-1">

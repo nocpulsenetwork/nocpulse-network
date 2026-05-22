@@ -3,9 +3,9 @@ import { onus, olts, type SignalStability } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, WifiOff, MoreHorizontal, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { Search, WifiOff, MoreHorizontal, ChevronRight, TrendingUp, TrendingDown, Minus, X, ChevronRight as Crumb, Filter } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useLocation } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from 'sonner';
+import { ConfirmModal } from '@/components/ConfirmModal';
 
 const getRxColor = (power: number) => {
   if (power > -25) return 'text-green-500';
@@ -47,29 +48,40 @@ const getStabilityStyle = (stability: SignalStability) => {
   }
 };
 
+type ConfirmAction = { type: 'reboot' | 'disable' | 'enable'; onuId: string } | null;
+
 export default function OnuManagement() {
   const [, setLocation] = useLocation();
+
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get('status');
+  const initialOlt = searchParams.get('olt');
+  const initialPon = searchParams.get('pon');
+
+  const normalise = (raw: string | null, fallback: string) =>
+    raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : fallback;
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>(
-    initialStatus ? initialStatus.charAt(0).toUpperCase() + initialStatus.slice(1) : 'All Status'
-  );
-  const [oltFilter, setOltFilter] = useState<string>('All OLTs');
-  const [ponFilter, setPonFilter] = useState<string>('All PONs');
+  const [statusFilter, setStatusFilter] = useState<string>(normalise(initialStatus, 'All Status'));
+  const [oltFilter, setOltFilter] = useState<string>(initialOlt ?? 'All OLTs');
+  const [ponFilter, setPonFilter] = useState<string>(initialPon ?? 'All PONs');
   const [stabilityFilter, setStabilityFilter] = useState<string>('All');
 
   const [page, setPage] = useState(1);
   const [editingOnu, setEditingOnu] = useState<string | null>(null);
   const [editDesc, setEditDesc] = useState('');
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
-    if (initialStatus) {
-      setStatusFilter(initialStatus.charAt(0).toUpperCase() + initialStatus.slice(1));
-    }
-  }, [initialStatus]);
+    const sp = new URLSearchParams(window.location.search);
+    const s = sp.get('status');
+    const o = sp.get('olt');
+    const p = sp.get('pon');
+    if (s) setStatusFilter(s.charAt(0).toUpperCase() + s.slice(1));
+    if (o) setOltFilter(o);
+    if (p) setPonFilter(p);
+  }, []);
 
   const filteredOnus = useMemo(() => {
     return onus.filter(onu => {
@@ -109,19 +121,97 @@ export default function OnuManagement() {
   const paginatedOnus = filteredOnus.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
   const totalPages = Math.ceil(filteredOnus.length / ITEMS_PER_PAGE);
 
+  const activeOlt = olts.find(o => o.id === oltFilter);
+
+  const confirmOnu = onus.find(o => o.id === confirmAction?.onuId);
+
   return (
     <div className="space-y-5 pb-10">
+
+      {/* Breadcrumb */}
+      {activeOlt ? (
+        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link href="/olts" className="hover:text-foreground transition-colors">OLT Management</Link>
+          <Crumb className="h-3.5 w-3.5 shrink-0" />
+          <Link href={`/olts/${activeOlt.id}`} className="hover:text-foreground transition-colors">{activeOlt.name}</Link>
+          <Crumb className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-foreground font-medium">ONU List</span>
+          {statusFilter !== 'All Status' && (
+            <>
+              <Crumb className="h-3.5 w-3.5 shrink-0" />
+              <span className={`font-medium ${statusFilter === 'Online' ? 'text-green-400' : statusFilter === 'Offline' ? 'text-red-400' : 'text-amber-400'}`}>{statusFilter} only</span>
+            </>
+          )}
+        </nav>
+      ) : (
+        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <span>Network</span>
+          <Crumb className="h-3.5 w-3.5 shrink-0" />
+          <span className="text-foreground font-medium">ONU Management</span>
+        </nav>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">ONU Management</h1>
           <div className="text-muted-foreground flex items-center gap-2 text-sm mt-0.5">
-            Monitor and manage customer premises equipment
+            {activeOlt
+              ? <>Showing ONUs connected to <span className="text-primary font-medium">{activeOlt.name}</span></>
+              : 'Monitor and manage customer premises equipment'
+            }
             <Badge variant="secondary">Total: {filteredOnus.length} ONUs</Badge>
           </div>
         </div>
         <Button variant="outline" disabled className="opacity-50 cursor-not-allowed">Export CSV</Button>
       </div>
+
+      {/* Active filter chips */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Filter className="h-3 w-3" />
+            <span>Active filters:</span>
+          </div>
+          {oltFilter !== 'All OLTs' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+              OLT: {activeOlt?.name ?? oltFilter}
+              <button onClick={() => { setOltFilter('All OLTs'); setPage(1); }} className="ml-0.5 hover:text-foreground transition-colors"><X className="h-2.5 w-2.5" /></button>
+            </span>
+          )}
+          {statusFilter !== 'All Status' && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
+              statusFilter === 'Online' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+              statusFilter === 'Offline' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+              'bg-amber-500/10 text-amber-400 border-amber-500/20'
+            }`}>
+              Status: {statusFilter}
+              <button onClick={() => { setStatusFilter('All Status'); setPage(1); }} className="ml-0.5 hover:text-foreground transition-colors"><X className="h-2.5 w-2.5" /></button>
+            </span>
+          )}
+          {ponFilter !== 'All PONs' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+              {ponFilter}
+              <button onClick={() => { setPonFilter('All PONs'); setPage(1); }} className="ml-0.5 hover:text-foreground transition-colors"><X className="h-2.5 w-2.5" /></button>
+            </span>
+          )}
+          {stabilityFilter !== 'All' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/50">
+              Stability: {stabilityFilter}
+              <button onClick={() => { setStabilityFilter('All'); setPage(1); }} className="ml-0.5 hover:text-foreground transition-colors"><X className="h-2.5 w-2.5" /></button>
+            </span>
+          )}
+          {searchTerm !== '' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border/50">
+              Search: "{searchTerm}"
+              <button onClick={() => { setSearchTerm(''); setPage(1); }} className="ml-0.5 hover:text-foreground transition-colors"><X className="h-2.5 w-2.5" /></button>
+            </span>
+          )}
+          <button onClick={clearFilters} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors ml-1">
+            Clear all
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 bg-card p-4 rounded-lg border shadow-sm">
@@ -136,7 +226,9 @@ export default function OnuManagement() {
         </div>
 
         <Select value={oltFilter} onValueChange={(v) => { setOltFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All OLTs" /></SelectTrigger>
+          <SelectTrigger className={`w-[160px] ${oltFilter !== 'All OLTs' ? 'border-primary/50 text-primary' : ''}`}>
+            <SelectValue placeholder="All OLTs" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="All OLTs">All OLTs</SelectItem>
             {olts.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
@@ -144,7 +236,9 @@ export default function OnuManagement() {
         </Select>
 
         <Select value={ponFilter} onValueChange={(v) => { setPonFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[120px]"><SelectValue placeholder="All PONs" /></SelectTrigger>
+          <SelectTrigger className={`w-[120px] ${ponFilter !== 'All PONs' ? 'border-cyan-500/50 text-cyan-400' : ''}`}>
+            <SelectValue placeholder="All PONs" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="All PONs">All PONs</SelectItem>
             <SelectItem value="PON-1">PON-1</SelectItem>
@@ -154,7 +248,13 @@ export default function OnuManagement() {
         </Select>
 
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[130px]"><SelectValue placeholder="All Status" /></SelectTrigger>
+          <SelectTrigger className={`w-[130px] ${
+            statusFilter === 'Online' ? 'border-green-500/50 text-green-400' :
+            statusFilter === 'Offline' ? 'border-red-500/50 text-red-400' :
+            statusFilter === 'Degraded' ? 'border-amber-500/50 text-amber-400' : ''
+          }`}>
+            <SelectValue placeholder="All Status" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="All Status">All Status</SelectItem>
             <SelectItem value="Online">Online</SelectItem>
@@ -172,12 +272,6 @@ export default function OnuManagement() {
             <SelectItem value="Degrading">Degrading</SelectItem>
           </SelectContent>
         </Select>
-
-        {hasActiveFilters && (
-          <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground text-sm">
-            Clear filters
-          </Button>
-        )}
       </div>
 
       {/* Table */}
@@ -233,7 +327,6 @@ export default function OnuManagement() {
                         }
                       }}
                     >
-                      {/* ONU / PON */}
                       <TableCell className="px-3 py-2.5">
                         <div className="font-mono font-bold text-xs">{onu.onuNo}</div>
                         <div className="flex items-center gap-1 mt-1">
@@ -242,25 +335,21 @@ export default function OnuManagement() {
                         </div>
                       </TableCell>
 
-                      {/* Customer */}
                       <TableCell className="px-3 py-2.5 max-w-[160px]">
                         <div className="text-xs font-medium truncate" title={onu.description}>{onu.description}</div>
                         <div className="text-[10px] text-muted-foreground truncate mt-0.5">{onu.customerName}</div>
                       </TableCell>
 
-                      {/* OLT / Port */}
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div className="text-xs font-medium text-primary">{parentOlt?.name ?? onu.oltId}</div>
                         <div className="text-[10px] font-mono text-muted-foreground mt-0.5">{onu.oltPort}</div>
                       </TableCell>
 
-                      {/* MAC Addresses */}
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div className="text-[10px] font-mono text-muted-foreground">{onu.macAddress}</div>
                         <div className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">{onu.clientMac}</div>
                       </TableCell>
 
-                      {/* RX Power + delta */}
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div className={`text-xs font-semibold ${getRxColor(onu.signalLevel)}`}>
                           {onu.signalLevel} dBm
@@ -275,19 +364,16 @@ export default function OnuManagement() {
                         )}
                       </TableCell>
 
-                      {/* TX Power */}
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div className={`text-xs font-semibold ${getTxColor(onu.txPower)}`}>
                           {onu.txPower} dBm
                         </div>
                       </TableCell>
 
-                      {/* Distance */}
                       <TableCell className="px-3 py-2.5 text-right whitespace-nowrap">
                         <div className="text-xs text-muted-foreground font-mono">{onu.distance}</div>
                       </TableCell>
 
-                      {/* Uptime / Reason */}
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div className={`text-xs font-medium ${onu.status === 'Online' ? 'text-green-500' : 'text-muted-foreground'}`}>
                           {onu.onlineDuration === 'N/A' ? '—' : onu.onlineDuration}
@@ -299,19 +385,16 @@ export default function OnuManagement() {
                         )}
                       </TableCell>
 
-                      {/* Stability */}
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <Badge variant="outline" className={`text-[9px] ${getStabilityStyle(onu.signalStability)}`}>
                           {onu.signalStability}
                         </Badge>
                       </TableCell>
 
-                      {/* Status */}
                       <TableCell className="px-3 py-2.5">
                         <StatusBadge status={onu.status} />
                       </TableCell>
 
-                      {/* Action */}
                       <TableCell className="action-col px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center">
                           <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-60 transition-opacity" />
@@ -325,19 +408,22 @@ export default function OnuManagement() {
                               <DropdownMenuItem onClick={() => setLocation(`/onus/${onu.id}`)}>
                                 View ONU
                               </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast.success(`Reboot sent to ${onu.description}`)}>
+                              <DropdownMenuItem onClick={() => setConfirmAction({ type: 'reboot', onuId: onu.id })}>
                                 Reboot ONU
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => toast.success(`ONU ${onu.description} disabled`)}
-                                className="text-red-500"
-                              >
-                                Disable ONU
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} enabled`)}>
-                                Enable ONU
-                              </DropdownMenuItem>
+                              {onu.status !== 'Offline' ? (
+                                <DropdownMenuItem
+                                  onClick={() => setConfirmAction({ type: 'disable', onuId: onu.id })}
+                                  className="text-red-500"
+                                >
+                                  Disable ONU
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem onClick={() => setConfirmAction({ type: 'enable', onuId: onu.id })}>
+                                  Enable ONU
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => { setEditingOnu(onu.id); setEditDesc(onu.description); }}>
                                 Edit Description
@@ -387,6 +473,43 @@ export default function OnuManagement() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Confirmation Modals ── */}
+      <ConfirmModal
+        open={confirmAction?.type === 'reboot'}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => toast.success(`Reboot sent to ${confirmOnu?.description ?? 'ONU'}`, { description: 'ONU will restart within 30 seconds' })}
+        title="Reboot ONU"
+        description="This will send a remote reboot command to the ONU. The customer will lose connectivity for approximately 30–60 seconds while the device restarts."
+        device={confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ''}
+        confirmLabel="Reboot ONU"
+        variant="warning"
+        icon="reboot"
+      />
+
+      <ConfirmModal
+        open={confirmAction?.type === 'disable'}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => toast.error(`ONU disabled: ${confirmOnu?.description ?? 'ONU'}`, { description: 'Service suspended. Use Enable to restore.' })}
+        title="Disable ONU"
+        description="This will administratively shut down the ONU on the OLT. The customer will lose all internet access immediately and remain offline until the ONU is manually re-enabled."
+        device={confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ''}
+        confirmLabel="Disable ONU"
+        variant="danger"
+        icon="disable"
+      />
+
+      <ConfirmModal
+        open={confirmAction?.type === 'enable'}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => toast.success(`ONU enabled: ${confirmOnu?.description ?? 'ONU'}`, { description: 'ONU is coming back online' })}
+        title="Enable ONU"
+        description="This will bring the ONU back online and restore the customer's internet service. The ONU will re-register with the OLT and re-obtain its signal lock."
+        device={confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ''}
+        confirmLabel="Enable ONU"
+        variant="warning"
+        icon="enable"
+      />
     </div>
   );
 }
