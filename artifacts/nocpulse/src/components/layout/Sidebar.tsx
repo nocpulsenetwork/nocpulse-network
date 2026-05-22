@@ -15,7 +15,7 @@ import {
   Stethoscope,
   Users,
   Building2,
-  LogOut,
+  Crown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -185,17 +185,17 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
           </div>
         ) : (
           <div className="flex items-center gap-3 rounded-lg bg-card p-3 border shadow-sm shrink-0">
-            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-              <span className="text-xs font-bold text-primary">JD</span>
+            <div className="h-8 w-8 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+              <span className="text-xs font-bold text-amber-400">JD</span>
             </div>
             <div className="flex flex-col truncate">
               <div className="flex items-center gap-1.5">
                 <span className="text-xs font-medium truncate">John Doe</span>
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-bold uppercase tracking-wider shrink-0">
-                  Admin
-                </span>
               </div>
-              <span className="text-[10px] text-muted-foreground truncate">NOC Lead</span>
+              <div className="flex items-center gap-1 mt-0.5">
+                <Crown className="h-2.5 w-2.5 text-amber-400 shrink-0" />
+                <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider truncate">Super Admin</span>
+              </div>
             </div>
           </div>
         )}

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, useLocation, Link } from 'wouter';
 import { onus, olts } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -7,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
+import { ConfirmModal } from '@/components/ConfirmModal';
+
 import {
   Signal,
   Radio,
@@ -23,6 +26,7 @@ import {
   RefreshCw,
   Bell,
   Power,
+  PowerOff,
   TrendingDown,
   TrendingUp,
   Settings,
@@ -63,6 +67,7 @@ const mockLogs = [
 export default function OnuDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const [modal, setModal] = useState<'reboot' | 'disable' | 'enable' | 'router' | null>(null);
 
   const id = params?.id;
   const onu = onus.find(o => o.id === id);
@@ -181,18 +186,35 @@ export default function OnuDetail() {
           </Button>
           <Button
             variant="outline"
-            className="bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500/20"
-            onClick={() => toast.success(`Reboot command sent to ${onu.onuNo}`)}
+            className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20"
+            onClick={() => setModal('reboot')}
           >
-            Reboot
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Reboot
           </Button>
           <Button
             variant="outline"
-            className="bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20"
-            onClick={() => toast.success(`ONU disabled`)}
+            className="bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20"
+            onClick={() => setModal('router')}
           >
-            Disable
+            <Settings className="mr-1.5 h-3.5 w-3.5" /> Reboot Router
           </Button>
+          {onu.status === 'Offline' ? (
+            <Button
+              variant="outline"
+              className="bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20"
+              onClick={() => setModal('enable')}
+            >
+              <Power className="mr-1.5 h-3.5 w-3.5" /> Enable
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              className="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20"
+              onClick={() => setModal('disable')}
+            >
+              <PowerOff className="mr-1.5 h-3.5 w-3.5" /> Disable
+            </Button>
+          )}
         </div>
       </div>
 
@@ -797,6 +819,55 @@ export default function OnuDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {/* ── Confirmation Modals ── */}
+      <ConfirmModal
+        open={modal === 'reboot'}
+        onClose={() => setModal(null)}
+        onConfirm={() => toast.success(`Reboot command sent to ${onu.onuNo}`, { description: 'ONU will restart within 30 seconds' })}
+        title="Reboot ONU"
+        description="This will send a remote reboot command to the ONU. The customer will lose internet connectivity for approximately 30–60 seconds while the device restarts."
+        device={`${onu.onuNo} — ${onu.description}`}
+        confirmLabel="Reboot ONU"
+        variant="warning"
+        icon="reboot"
+      />
+
+      <ConfirmModal
+        open={modal === 'router'}
+        onClose={() => setModal(null)}
+        onConfirm={() => toast.success(`Router reboot sent via TR-069`, { description: 'CPE will restart within 60 seconds' })}
+        title="Reboot Customer Router"
+        description="This will send a TR-069 reboot command to the customer's CPE/router. The customer's LAN devices will lose connectivity while the router restarts."
+        device={`${onu.onuNo} — ${onu.description} (LAN port)`}
+        confirmLabel="Reboot Router"
+        variant="warning"
+        icon="router"
+      />
+
+      <ConfirmModal
+        open={modal === 'disable'}
+        onClose={() => setModal(null)}
+        onConfirm={() => toast.error(`ONU disabled: ${onu.onuNo}`, { description: 'Service suspended. Use Enable to restore.' })}
+        title="Disable ONU"
+        description="This will administratively shut down the ONU on the OLT. The customer will lose all internet access immediately and remain offline until the ONU is manually re-enabled."
+        device={`${onu.onuNo} — ${onu.description}`}
+        confirmLabel="Disable ONU"
+        variant="danger"
+        icon="disable"
+      />
+
+      <ConfirmModal
+        open={modal === 'enable'}
+        onClose={() => setModal(null)}
+        onConfirm={() => toast.success(`ONU enabled: ${onu.onuNo}`, { description: 'ONU is coming back online' })}
+        title="Enable ONU"
+        description="This will bring the ONU back online and restore the customer's internet service. The ONU will re-register with the OLT and re-obtain its signal lock."
+        device={`${onu.onuNo} — ${onu.description}`}
+        confirmLabel="Enable ONU"
+        variant="warning"
+        icon="enable"
+      />
     </div>
   );
 }

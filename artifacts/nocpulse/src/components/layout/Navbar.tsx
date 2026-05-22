@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Bell, Sun, Moon, Menu, User, Settings as SettingsIcon } from 'lucide-react';
+import { Search, Bell, Sun, Moon, Menu, User, Settings as SettingsIcon, Crown, LogOut } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -177,10 +177,22 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">John Doe</p>
-                <p className="text-xs leading-none text-muted-foreground">Network Engineer</p>
-                <p className="text-xs leading-none text-muted-foreground mt-1">j.doe@isp.local</p>
+              <div className="flex flex-col space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-primary">JD</span>
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <p className="text-sm font-semibold leading-none">John Doe</p>
+                    <p className="text-[10px] leading-none text-muted-foreground mt-0.5">j.doe@isp.local</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 px-1">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px] font-bold uppercase tracking-wider">
+                    <Crown className="h-2.5 w-2.5" /> Super Admin
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">NOC Lead</span>
+                </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -190,23 +202,17 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
             </DropdownMenuItem>
             <DropdownMenuItem asChild className="cursor-pointer gap-2">
               <Link href="/settings" className="w-full flex items-center">
-                <SettingsIcon className="h-4 w-4" />
+                <SettingsIcon className="h-4 w-4 mr-2" />
                 Settings
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <div className="w-full cursor-not-allowed">
-                  <DropdownMenuItem disabled className="opacity-50 pointer-events-none gap-2">
-                    Sign Out
-                  </DropdownMenuItem>
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="left">
-                <p>Auth coming soon</p>
-              </TooltipContent>
-            </Tooltip>
+            <DropdownMenuItem asChild className="cursor-pointer gap-2 text-muted-foreground hover:text-foreground">
+              <Link href="/login" className="w-full flex items-center">
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Link>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
