@@ -157,6 +157,20 @@ export const alarms: Alarm[] = [
   }
 ];
 
+export interface NocStaff {
+  id: string;
+  name: string;
+  role: string;
+  initials: string;
+}
+
+export const NOC_STAFF: NocStaff[] = [
+  { id: 'staff-01', name: 'John Doe', role: 'NOC Engineer', initials: 'JD' },
+  { id: 'staff-02', name: 'Sarah Chen', role: 'Senior NOC', initials: 'SC' },
+  { id: 'staff-03', name: 'Mike Torres', role: 'NOC Lead', initials: 'MT' },
+  { id: 'staff-04', name: 'Lisa Park', role: 'NOC Engineer', initials: 'LP' },
+];
+
 export const metrics = {
   totalOlts: olts.length,
   totalOnus: onus.length,
