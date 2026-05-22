@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useRole } from '@/contexts/RoleContext';
+import { olts, onus } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -9,7 +11,7 @@ import {
   Key, Server, Copy, CheckCircle2, AlertTriangle, Info,
   Database, Cpu, Globe, Bell, MessageCircle, Clock,
   Activity, Zap, Wifi, WifiOff, Layers, Send, ChevronDown,
-  Monitor, Moon, Sun, BarChart3, HardDrive,
+  Monitor, Moon, Sun, BarChart3, HardDrive, Crown, Users,
 } from 'lucide-react';
 
 interface OltCredential {
@@ -84,6 +86,7 @@ const TIMEZONES = [
 
 export default function Settings() {
   const { theme, setTheme } = useTheme();
+  const { isSuperAdmin } = useRole();
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [showSnmp, setShowSnmp] = useState(false);
   const [showSshKey, setShowSshKey] = useState(false);
@@ -398,7 +401,31 @@ export default function Settings() {
       </SectionCard>
 
       {/* ── OLT CREDENTIAL SECURITY ── */}
-      <Card className="border-amber-500/20">
+      {!isSuperAdmin && (
+        <Card className="border-amber-500/20">
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Shield className="h-4 w-4 text-amber-400" />
+              </div>
+              <div>
+                <CardTitle>OLT Credential Security</CardTitle>
+                <CardDescription className="text-xs">Stored device credentials — Super Admin access required to modify</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3 p-4 rounded-lg border border-amber-500/20 bg-amber-500/5">
+              <Lock className="h-5 w-5 text-amber-400 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-400">Super Admin Access Required</p>
+                <p className="text-xs text-muted-foreground mt-0.5">OLT device credentials are only visible and editable by Super Admins. Contact your administrator for access.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {isSuperAdmin && <Card className="border-amber-500/20">
         <CardHeader>
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
@@ -567,7 +594,69 @@ export default function Settings() {
             )}
           </div>
         </CardContent>
-      </Card>
+      </Card>}
+
+      {/* ── RESOURCE LIMITS (Super Admin only) ── */}
+      {isSuperAdmin && (
+        <SectionCard title="Resource Limits" description="Provisioned capacity and current usage across your infrastructure" icon={Crown} iconColor="text-amber-400" borderColor="border-amber-500/20">
+          <div className="space-y-4">
+            <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400/80">
+              <Crown className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-400" />
+              Resource limits are tied to your NOCpulse license. Contact your account manager to expand capacity.
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Server className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold">OLT Devices</span>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-bold font-mono">{olts.length}</span>
+                    <span className="text-sm text-muted-foreground font-mono">/ 20</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(olts.length / 20) * 100}%` }} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">{20 - olts.length} slots remaining</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold">Staff Accounts</span>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-bold font-mono">7</span>
+                    <span className="text-sm text-muted-foreground font-mono">/ 25</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+                    <div className="h-full rounded-full bg-cyan-500 transition-all" style={{ width: `${(7 / 25) * 100}%` }} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">18 accounts remaining</p>
+                </div>
+              </div>
+              <div className="rounded-xl border border-border/60 bg-card/60 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-semibold">ONU Devices</span>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-2xl font-bold font-mono">{onus.length}</span>
+                    <span className="text-sm text-green-400 font-bold font-mono">/ ∞</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted/40 overflow-hidden">
+                    <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: '30%' }} />
+                  </div>
+                  <p className="text-[10px] text-green-400">No ONU limit — unrestricted capacity</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      )}
 
       {/* ── DATA RETENTION ── */}
       <SectionCard title="Data Retention" description="Configure how long historical data is stored" icon={Clock} iconColor="text-muted-foreground">

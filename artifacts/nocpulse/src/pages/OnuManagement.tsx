@@ -42,10 +42,18 @@ const getReasonBadgeColor = (reason: string) => {
 
 const getStabilityStyle = (stability: SignalStability) => {
   switch (stability) {
-    case 'Stable': return 'bg-green-500/10 text-green-600 border-green-500/20';
-    case 'Fluctuating': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-    case 'Degrading': return 'bg-red-500/10 text-red-600 border-red-500/20';
+    case 'Stable':      return 'bg-green-500/10 text-green-600 border-green-500/20';
+    case 'Weak Signal': return 'bg-amber-400/10 text-amber-500 border-amber-400/20';
+    case 'Unstable':    return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+    case 'High Loss':   return 'bg-red-500/10 text-red-600 border-red-500/20';
+    case 'Offline':     return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
   }
+};
+
+const getOnuTypeBadgeClass = (type: string) => {
+  if (type === 'EPON') return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
+  if (type === 'XPON') return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+  return 'bg-primary/10 text-primary border-primary/20';
 };
 
 type ConfirmAction = { type: 'reboot' | 'disable' | 'enable'; onuId: string } | null;
@@ -268,8 +276,10 @@ export default function OnuManagement() {
           <SelectContent>
             <SelectItem value="All">All Stability</SelectItem>
             <SelectItem value="Stable">Stable</SelectItem>
-            <SelectItem value="Fluctuating">Fluctuating</SelectItem>
-            <SelectItem value="Degrading">Degrading</SelectItem>
+            <SelectItem value="Weak Signal">Weak Signal</SelectItem>
+            <SelectItem value="Unstable">Unstable</SelectItem>
+            <SelectItem value="High Loss">High Loss</SelectItem>
+            <SelectItem value="Offline">Offline</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -332,6 +342,7 @@ export default function OnuManagement() {
                         <div className="flex items-center gap-1 mt-1">
                           <span className="text-[9px] font-mono bg-primary/10 text-primary border border-primary/20 rounded px-1 py-0.5">VLAN {onu.vlanId}</span>
                           <span className="text-[9px] text-muted-foreground bg-muted/50 border border-border/40 rounded px-1 py-0.5">PON {ponNum}</span>
+                          <span className={`text-[9px] font-bold border rounded px-1 py-0.5 ${getOnuTypeBadgeClass(onu.onuType)}`}>{onu.onuType}</span>
                         </div>
                       </TableCell>
 

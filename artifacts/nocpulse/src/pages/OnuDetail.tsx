@@ -108,7 +108,7 @@ export default function OnuDetail() {
   const lossReasons = [
     { label: 'Fiber attenuation', prob: isPoorSignal ? 'High' : isWarningSignal ? 'Medium' : 'Low', pct: isPoorSignal ? 72 : isWarningSignal ? 38 : 8 },
     { label: 'QoS / buffer congestion', prob: lossRate && lossRate > 5 ? 'Medium' : 'Low', pct: lossRate && lossRate > 5 ? 42 : 12 },
-    { label: 'Customer router overload', prob: onu.signalStability === 'Fluctuating' ? 'Medium' : 'Low', pct: onu.signalStability === 'Fluctuating' ? 35 : 10 },
+    { label: 'Customer router overload', prob: onu.signalStability === 'Unstable' ? 'Medium' : 'Low', pct: onu.signalStability === 'Unstable' ? 35 : 10 },
     { label: 'OLT PON port congestion', prob: 'Very Low', pct: 5 },
     { label: 'Physical layer / connector', prob: isPoorSignal ? 'Medium' : 'Very Low', pct: isPoorSignal ? 30 : 4 },
   ];
@@ -128,10 +128,14 @@ export default function OnuDetail() {
     switch (onu.signalStability) {
       case 'Stable':
         return { color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-l-green-500', badge: 'bg-green-500/10 text-green-600 border-green-500/20', label: 'Stable', desc: 'Signal is consistent within ±0.5 dBm over the last 24h' };
-      case 'Fluctuating':
-        return { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-l-amber-500', badge: 'bg-amber-500/10 text-amber-600 border-amber-500/20', label: 'Fluctuating', desc: 'Signal varies ±2–4 dBm — possible micro-bend or loose connector' };
-      case 'Degrading':
-        return { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-l-red-500', badge: 'bg-red-500/10 text-red-600 border-red-500/20', label: 'Degrading', desc: 'Sustained signal decline — fiber inspection recommended' };
+      case 'Weak Signal':
+        return { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-l-amber-400', badge: 'bg-amber-500/10 text-amber-500 border-amber-500/20', label: 'Weak Signal', desc: 'RX power near warning threshold — check fiber path and connectors' };
+      case 'Unstable':
+        return { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-l-amber-500', badge: 'bg-amber-500/10 text-amber-600 border-amber-500/20', label: 'Unstable', desc: 'Signal varies ±2–4 dBm — possible micro-bend or loose connector' };
+      case 'High Loss':
+        return { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-l-red-500', badge: 'bg-red-500/10 text-red-600 border-red-500/20', label: 'High Loss', desc: 'Sustained signal decline — fiber inspection and OTDR recommended' };
+      case 'Offline':
+        return { color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-l-slate-500', badge: 'bg-slate-500/10 text-slate-400 border-slate-500/20', label: 'Offline', desc: 'ONU is not reachable — no optical signal detected on the PON port' };
     }
   };
   const stability = getStabilityConfig();
@@ -176,6 +180,12 @@ export default function OnuDetail() {
             <span className="font-mono bg-primary/10 text-primary border border-primary/20 rounded px-1.5 py-0.5">VLAN {onu.vlanId}</span>
             <span className="font-mono bg-muted/60 border border-border/40 rounded px-1.5 py-0.5">{onu.ponPort}</span>
             <span className="font-mono bg-muted/60 border border-border/40 rounded px-1.5 py-0.5">{onu.oltPort}</span>
+            <span className="text-muted-foreground/60">·</span>
+            <span className={`font-bold border rounded px-1.5 py-0.5 ${
+              onu.onuType === 'EPON' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' :
+              onu.onuType === 'XPON' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+              'bg-primary/10 text-primary border-primary/20'
+            }`}>{onu.onuType}</span>
             <span className="text-muted-foreground/60">·</span>
             <span>{parentOlt?.brand ?? '—'} {parentOlt?.type ?? ''}</span>
           </div>
