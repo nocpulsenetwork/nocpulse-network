@@ -1,20 +1,22 @@
-import React from 'react';
 import { Link, useLocation } from 'wouter';
-import { 
-  LayoutDashboard, 
-  Server, 
-  Cpu, 
-  GitBranch, 
-  Map, 
-  Bell, 
+import {
+  LayoutDashboard,
+  Server,
+  Cpu,
+  GitBranch,
+  Map,
+  Bell,
   Settings,
   Activity,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ClipboardList,
+  BellRing,
+  Stethoscope,
+  Users,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Button } from '@/components/ui/button';
 import { alarms } from '@/data/mockData';
 
 interface SidebarProps {
@@ -38,30 +40,37 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
     { href: '/fiber-map', label: 'Fiber Map', icon: Map },
   ];
 
+  const operationsItems = [
+    { href: '/activity-logs', label: 'Activity Logs', icon: ClipboardList },
+    { href: '/notifications', label: 'Notifications', icon: BellRing },
+    { href: '/diagnostics', label: 'Smart Diagnostics', icon: Stethoscope },
+  ];
+
   const systemItems = [
+    { href: '/staff', label: 'Staff & Permissions', icon: Users },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
   const unacknowledgedAlarmsCount = alarms.filter(a => !a.acknowledged).length;
 
-  const renderNavLinks = (items: any[]) => {
+  const renderNavLinks = (items: { href: string; label: string; icon: React.ElementType }[]) => {
     return items.map((item) => {
       const isActive = location === item.href || (item.href !== '/' && location.startsWith(item.href));
       const showBadge = item.href === '/alarms' && unacknowledgedAlarmsCount > 0;
-      
+
       const navLink = (
         <Link key={item.href} href={item.href}>
           <span
             className={cn(
-              "flex items-center rounded-lg px-3 py-2 transition-all cursor-pointer border-l-2 relative",
-              isActive 
-                ? "border-primary bg-primary/10 text-primary font-semibold shadow-[inset_-2px_0_0_hsl(var(--primary)/0.3)]" 
-                : "border-transparent text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground",
-              collapsed ? "justify-center px-0" : "gap-3"
+              'flex items-center rounded-lg px-3 py-2 transition-all cursor-pointer border-l-2 relative',
+              isActive
+                ? 'border-primary bg-primary/10 text-primary font-semibold shadow-[inset_-2px_0_0_hsl(var(--primary)/0.3)]'
+                : 'border-transparent text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
+              collapsed ? 'justify-center px-0' : 'gap-3'
             )}
-            data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
+            data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
           >
-            <item.icon className={cn("h-5 w-5 shrink-0", isActive ? "text-primary" : "")} />
+            <item.icon className={cn('h-5 w-5 shrink-0', isActive ? 'text-primary' : '')} />
             {!collapsed && (
               <span className="flex-1 flex items-center justify-between">
                 {item.label}
@@ -73,7 +82,7 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
               </span>
             )}
             {collapsed && showBadge && (
-               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive animate-pulse" />
+              <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive animate-pulse" />
             )}
           </span>
         </Link>
@@ -82,9 +91,7 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
       if (collapsed) {
         return (
           <Tooltip key={item.href} delayDuration={0}>
-            <TooltipTrigger asChild>
-              {navLink}
-            </TooltipTrigger>
+            <TooltipTrigger asChild>{navLink}</TooltipTrigger>
             <TooltipContent side="right" className="font-semibold flex items-center gap-2">
               {item.label}
               {showBadge && (
@@ -101,16 +108,28 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
     });
   };
 
+  const SectionHeader = ({ label }: { label: string }) => {
+    if (collapsed) return <div className="h-px bg-border mx-4 my-2" />;
+    return (
+      <div className="flex items-center px-3 mb-1 mt-4">
+        <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mr-2 shrink-0">
+          {label}
+        </span>
+        <div className="h-px bg-border flex-1" />
+      </div>
+    );
+  };
+
   return (
-    <div 
+    <div
       className={cn(
-        "flex h-screen flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out relative",
-        collapsed ? "w-16" : "w-64",
+        'flex h-screen flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out relative',
+        collapsed ? 'w-16' : 'w-64',
         className
       )}
     >
-      <div className={cn("flex h-14 items-center border-b shrink-0", collapsed ? "justify-center px-0" : "px-4")}>
-        <Activity className={cn("text-primary shrink-0", collapsed ? "h-6 w-6" : "h-6 w-6 mr-2")} />
+      <div className={cn('flex h-14 items-center border-b shrink-0', collapsed ? 'justify-center px-0' : 'px-4')}>
+        <Activity className={cn('text-primary shrink-0', collapsed ? 'h-6 w-6' : 'h-6 w-6 mr-2')} />
         {!collapsed && (
           <div className="flex flex-1 items-center justify-between truncate">
             <span className="text-lg font-bold tracking-tight">NOCpulse</span>
@@ -124,32 +143,27 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
 
       <div className="flex-1 overflow-y-auto py-2 flex flex-col">
         <nav className="grid items-start px-2 text-sm font-medium gap-1">
-          {(!collapsed) && <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-1 mt-2">Main</div>}
-          {renderNavLinks(mainItems)}
-          
-          {(!collapsed) && (
-             <div className="flex items-center px-3 mb-1 mt-4">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mr-2 shrink-0">Network</span>
-                <div className="h-px bg-border flex-1" />
-             </div>
+          {!collapsed && (
+            <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-1 mt-2">
+              Main
+            </div>
           )}
-          {collapsed && <div className="h-px bg-border mx-4 my-2" />}
+          {renderNavLinks(mainItems)}
+
+          <SectionHeader label="Network" />
           {renderNavLinks(networkItems)}
 
-          {(!collapsed) && (
-             <div className="flex items-center px-3 mb-1 mt-4">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mr-2 shrink-0">System</span>
-                <div className="h-px bg-border flex-1" />
-             </div>
-          )}
-          {collapsed && <div className="h-px bg-border mx-4 my-2" />}
+          <SectionHeader label="Operations" />
+          {renderNavLinks(operationsItems)}
+
+          <SectionHeader label="System" />
           {renderNavLinks(systemItems)}
         </nav>
       </div>
 
       {onToggleCollapse && (
         <div className="px-2 pb-2 shrink-0 hidden sm:block">
-          <button 
+          <button
             onClick={onToggleCollapse}
             className="flex items-center justify-center sm:justify-between w-full px-3 py-2 text-xs text-muted-foreground hover:text-foreground rounded-lg hover:bg-sidebar-accent/60 transition-colors"
           >
@@ -172,8 +186,13 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
               <span className="text-xs font-bold text-primary">JD</span>
             </div>
             <div className="flex flex-col truncate">
-              <span className="text-xs font-medium truncate">John Doe</span>
-              <span className="text-[10px] text-muted-foreground truncate">Network Engineer</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-medium truncate">John Doe</span>
+                <span className="text-[9px] px-1.5 py-0.5 rounded bg-primary/15 text-primary font-bold uppercase tracking-wider shrink-0">
+                  Admin
+                </span>
+              </div>
+              <span className="text-[10px] text-muted-foreground truncate">NOC Lead</span>
             </div>
           </div>
         )}

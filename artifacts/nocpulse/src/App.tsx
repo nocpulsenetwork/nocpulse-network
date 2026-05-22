@@ -14,6 +14,10 @@ import DeviceDiagram from "@/pages/DeviceDiagram";
 import FiberMap from "@/pages/FiberMap";
 import AlarmCenter from "@/pages/AlarmCenter";
 import Settings from "@/pages/Settings";
+import StaffManagement from "@/pages/StaffManagement";
+import ActivityLogs from "@/pages/ActivityLogs";
+import NotificationCenter from "@/pages/NotificationCenter";
+import SmartDiagnostics from "@/pages/SmartDiagnostics";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -30,6 +34,10 @@ function Router() {
         <Route path="/diagram" component={DeviceDiagram} />
         <Route path="/fiber-map" component={FiberMap} />
         <Route path="/alarms" component={AlarmCenter} />
+        <Route path="/activity-logs" component={ActivityLogs} />
+        <Route path="/notifications" component={NotificationCenter} />
+        <Route path="/diagnostics" component={SmartDiagnostics} />
+        <Route path="/staff" component={StaffManagement} />
         <Route path="/settings" component={Settings} />
         <Route component={NotFound} />
       </Switch>
