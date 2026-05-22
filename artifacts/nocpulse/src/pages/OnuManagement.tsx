@@ -131,6 +131,26 @@ export default function OnuManagement() {
 
   const activeOlt = olts.find(o => o.id === oltFilter);
 
+  // Dynamic PON ports: when an OLT is selected, generate all its ports; otherwise derive from data
+  const availablePonPorts = useMemo(() => {
+    if (oltFilter !== 'All OLTs' && activeOlt) {
+      return Array.from({ length: activeOlt.ponPortCount }, (_, i) => `PON-${i + 1}`);
+    }
+    const ports = new Set(onus.map(o => o.ponPort));
+    return Array.from(ports).sort((a, b) => {
+      const na = parseInt(a.replace('PON-', ''), 10);
+      const nb = parseInt(b.replace('PON-', ''), 10);
+      return na - nb;
+    });
+  }, [oltFilter, activeOlt]);
+
+  // Reset PON filter if selected port no longer exists in current OLT's port list
+  useEffect(() => {
+    if (ponFilter !== 'All PONs' && !availablePonPorts.includes(ponFilter)) {
+      setPonFilter('All PONs');
+    }
+  }, [availablePonPorts]);
+
   const confirmOnu = onus.find(o => o.id === confirmAction?.onuId);
 
   return (
@@ -249,9 +269,9 @@ export default function OnuManagement() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="All PONs">All PONs</SelectItem>
-            <SelectItem value="PON-1">PON-1</SelectItem>
-            <SelectItem value="PON-2">PON-2</SelectItem>
-            <SelectItem value="PON-3">PON-3</SelectItem>
+            {availablePonPorts.map(p => (
+              <SelectItem key={p} value={p}>{p}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
 

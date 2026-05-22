@@ -35,13 +35,14 @@ export default function OltDetail() {
   const uptimeDays = Math.floor(uptimeMs / 86400000);
   const uptimeHrs = Math.floor((uptimeMs % 86400000) / 3600000);
 
-  const ponPorts = Array.from({ length: Math.min(olt.ponPortCount, 8) }, (_, i) => {
+  const ponPorts = Array.from({ length: olt.ponPortCount }, (_, i) => {
     const portOnus = connectedOnus.filter(o => o.ponPort === `PON-${i + 1}`);
     const onlineCount = portOnus.filter(o => o.status === 'Online').length;
     const offlineCount = portOnus.filter(o => o.status !== 'Online').length;
     return {
       id: i + 1,
-      name: `PON ${i + 1}/${i + 1}`,
+      name: `PON-${i + 1}`,
+      total: portOnus.length,
       onuCount: portOnus.length,
       online: onlineCount,
       offline: offlineCount,
@@ -61,10 +62,13 @@ export default function OltDetail() {
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div>
-            <div className="flex items-center gap-3 mb-1">
+            <div className="flex items-center gap-3 mb-1 flex-wrap">
               <h1 className="text-3xl font-bold tracking-tight">{olt.name}</h1>
               <StatusBadge status={olt.status} />
-              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border bg-cyan-500/10 text-cyan-400 border-cyan-500/20">{olt.type}</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${olt.type === 'EPON' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-primary/10 text-primary border-primary/20'}`}>{olt.type}</span>
+              {olt.mode === 'BOTH' && (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border bg-purple-500/10 text-purple-400 border-purple-500/20">XPON / BOTH</span>
+              )}
             </div>
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <span className="font-mono">{olt.ip}</span>
@@ -88,52 +92,63 @@ export default function OltDetail() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <button
-          onClick={() => navigate(`/onus?olt=${olt.id}&status=Online`)}
-          className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg text-left hover:border-green-500/40 hover:bg-green-500/5 transition-colors group"
+          onClick={() => navigate(`/onus?olt=${olt.id}`)}
+          className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 space-y-2 shadow-lg text-left hover:border-primary/40 hover:bg-primary/5 transition-colors group"
         >
           <div className="flex items-start justify-between">
-            <p className="text-sm text-muted-foreground">Online ONUs</p>
-            <div className="p-2 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors"><Wifi className="h-4 w-4 text-green-400" /></div>
+            <p className="text-xs text-muted-foreground">Total ONUs</p>
+            <div className="p-1.5 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors"><Activity className="h-3.5 w-3.5 text-primary" /></div>
           </div>
-          <p className="text-3xl font-bold text-green-400">{onlineOnus.length}</p>
-          <p className="text-xs text-muted-foreground group-hover:text-green-400/70 transition-colors">of {connectedOnus.length} total · click to filter</p>
+          <p className="text-2xl font-bold">{connectedOnus.length}</p>
+          <p className="text-[10px] text-muted-foreground group-hover:text-primary/70 transition-colors">All connected · view</p>
+        </button>
+        <button
+          onClick={() => navigate(`/onus?olt=${olt.id}&status=Online`)}
+          className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 space-y-2 shadow-lg text-left hover:border-green-500/40 hover:bg-green-500/5 transition-colors group"
+        >
+          <div className="flex items-start justify-between">
+            <p className="text-xs text-muted-foreground">Online ONUs</p>
+            <div className="p-1.5 rounded-lg bg-green-500/10 group-hover:bg-green-500/20 transition-colors"><Wifi className="h-3.5 w-3.5 text-green-400" /></div>
+          </div>
+          <p className="text-2xl font-bold text-green-400">{onlineOnus.length}</p>
+          <p className="text-[10px] text-muted-foreground group-hover:text-green-400/70 transition-colors">Active · click to filter</p>
         </button>
         <button
           onClick={() => navigate(`/onus?olt=${olt.id}&status=Offline`)}
-          className={`rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg text-left transition-colors group ${offlineOnus.length > 0 ? 'hover:border-red-500/40 hover:bg-red-500/5' : 'hover:border-muted hover:bg-muted/5'}`}
+          className={`rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 space-y-2 shadow-lg text-left transition-colors group ${offlineOnus.length > 0 ? 'hover:border-red-500/40 hover:bg-red-500/5' : 'hover:border-muted/50 hover:bg-muted/5'}`}
         >
           <div className="flex items-start justify-between">
-            <p className="text-sm text-muted-foreground">Offline ONUs</p>
-            <div className="p-2 rounded-lg bg-red-500/10 group-hover:bg-red-500/20 transition-colors"><WifiOff className="h-4 w-4 text-red-400" /></div>
+            <p className="text-xs text-muted-foreground">Offline ONUs</p>
+            <div className="p-1.5 rounded-lg bg-red-500/10 group-hover:bg-red-500/20 transition-colors"><WifiOff className="h-3.5 w-3.5 text-red-400" /></div>
           </div>
-          <p className={`text-3xl font-bold ${offlineOnus.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{offlineOnus.length}</p>
-          <p className="text-xs text-muted-foreground group-hover:text-red-400/70 transition-colors">{offlineOnus.length > 0 ? 'Require attention · click to filter' : 'All nominal'}</p>
+          <p className={`text-2xl font-bold ${offlineOnus.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{offlineOnus.length}</p>
+          <p className="text-[10px] text-muted-foreground group-hover:text-red-400/70 transition-colors">{offlineOnus.length > 0 ? 'Need attention · filter' : 'All nominal'}</p>
         </button>
-        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg">
+        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 space-y-2 shadow-lg">
           <div className="flex items-start justify-between">
-            <p className="text-sm text-muted-foreground">PON Ports</p>
-            <div className="p-2 rounded-lg bg-cyan-500/10"><Server className="h-4 w-4 text-cyan-400" /></div>
+            <p className="text-xs text-muted-foreground">PON Ports</p>
+            <div className="p-1.5 rounded-lg bg-cyan-500/10"><Server className="h-3.5 w-3.5 text-cyan-400" /></div>
           </div>
-          <p className="text-3xl font-bold">{olt.ponPortCount}</p>
-          <p className="text-xs text-muted-foreground">Total capacity</p>
+          <p className="text-2xl font-bold">{olt.ponPortCount}</p>
+          <p className="text-[10px] text-muted-foreground">Total capacity</p>
         </div>
-        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg">
+        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 space-y-2 shadow-lg">
           <div className="flex items-start justify-between">
-            <p className="text-sm text-muted-foreground">Active Alarms</p>
-            <div className="p-2 rounded-lg bg-amber-500/10"><AlertTriangle className="h-4 w-4 text-amber-400" /></div>
+            <p className="text-xs text-muted-foreground">Active Alarms</p>
+            <div className="p-1.5 rounded-lg bg-amber-500/10"><AlertTriangle className="h-3.5 w-3.5 text-amber-400" /></div>
           </div>
-          <p className={`text-3xl font-bold ${unacknowledgedAlarms.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>{unacknowledgedAlarms.length}</p>
-          <p className="text-xs text-muted-foreground">Unresolved</p>
+          <p className={`text-2xl font-bold ${unacknowledgedAlarms.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>{unacknowledgedAlarms.length}</p>
+          <p className="text-[10px] text-muted-foreground">Unresolved</p>
         </div>
-        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-5 space-y-3 shadow-lg">
+        <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm p-4 space-y-2 shadow-lg">
           <div className="flex items-start justify-between">
-            <p className="text-sm text-muted-foreground">OLT Uptime</p>
-            <div className="p-2 rounded-lg bg-primary/10"><Clock className="h-4 w-4 text-primary" /></div>
+            <p className="text-xs text-muted-foreground">OLT Uptime</p>
+            <div className="p-1.5 rounded-lg bg-primary/10"><Clock className="h-3.5 w-3.5 text-primary" /></div>
           </div>
-          <p className="text-3xl font-bold">{uptimeDays}d</p>
-          <p className="text-xs text-muted-foreground">{uptimeDays}d {uptimeHrs}h continuous</p>
+          <p className="text-2xl font-bold">{uptimeDays}d</p>
+          <p className="text-[10px] text-muted-foreground">{uptimeDays}d {uptimeHrs}h continuous</p>
         </div>
       </div>
 
@@ -240,50 +255,57 @@ export default function OltDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <Card className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-lg overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-sm font-semibold">PON Port Summary</CardTitle>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-semibold">PON Port Summary</CardTitle>
+                <span className="text-[10px] text-muted-foreground">{olt.ponPortCount} ports</span>
+              </div>
             </CardHeader>
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30">
-                  <TableHead className="text-xs">Port</TableHead>
-                  <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="text-xs">ONUs Online</TableHead>
-                  <TableHead className="text-xs">ONUs Offline</TableHead>
-                  <TableHead className="text-xs">Avg RX</TableHead>
-                  <TableHead className="text-xs text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ponPorts.map(port => (
-                  <TableRow key={port.id}>
-                    <TableCell className="font-mono text-xs">{port.name}</TableCell>
-                    <TableCell>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
-                        port.status === 'Active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
-                        port.status === 'Degraded' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                        'bg-slate-500/10 text-slate-400 border-slate-500/20'
-                      }`}>
-                        {port.status}
-                      </span>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-green-400">{port.online}</TableCell>
-                    <TableCell className="font-mono text-xs text-red-400">{port.offline}</TableCell>
-                    <TableCell className="font-mono text-xs">{port.avgRx} dBm</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => navigate(`/onus?olt=${olt.id}&pon=PON-${port.id}`)}
-                        className="h-8 text-xs"
-                      >
-                        View ONUs
-                      </Button>
-                    </TableCell>
+            <div className={olt.ponPortCount > 8 ? 'max-h-72 overflow-y-auto' : ''}>
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/30 sticky top-0 z-10">
+                    <TableHead className="text-[10px] py-2">Port</TableHead>
+                    <TableHead className="text-[10px] py-2">Status</TableHead>
+                    <TableHead className="text-[10px] py-2 text-center">Total</TableHead>
+                    <TableHead className="text-[10px] py-2 text-center text-green-400">Online</TableHead>
+                    <TableHead className="text-[10px] py-2 text-center text-red-400">Offline</TableHead>
+                    <TableHead className="text-[10px] py-2">Avg RX</TableHead>
+                    <TableHead className="text-[10px] py-2 text-right">Action</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {ponPorts.map(port => (
+                    <TableRow key={port.id} className="hover:bg-muted/20">
+                      <TableCell className="font-mono text-xs py-2 font-semibold">{port.name}</TableCell>
+                      <TableCell className="py-2">
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                          port.status === 'Active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                          port.status === 'Degraded' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                          'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                        }`}>
+                          {port.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs py-2 text-center text-muted-foreground">{port.total}</TableCell>
+                      <TableCell className="font-mono text-xs py-2 text-center text-green-400">{port.online}</TableCell>
+                      <TableCell className={`font-mono text-xs py-2 text-center ${port.offline > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{port.offline}</TableCell>
+                      <TableCell className="font-mono text-xs py-2 text-muted-foreground">{port.total > 0 ? `${port.avgRx} dBm` : '—'}</TableCell>
+                      <TableCell className="text-right py-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/onus?olt=${olt.id}&pon=PON-${port.id}`)}
+                          className="h-7 text-[11px] px-2"
+                        >
+                          View ONUs
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </Card>
 
           <div className="space-y-3">
