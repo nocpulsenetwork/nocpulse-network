@@ -16,12 +16,21 @@ export interface OltDevice {
 export interface OnuDevice {
   id: string;
   oltId: string;
-  signalLevel: number;
+  onuNo: string;           // e.g. "1/1/1", "1/1/2", "1/2/1"
+  description: string;     // e.g. "Acme Corp - HQ", "TechStart Office"
+  distance: string;        // e.g. "1.24 km", "3.87 km"
+  signalLevel: number;     // RX power in dBm
+  txPower: number;         // TX power in dBm, e.g. 2.5, 3.1, -0.5
   status: Status;
-  macAddress: string;
+  macAddress: string;      // ONU MAC
+  clientMac: string;       // Client-side MAC e.g. "A4:C3:F0:85:12:33"
   customerName: string;
   lastSync: string;
   bandwidth: string;
+  lastLogoutTime: string;  // e.g. "2024-01-15 14:22:00" or "N/A" if never
+  lastLogoutReason: string; // e.g. "Power Loss", "Admin Reboot", "Signal Lost", "N/A"
+  onlineDuration: string;  // e.g. "12d 4h 32m", "N/A"
+  ponPort: string;         // PON port identifier e.g. "PON-1", "PON-2", "PON-3"
 }
 
 export interface Alarm {
@@ -43,19 +52,45 @@ export const olts: OltDevice[] = [
   { id: 'olt-06', name: 'OLT-Core-02', ip: '10.0.1.11', portCount: 16, activeOnus: 520, status: 'Online', uptime: '300d 5h', lastSeen: 'Just now', location: 'Data Center Alpha' },
   { id: 'olt-07', name: 'OLT-Metro-01', ip: '10.0.6.10', portCount: 8, activeOnus: 195, status: 'Online', uptime: '45d 12h', lastSeen: 'Just now', location: 'Metro Exchange' },
   { id: 'olt-08', name: 'OLT-Sub-01', ip: '10.0.7.22', portCount: 4, activeOnus: 85, status: 'Online', uptime: '12d 8h', lastSeen: 'Just now', location: 'Suburban Hub 1' },
+  { id: 'olt-09', name: 'OLT-North-03', ip: '10.0.2.16', portCount: 8, activeOnus: 0, status: 'Offline', uptime: '0d 0h', lastSeen: '1h ago', location: 'North Hub' },
+  { id: 'olt-10', name: 'OLT-South-02', ip: '10.0.3.21', portCount: 16, activeOnus: 200, status: 'Degraded', uptime: '2d 1h', lastSeen: '1m ago', location: 'South Node' },
+  { id: 'olt-11', name: 'OLT-East-02', ip: '10.0.4.12', portCount: 8, activeOnus: 110, status: 'Online', uptime: '10d 5h', lastSeen: 'Just now', location: 'East Hub' },
 ];
 
 export const onus: OnuDevice[] = [
-  { id: 'onu-001', oltId: 'olt-01', signalLevel: -18.5, status: 'Online', macAddress: '00:1A:2B:3C:4D:5E', customerName: 'Acme Corp', lastSync: 'Just now', bandwidth: '1G/1G' },
-  { id: 'onu-002', oltId: 'olt-01', signalLevel: -22.1, status: 'Online', macAddress: '00:1A:2B:3C:4D:5F', customerName: 'TechStart Inc', lastSync: 'Just now', bandwidth: '500M/500M' },
-  { id: 'onu-003', oltId: 'olt-02', signalLevel: -28.4, status: 'Degraded', macAddress: '00:1A:2B:3C:4D:60', customerName: 'Global Logistics', lastSync: '5m ago', bandwidth: '1G/1G' },
-  { id: 'onu-004', oltId: 'olt-03', signalLevel: -15.2, status: 'Online', macAddress: '00:1A:2B:3C:4D:61', customerName: 'City Library', lastSync: 'Just now', bandwidth: '2G/2G' },
-  { id: 'onu-005', oltId: 'olt-05', signalLevel: -40.0, status: 'Offline', macAddress: '00:1A:2B:3C:4D:62', customerName: 'Westside Cafe', lastSync: '2h ago', bandwidth: '100M/100M' },
-  { id: 'onu-006', oltId: 'olt-01', signalLevel: -19.8, status: 'Online', macAddress: '00:1A:2B:3C:4D:63', customerName: 'Downtown Medical', lastSync: 'Just now', bandwidth: '1G/1G' },
-  { id: 'onu-007', oltId: 'olt-04', signalLevel: -24.5, status: 'Online', macAddress: '00:1A:2B:3C:4D:64', customerName: 'Sunrise Bakery', lastSync: 'Just now', bandwidth: '200M/200M' },
-  { id: 'onu-008', oltId: 'olt-02', signalLevel: -21.0, status: 'Online', macAddress: '00:1A:2B:3C:4D:65', customerName: 'Oceanview Apartments', lastSync: 'Just now', bandwidth: '1G/1G' },
-  { id: 'onu-009', oltId: 'olt-03', signalLevel: -29.1, status: 'Degraded', macAddress: '00:1A:2B:3C:4D:66', customerName: 'Valley High School', lastSync: '12m ago', bandwidth: '500M/500M' },
-  { id: 'onu-010', oltId: 'olt-06', signalLevel: -16.4, status: 'Online', macAddress: '00:1A:2B:3C:4D:67', customerName: 'Enterprise Towers', lastSync: 'Just now', bandwidth: '10G/10G' },
+  { id: 'onu-001', oltId: 'olt-01', onuNo: '1/1/1', description: 'Acme Corp - HQ', distance: '1.24 km', signalLevel: -18.5, txPower: 2.5, status: 'Online', macAddress: '00:1A:2B:3C:4D:5E', clientMac: 'A4:C3:F0:85:12:33', customerName: 'Acme Corp', lastSync: 'Just now', bandwidth: '1G/1G', lastLogoutTime: 'N/A', lastLogoutReason: 'N/A', onlineDuration: '12d 4h 32m', ponPort: 'PON-1' },
+  { id: 'onu-002', oltId: 'olt-01', onuNo: '1/1/2', description: 'TechStart Office', distance: '2.10 km', signalLevel: -22.1, txPower: 2.1, status: 'Online', macAddress: '00:1A:2B:3C:4D:5F', clientMac: 'A4:C3:F0:85:12:34', customerName: 'TechStart Inc', lastSync: 'Just now', bandwidth: '500M/500M', lastLogoutTime: '2024-01-15 14:22:00', lastLogoutReason: 'Admin Reboot', onlineDuration: '5d 2h 10m', ponPort: 'PON-1' },
+  { id: 'onu-003', oltId: 'olt-02', onuNo: '1/2/1', description: 'Logistics Warehouse', distance: '4.50 km', signalLevel: -28.4, txPower: -0.5, status: 'Degraded', macAddress: '00:1A:2B:3C:4D:60', clientMac: 'A4:C3:F0:85:12:35', customerName: 'Global Logistics', lastSync: '5m ago', bandwidth: '1G/1G', lastLogoutTime: '2024-01-16 09:10:00', lastLogoutReason: 'Signal Lost', onlineDuration: '1d 1h 5m', ponPort: 'PON-2' },
+  { id: 'onu-004', oltId: 'olt-03', onuNo: '2/1/1', description: 'Main Library', distance: '0.80 km', signalLevel: -15.2, txPower: 3.1, status: 'Online', macAddress: '00:1A:2B:3C:4D:61', clientMac: 'A4:C3:F0:85:12:36', customerName: 'City Library', lastSync: 'Just now', bandwidth: '2G/2G', lastLogoutTime: 'N/A', lastLogoutReason: 'N/A', onlineDuration: '45d 10h 20m', ponPort: 'PON-1' },
+  { id: 'onu-005', oltId: 'olt-05', onuNo: '1/3/1', description: 'Cafe Branch', distance: '3.20 km', signalLevel: -40.0, txPower: -5.0, status: 'Offline', macAddress: '00:1A:2B:3C:4D:62', clientMac: 'A4:C3:F0:85:12:37', customerName: 'Westside Cafe', lastSync: '2h ago', bandwidth: '100M/100M', lastLogoutTime: '2024-01-18 11:45:00', lastLogoutReason: 'Power Loss', onlineDuration: 'N/A', ponPort: 'PON-3' },
+  { id: 'onu-006', oltId: 'olt-01', onuNo: '1/1/3', description: 'Medical Center', distance: '1.50 km', signalLevel: -19.8, txPower: 2.2, status: 'Online', macAddress: '00:1A:2B:3C:4D:63', clientMac: 'A4:C3:F0:85:12:38', customerName: 'Downtown Medical', lastSync: 'Just now', bandwidth: '1G/1G', lastLogoutTime: 'N/A', lastLogoutReason: 'N/A', onlineDuration: '30d 5h 12m', ponPort: 'PON-1' },
+  { id: 'onu-007', oltId: 'olt-04', onuNo: '1/1/1', description: 'Bakery Shop', distance: '2.40 km', signalLevel: -24.5, txPower: 1.8, status: 'Online', macAddress: '00:1A:2B:3C:4D:64', clientMac: 'A4:C3:F0:85:12:39', customerName: 'Sunrise Bakery', lastSync: 'Just now', bandwidth: '200M/200M', lastLogoutTime: '2024-01-10 08:30:00', lastLogoutReason: 'Admin Reboot', onlineDuration: '8d 14h 22m', ponPort: 'PON-1' },
+  { id: 'onu-008', oltId: 'olt-02', onuNo: '1/2/2', description: 'Apt Complex', distance: '1.90 km', signalLevel: -21.0, txPower: 2.0, status: 'Online', macAddress: '00:1A:2B:3C:4D:65', clientMac: 'A4:C3:F0:85:12:3A', customerName: 'Oceanview Apartments', lastSync: 'Just now', bandwidth: '1G/1G', lastLogoutTime: 'N/A', lastLogoutReason: 'N/A', onlineDuration: '100d 2h 45m', ponPort: 'PON-2' },
+  { id: 'onu-009', oltId: 'olt-03', onuNo: '2/1/2', description: 'High School', distance: '5.10 km', signalLevel: -29.1, txPower: -1.0, status: 'Degraded', macAddress: '00:1A:2B:3C:4D:66', clientMac: 'A4:C3:F0:85:12:3B', customerName: 'Valley High School', lastSync: '12m ago', bandwidth: '500M/500M', lastLogoutTime: '2024-01-17 15:20:00', lastLogoutReason: 'Signal Lost', onlineDuration: '10h 5m', ponPort: 'PON-1' },
+  { id: 'onu-010', oltId: 'olt-06', onuNo: '1/1/1', description: 'Corp Tower', distance: '0.50 km', signalLevel: -16.4, txPower: 2.8, status: 'Online', macAddress: '00:1A:2B:3C:4D:67', clientMac: 'A4:C3:F0:85:12:3C', customerName: 'Enterprise Towers', lastSync: 'Just now', bandwidth: '10G/10G', lastLogoutTime: 'N/A', lastLogoutReason: 'N/A', onlineDuration: '200d 12h 1m', ponPort: 'PON-1' },
+  ...Array.from({length: 15}).map((_, i) => {
+    const id = `onu-01${i + 1}`;
+    const isOffline = i % 5 === 0;
+    return {
+      id,
+      oltId: `olt-0${(i % 8) + 1}`,
+      onuNo: `1/${(i % 4) + 1}/${(i % 8) + 1}`,
+      description: `Customer Site ${i + 1}`,
+      distance: `${(1 + i * 0.3).toFixed(2)} km`,
+      signalLevel: isOffline ? -40.0 : -20 - (i % 8),
+      txPower: isOffline ? -5.0 : 2.0 - (i * 0.1),
+      status: (isOffline ? 'Offline' : (i % 7 === 0 ? 'Degraded' : 'Online')) as Status,
+      macAddress: `00:1A:2B:3C:4D:${(70 + i).toString(16).toUpperCase()}`,
+      clientMac: `A4:C3:F0:85:12:${(40 + i).toString(16).toUpperCase()}`,
+      customerName: `Client ${i + 1}`,
+      lastSync: isOffline ? '2h ago' : 'Just now',
+      bandwidth: '1G/1G',
+      lastLogoutTime: isOffline ? '2024-01-18 10:00:00' : 'N/A',
+      lastLogoutReason: isOffline ? 'Power Loss' : 'N/A',
+      onlineDuration: isOffline ? 'N/A' : `${i + 2}d 5h`,
+      ponPort: `PON-${(i % 3) + 1}`
+    };
+  })
 ];
 
 export const alarms: Alarm[] = [
@@ -70,7 +105,10 @@ export const alarms: Alarm[] = [
 
 export const metrics = {
   totalOlts: olts.length,
-  totalOnus: 1990, // mock total
+  totalOnus: onus.length,
+  onlineOnus: onus.filter(o => o.status === 'Online').length,
+  offlineOnus: onus.filter(o => o.status === 'Offline').length,
+  offlineOlts: olts.filter(o => o.status === 'Offline').length,
   activeAlarms: alarms.filter(a => !a.acknowledged).length,
   criticalAlarms: alarms.filter(a => a.severity === 'Critical' && !a.acknowledged).length,
   networkUptime: 99.98,

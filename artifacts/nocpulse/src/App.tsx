@@ -8,6 +8,7 @@ import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
 import OltManagement from "@/pages/OltManagement";
 import OnuManagement from "@/pages/OnuManagement";
+import OnuDetail from "@/pages/OnuDetail";
 import DeviceDiagram from "@/pages/DeviceDiagram";
 import FiberMap from "@/pages/FiberMap";
 import AlarmCenter from "@/pages/AlarmCenter";
@@ -22,6 +23,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/olts" component={OltManagement} />
+        <Route path="/onus/:id" component={OnuDetail} />
         <Route path="/onus" component={OnuManagement} />
         <Route path="/diagram" component={DeviceDiagram} />
         <Route path="/fiber-map" component={FiberMap} />

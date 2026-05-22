@@ -1,8 +1,8 @@
 import React from 'react';
 import { MetricCard } from '@/components/MetricCard';
 import { AlarmRow } from '@/components/AlarmRow';
-import { alarms, olts, onus } from '@/data/mockData';
-import { Server, Wifi, WifiOff, AlertTriangle, Cpu } from 'lucide-react';
+import { alarms, olts, onus, metrics } from '@/data/mockData';
+import { Server, Router, Wifi, WifiOff, AlertTriangle, Cpu, ServerCrash } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Link } from 'wouter';
@@ -16,45 +16,63 @@ export default function Dashboard() {
     { name: 'Offline', value: olts.filter(o => o.status === 'Offline').length, color: 'hsl(var(--chart-5))' },
   ];
 
-  const onlineOnusCount = onus.filter(o => o.status === 'Online').length;
-  const offlineOnusCount = onus.filter(o => o.status === 'Offline').length;
-  const activeAlarmsCount = alarms.filter(a => !a.acknowledged).length;
-  const criticalCount = alarms.filter(a => !a.acknowledged && a.severity === 'Critical').length;
+  const { totalOlts, totalOnus, onlineOnus, offlineOnus, offlineOlts, activeAlarms, criticalAlarms } = metrics;
   const majorCount = alarms.filter(a => !a.acknowledged && a.severity === 'Major').length;
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <MetricCard
-          title="Total OLTs"
-          value={olts.length}
+          title="Total OLT"
+          value={totalOlts}
           icon={Server}
           accentColor="cyan"
-          description="Configured devices"
+          description="Configured terminals"
+          href="/olts"
         />
         <MetricCard
-          title="Online ONUs"
-          value={onlineOnusCount}
+          title="Total ONU"
+          value={totalOnus}
+          icon={Router}
+          accentColor="cyan"
+          description="Customer premises"
+          href="/onus"
+        />
+        <MetricCard
+          title="Online ONU"
+          value={onlineOnus}
           icon={Wifi}
           accentColor="green"
-          description="of 1,990 total connections"
+          description="Active connections"
+          href="/onus?status=online"
         />
         <MetricCard
-          title="Offline ONUs"
-          value={offlineOnusCount}
+          title="Offline ONU"
+          value={offlineOnus}
           icon={WifiOff}
           accentColor="red"
-          alert={offlineOnusCount > 0}
-          description="Require attention (sample)"
+          alert={offlineOnus > 0}
+          description="Require attention"
+          href="/onus?status=offline"
         />
         <MetricCard
-          title="Active Alerts"
-          value={activeAlarmsCount}
+          title="Offline OLT"
+          value={offlineOlts}
+          icon={ServerCrash}
+          accentColor="red"
+          alert={offlineOlts > 0}
+          description="Down terminals"
+          href="/olts?status=offline"
+        />
+        <MetricCard
+          title="Critical Alerts"
+          value={criticalAlarms}
           icon={AlertTriangle}
           accentColor="amber"
-          pulse={activeAlarmsCount > 0}
-          alert={activeAlarmsCount > 0}
-          description={`${criticalCount} critical, ${majorCount} major`}
+          pulse={criticalAlarms > 0}
+          alert={criticalAlarms > 0}
+          description={`${majorCount} major pending`}
+          href="/alarms"
         />
       </div>
 

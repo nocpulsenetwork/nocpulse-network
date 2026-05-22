@@ -28,6 +28,7 @@ export function Layout({ children }: LayoutProps) {
   const getTitle = () => {
     if (location === '/') return 'Dashboard';
     if (location.startsWith('/olts')) return 'OLT Management';
+    if (location.startsWith('/onus/')) return 'ONU Details';
     if (location.startsWith('/onus')) return 'ONU Management';
     if (location.startsWith('/diagram')) return 'Device Diagram';
     if (location.startsWith('/fiber-map')) return 'Fiber Map';
