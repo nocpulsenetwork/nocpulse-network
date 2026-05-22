@@ -71,17 +71,17 @@ export default function OltManagement() {
         </Select>
       </div>
 
-      <div className="rounded-md border bg-card overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg">
         <Table>
-          <TableHeader className="bg-muted/50">
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>IP Address</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Ports</TableHead>
-              <TableHead>Active ONUs</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Uptime</TableHead>
+          <TableHeader>
+            <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/60">
+              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Name</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">IP Address</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Location</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Ports</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Active ONUs</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Status</TableHead>
+              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Uptime</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -93,7 +93,7 @@ export default function OltManagement() {
               </TableRow>
             ) : (
               filteredOlts.map((olt) => (
-                <TableRow key={olt.id} className="cursor-pointer hover:bg-muted/50 transition-colors">
+                <TableRow key={olt.id} className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group">
                   <TableCell className="font-medium">{olt.name}</TableCell>
                   <TableCell className="font-mono text-xs">{olt.ip}</TableCell>
                   <TableCell>{olt.location}</TableCell>

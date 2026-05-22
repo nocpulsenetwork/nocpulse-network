@@ -3,7 +3,7 @@ import { onus, olts } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, WifiOff, MoreHorizontal } from 'lucide-react';
+import { Search, WifiOff, MoreHorizontal, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLocation } from 'wouter';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -150,23 +150,23 @@ export default function OnuManagement() {
         )}
       </div>
 
-      <div className="rounded-md border bg-card overflow-hidden shadow-sm">
+      <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg">
         <div className="overflow-x-auto w-full">
           <Table>
-            <TableHeader className="bg-muted/50">
-              <TableRow>
-                <TableHead className="whitespace-nowrap">ONU No</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead className="text-right whitespace-nowrap">Distance</TableHead>
-                <TableHead>ONU MAC</TableHead>
-                <TableHead>Client MAC</TableHead>
-                <TableHead className="whitespace-nowrap">RX Power</TableHead>
-                <TableHead className="whitespace-nowrap">TX Power</TableHead>
-                <TableHead className="whitespace-nowrap">Last Logout Time</TableHead>
-                <TableHead className="whitespace-nowrap">Last Logout Reason</TableHead>
-                <TableHead className="whitespace-nowrap">Online Duration</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-[80px]">Action</TableHead>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/60">
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">ONU No</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Description</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground text-right whitespace-nowrap">Distance</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">ONU MAC</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Client MAC</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">RX Power</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">TX Power</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">Last Logout Time</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">Last Logout Reason</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">Online Duration</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Status</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground w-[80px]">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -187,7 +187,7 @@ export default function OnuManagement() {
                 paginatedOnus.map((onu) => (
                   <TableRow 
                     key={onu.id} 
-                    className="hover:bg-muted/50 cursor-pointer group"
+                    className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group"
                     onClick={(e) => {
                       if (!(e.target as HTMLElement).closest('.action-btn')) {
                         setLocation(`/onus/${onu.id}`);
@@ -220,35 +220,38 @@ export default function OnuManagement() {
                       <StatusBadge status={onu.status} />
                     </TableCell>
                     <TableCell className="action-btn" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setLocation(`/onus/${onu.id}`)}>
-                            View ONU
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast.success(`Reboot command sent to ${onu.description}`)}>
-                            Reboot ONU
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} disabled`)} className="text-red-500">
-                            Disable ONU
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} enabled`)}>
-                            Enable ONU
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => {
-                            setEditingOnu(onu.id);
-                            setEditDesc(onu.description);
-                          }}>
-                            Edit Description
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <div className="flex items-center">
+                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mr-1" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setLocation(`/onus/${onu.id}`)}>
+                              View ONU
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toast.success(`Reboot command sent to ${onu.description}`)}>
+                              Reboot ONU
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} disabled`)} className="text-red-500">
+                              Disable ONU
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} enabled`)}>
+                              Enable ONU
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => {
+                              setEditingOnu(onu.id);
+                              setEditDesc(onu.description);
+                            }}>
+                              Edit Description
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))

@@ -16,7 +16,9 @@ import {
   ArrowLeft,
   AlertTriangle,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Thermometer,
+  Activity
 } from 'lucide-react';
 
 // Generate some dummy bandwidth data
@@ -31,7 +33,9 @@ const generateBandwidthData = () => {
 const bandwidthData = generateBandwidthData();
 
 const mockLogs = [
+  { time: '2 mins ago', level: 'INFO', event: 'Temperature check OK', details: 'Operational at 42°C' },
   { time: '10 mins ago', level: 'INFO', event: 'Config pushed', details: 'Updated traffic profile successfully' },
+  { time: '1 hour ago', level: 'WARN', event: 'Bandwidth utilization peaked at 94%', details: 'High traffic on PON port' },
   { time: '1 hour ago', level: 'INFO', event: 'Admin login', details: 'Web interface accessed by admin' },
   { time: '5 hours ago', level: 'WARN', event: 'Signal fluctuation', details: 'RX power dropped by 2dBm temporarily' },
   { time: '2 days ago', level: 'INFO', event: 'DHCP lease obtained', details: 'IP assigned to client device' },
@@ -72,11 +76,25 @@ export default function OnuDetail() {
 
   const getLogBadge = (level: string) => {
     switch (level) {
-      case 'ERROR': return <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20">ERROR</Badge>;
-      case 'WARN': return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">WARN</Badge>;
-      case 'INFO': default: return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20">INFO</Badge>;
+      case 'ERROR': return <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px]">ERROR</Badge>;
+      case 'WARN': return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">WARN</Badge>;
+      case 'INFO': default: return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px]">INFO</Badge>;
     }
   };
+
+  const getLogBorder = (level: string) => {
+    switch (level) {
+      case 'ERROR': return 'border-l-2 border-l-red-500';
+      case 'WARN': return 'border-l-2 border-l-amber-500';
+      case 'INFO': default: return 'border-l-2 border-l-blue-500';
+    }
+  };
+
+  const bars = 5;
+  const filledBars = onu.signalLevel > -20 ? 5 : onu.signalLevel > -25 ? 4 : onu.signalLevel > -28 ? 3 : onu.signalLevel > -32 ? 2 : 1;
+  const barColor = filledBars >= 4 ? 'bg-green-500' : filledBars === 3 ? 'bg-amber-500' : 'bg-red-500';
+  const qualityLabel = filledBars >= 4 ? 'Excellent' : filledBars === 3 ? 'Good' : filledBars === 2 ? 'Fair' : 'Poor';
+
 
   return (
     <div className="space-y-6 pb-10">
@@ -119,8 +137,8 @@ export default function OnuDetail() {
         </div>
       </div>
 
-      {/* Section 1: Signal Cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      {/* Section 1: Signal Cards (Row 1) */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card className="shadow-sm border-border/50 border-l-4 border-l-blue-500">
           <CardContent className="p-6">
             <div className="flex justify-between items-start pb-2">
@@ -178,6 +196,43 @@ export default function OnuDetail() {
         </Card>
       </div>
 
+      {/* Section 1.5: Extra Cards (Row 2) */}
+      <div className="grid gap-4 grid-cols-2">
+        <Card className={`shadow-sm border-border/50 border-l-4 ${filledBars >= 4 ? 'border-l-green-500' : filledBars === 3 ? 'border-l-amber-500' : 'border-l-red-500'}`}>
+           <CardContent className="p-6">
+              <div className="flex justify-between items-start pb-2">
+                 <p className="text-sm font-medium text-muted-foreground">Signal Quality</p>
+                 <div className="p-2 rounded-lg bg-muted text-muted-foreground">
+                    <Activity className="h-5 w-5" />
+                 </div>
+              </div>
+              <div className="mt-2 flex items-center gap-4">
+                 <div className="flex items-end gap-1 h-8">
+                    {Array.from({length: bars}).map((_, i) => (
+                       <div key={i} className={`w-2.5 rounded-sm transition-all ${i < filledBars ? barColor : 'bg-muted'}`} style={{height: `${(i+1) * 20}%`}} />
+                    ))}
+                 </div>
+                 <div className="text-2xl font-bold tracking-tight">{qualityLabel}</div>
+              </div>
+           </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-border/50 border-l-4 border-l-amber-500">
+           <CardContent className="p-6">
+              <div className="flex justify-between items-start pb-2">
+                 <p className="text-sm font-medium text-muted-foreground">Temperature</p>
+                 <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
+                    <Thermometer className="h-5 w-5" />
+                 </div>
+              </div>
+              <div className="text-3xl font-bold tracking-tight mt-2 text-muted-foreground/50">
+                 -- <span className="text-lg font-normal text-muted-foreground">°C</span>
+              </div>
+              <p className="text-[10px] text-amber-500/80 font-medium mt-1 uppercase tracking-widest">Requires SNMP backend</p>
+           </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-6 md:grid-cols-3">
         {/* Section 2: ONU Information */}
         <Card className="md:col-span-1 shadow-sm border-border/50 flex flex-col">
@@ -187,6 +242,18 @@ export default function OnuDetail() {
           </CardHeader>
           <CardContent className="flex-1 space-y-4">
             <div className="grid grid-cols-2 gap-y-4 text-sm">
+              <div className="col-span-2 flex gap-4 bg-muted/30 p-3 rounded-lg border border-border/50 mb-2">
+                 <div className="flex-1">
+                    <p className="text-[10px] uppercase text-muted-foreground tracking-widest mb-1 font-bold">ONU Uptime</p>
+                    <p className="font-semibold">{onu.onlineDuration}</p>
+                 </div>
+                 <div className="w-px bg-border" />
+                 <div className="flex-1">
+                    <p className="text-[10px] uppercase text-muted-foreground tracking-widest mb-1 font-bold">Last Disconnect</p>
+                    <p className="font-semibold text-xs">{onu.lastLogoutReason}</p>
+                 </div>
+              </div>
+
               <div>
                 <p className="text-muted-foreground mb-1">ONU MAC</p>
                 <p className="font-mono text-xs font-medium bg-muted p-1 rounded inline-block">{onu.macAddress}</p>
@@ -286,9 +353,13 @@ export default function OnuDetail() {
                     <p className="text-xs text-muted-foreground mb-1">RX Packets</p>
                     <p className="font-semibold font-mono text-sm">1,247,891</p>
                   </div>
-                  <div className="bg-muted/30 p-3 rounded-lg border border-green-500/20">
-                    <p className="text-xs text-muted-foreground mb-1">Loss Rate</p>
-                    <p className={`font-semibold font-mono text-sm ${getLossRateColor("0.04")}`}>0.04%</p>
+                  <div className="bg-muted/30 p-3 rounded-lg border border-green-500/20 text-left flex flex-col justify-center">
+                    <p className="text-xs text-muted-foreground mb-1 text-center">Loss Rate</p>
+                    <p className={`font-semibold font-mono text-sm text-center ${getLossRateColor("0.04")}`}>0.04%</p>
+                    <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden w-full">
+                       <div className="h-full bg-green-500 rounded-full" style={{width: '0.04%'}} />
+                    </div>
+                    <p className="text-[9px] text-muted-foreground mt-1 text-center truncate">of 1.25M pkts</p>
                   </div>
                 </div>
               </CardContent>
@@ -344,7 +415,7 @@ export default function OnuDetail() {
         <CardContent>
           <div className="rounded-md border">
             <div className="overflow-x-auto w-full">
-              <table className="w-full text-sm text-left">
+              <table className="w-full text-xs text-left">
                 <thead className="bg-muted/50 text-muted-foreground border-b">
                   <tr>
                     <th className="px-4 py-3 font-medium whitespace-nowrap">Timestamp</th>
@@ -355,11 +426,11 @@ export default function OnuDetail() {
                 </thead>
                 <tbody className="divide-y">
                   {mockLogs.map((log, i) => (
-                    <tr key={i} className="hover:bg-muted/30">
-                      <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">{log.time}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{getLogBadge(log.level)}</td>
-                      <td className="px-4 py-3 font-medium whitespace-nowrap">{log.event}</td>
-                      <td className="px-4 py-3">{log.details}</td>
+                    <tr key={i} className={`hover:bg-muted/30 ${i % 2 === 0 ? 'bg-muted/10' : 'bg-transparent'} ${getLogBorder(log.level)}`}>
+                      <td className="px-4 py-2 whitespace-nowrap text-muted-foreground">{log.time}</td>
+                      <td className="px-4 py-2 whitespace-nowrap">{getLogBadge(log.level)}</td>
+                      <td className="px-4 py-2 font-medium whitespace-nowrap">{log.event}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{log.details}</td>
                     </tr>
                   ))}
                 </tbody>
