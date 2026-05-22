@@ -27,12 +27,17 @@ export function Layout({ children }: LayoutProps) {
 
   const getTitle = () => {
     if (location === '/') return 'Dashboard';
+    if (location.match(/^\/olts\/[^/]+$/)) return 'OLT Details';
     if (location.startsWith('/olts')) return 'OLT Management';
-    if (location.startsWith('/onus/')) return 'ONU Details';
+    if (location.match(/^\/onus\/[^/]+$/)) return 'ONU Details';
     if (location.startsWith('/onus')) return 'ONU Management';
     if (location.startsWith('/diagram')) return 'Device Diagram';
     if (location.startsWith('/fiber-map')) return 'Fiber Map';
     if (location.startsWith('/alarms')) return 'Alarm Center';
+    if (location.startsWith('/activity-logs')) return 'Activity Logs';
+    if (location.startsWith('/notifications')) return 'Notifications';
+    if (location.startsWith('/diagnostics')) return 'Smart Diagnostics';
+    if (location.startsWith('/staff')) return 'Staff & Permissions';
     if (location.startsWith('/subscribers')) return 'Subscribers';
     if (location.startsWith('/settings')) return 'Settings';
     return 'NOCpulse';

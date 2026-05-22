@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Bell, Sun, Moon, Menu, User, Settings as SettingsIcon, Crown, LogOut } from 'lucide-react';
+import { Search, Bell, Sun, Moon, Menu, User, Settings as SettingsIcon, Crown, LogOut, ShieldCheck, Shield } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { alarms } from '@/data/mockData';
+import { useRole, ROLE_LABELS } from '@/contexts/RoleContext';
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -22,6 +23,9 @@ interface NavbarProps {
 
 export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
   const { theme, setTheme } = useTheme();
+  const { role, user } = useRole();
+  const roleStyle = ROLE_LABELS[role];
+  const RoleIcon = role === 'super_admin' ? Crown : role === 'admin' ? ShieldCheck : Shield;
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -171,27 +175,27 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center cursor-pointer transition-all hover:ring-2 hover:ring-primary/30 outline-none shrink-0">
-              <span className="text-xs font-bold text-primary">JD</span>
+            <button className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center cursor-pointer transition-all hover:ring-2 hover:ring-primary/30 outline-none shrink-0`}>
+              <span className={`text-xs font-bold ${roleStyle.color}`}>{user.initials}</span>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-primary">JD</span>
+                  <div className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center shrink-0`}>
+                    <span className={`text-xs font-bold ${roleStyle.color}`}>{user.initials}</span>
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <p className="text-sm font-semibold leading-none">John Doe</p>
-                    <p className="text-[10px] leading-none text-muted-foreground mt-0.5">j.doe@isp.local</p>
+                    <p className="text-sm font-semibold leading-none">{user.name}</p>
+                    <p className="text-[10px] leading-none text-muted-foreground mt-0.5">{user.email}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 px-1">
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px] font-bold uppercase tracking-wider">
-                    <Crown className="h-2.5 w-2.5" /> Super Admin
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border ${roleStyle.bg} ${roleStyle.color} ${roleStyle.border} text-[10px] font-bold uppercase tracking-wider`}>
+                    <RoleIcon className="h-2.5 w-2.5" /> {roleStyle.label}
                   </span>
-                  <span className="text-[10px] text-muted-foreground">NOC Lead</span>
+                  <span className="text-[10px] text-muted-foreground">{user.title}</span>
                 </div>
               </div>
             </DropdownMenuLabel>

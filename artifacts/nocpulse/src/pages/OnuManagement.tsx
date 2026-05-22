@@ -158,7 +158,28 @@ export default function OnuManagement() {
     if (ponFilter !== 'All PONs' && !availablePonPorts.includes(ponFilter)) {
       setPonFilter('All PONs');
     }
-  }, [availablePonPorts]);
+  }, [availablePonPorts, ponFilter]);
+
+  // Chip counts respect OLT / PON / search context but ignore status/stability
+  // so they accurately show "how many match this chip within current view"
+  const chipBaseOnus = useMemo(() => {
+    return onus.filter(o => {
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = !term ||
+        o.onuNo.toLowerCase().includes(term) ||
+        o.description.toLowerCase().includes(term) ||
+        o.macAddress.toLowerCase().includes(term) ||
+        o.clientMac.toLowerCase().includes(term) ||
+        o.customerName.toLowerCase().includes(term) ||
+        o.oltPort.toLowerCase().includes(term) ||
+        o.ponPort.toLowerCase().includes(term) ||
+        o.vlanId.toString().includes(term) ||
+        (oltNameMap[o.oltId] ?? '').includes(term);
+      const matchesOlt = oltFilter === 'All OLTs' || o.oltId === oltFilter;
+      const matchesPon = ponFilter === 'All PONs' || o.ponPort === ponFilter;
+      return matchesSearch && matchesOlt && matchesPon;
+    });
+  }, [searchTerm, oltFilter, ponFilter, oltNameMap]);
 
   const confirmOnu = onus.find(o => o.id === confirmAction?.onuId);
 
@@ -327,8 +348,8 @@ export default function OnuManagement() {
             ? statusFilter === 'All Status' && stabilityFilter === 'All'
             : statusFilter === chip.status && stabilityFilter === chip.stability;
           const count = chip.label === 'All'
-            ? onus.length
-            : onus.filter(o => (chip.status === 'All Status' || o.status === chip.status) && (chip.stability === 'All' || o.signalStability === chip.stability)).length;
+            ? chipBaseOnus.length
+            : chipBaseOnus.filter(o => (chip.status === 'All Status' || o.status === chip.status) && (chip.stability === 'All' || o.signalStability === chip.stability)).length;
           return (
             <button
               key={chip.label}
@@ -469,7 +490,7 @@ export default function OnuManagement() {
                           <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-60 transition-opacity" />
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" className="h-7 w-7 p-0 opacity-40 group-hover:opacity-100 focus:opacity-100 transition-opacity">
                                 <MoreHorizontal className="h-3.5 w-3.5" />
                               </Button>
                             </DropdownMenuTrigger>
