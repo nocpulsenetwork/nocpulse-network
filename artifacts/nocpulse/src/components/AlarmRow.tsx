@@ -9,8 +9,18 @@ interface AlarmRowProps {
 }
 
 export function AlarmRow({ alarm, onAcknowledge }: AlarmRowProps) {
+  const getSeverityBorder = (severity: string) => {
+    switch (severity) {
+      case 'Critical': return 'border-l-red-500';
+      case 'Major': return 'border-l-amber-500';
+      case 'Minor': return 'border-l-blue-500';
+      case 'Info': return 'border-l-slate-400';
+      default: return 'border-l-transparent';
+    }
+  };
+
   return (
-    <div className={`flex items-start justify-between p-4 border-b last:border-0 hover:bg-muted/50 transition-colors ${!alarm.acknowledged ? 'bg-muted/20' : 'opacity-70'}`}>
+    <div className={`flex items-start justify-between p-4 border-b last:border-0 hover:bg-muted/50 transition-colors border-l-2 ${getSeverityBorder(alarm.severity)} ${!alarm.acknowledged ? 'bg-muted/20' : 'opacity-70'}`}>
       <div className="flex items-start gap-4">
         <StatusBadge severity={alarm.severity} className="mt-0.5" />
         <div className="space-y-1">

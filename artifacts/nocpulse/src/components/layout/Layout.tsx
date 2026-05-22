@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { useLocation } from 'wouter';
-import { Sheet, SheetContent } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
+import { TooltipProvider } from '@/components/ui/tooltip';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,6 +12,18 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // Track collapse state with localStorage sync
+  const [collapsed, setCollapsed] = useState(() => {
+    const saved = localStorage.getItem('nocpulse-sidebar-collapsed');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nocpulse-sidebar-collapsed', String(collapsed));
+  }, [collapsed]);
+
+  const toggleCollapse = () => setCollapsed((prev) => !prev);
 
   const getTitle = () => {
     if (location === '/') return 'Dashboard';
@@ -24,18 +37,27 @@ export function Layout({ children }: LayoutProps) {
   };
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background">
-      <div className="flex flex-1">
-        <Sidebar className="hidden sm:flex" />
+    <TooltipProvider>
+      <div className="flex min-h-screen w-full bg-background">
+        <Sidebar 
+          className="hidden sm:flex fixed top-0 left-0 bottom-0 z-40 transition-all duration-300 ease-in-out" 
+          collapsed={collapsed} 
+          onToggleCollapse={toggleCollapse} 
+        />
         
         <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetContent side="left" className="p-0 w-64">
-            <Sidebar className="w-full" />
+          <SheetContent side="left" className="p-0 w-64 border-r-0">
+            <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+            <Sidebar className="w-full h-full" collapsed={false} />
           </SheetContent>
         </Sheet>
 
-        <div className="flex flex-1 flex-col sm:pl-0 w-full overflow-hidden">
-          <div className="sticky top-0 z-30 flex-none bg-background sm:border-b sm:h-14 flex flex-col justify-center">
+        <div 
+          className={`flex flex-1 flex-col w-full min-h-screen transition-all duration-300 ease-in-out ${
+            collapsed ? 'sm:ml-16' : 'sm:ml-64'
+          }`}
+        >
+          <div className="sticky top-0 z-30 flex-none h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col justify-center">
              <Navbar onMenuClick={() => setMobileMenuOpen(true)} title={getTitle()} />
           </div>
           <main className="flex-1 overflow-auto p-4 sm:p-6 lg:p-8 w-full max-w-full">
@@ -45,6 +67,6 @@ export function Layout({ children }: LayoutProps) {
           </main>
         </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
