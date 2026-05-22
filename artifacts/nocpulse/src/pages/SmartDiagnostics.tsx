@@ -3,7 +3,7 @@ import {
   Stethoscope, Signal, Wifi, WifiOff, PackageX, AlertTriangle,
   CheckCircle2, XCircle, AlertCircle, Lightbulb, RefreshCw,
   ChevronDown, ChevronUp, Router, Thermometer, Activity,
-  ArrowRight, Clock, Zap, Info
+  ArrowRight, Clock, Zap, Info, RotateCcw, Cable, GitBranch, Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -157,6 +157,68 @@ const DIAG_CARDS: DiagCard[] = [
       'Consider OTDR test from central office to isolate fault location',
     ],
   },
+  {
+    id: 'd9',
+    severity: 'Minor',
+    category: 'Fiber Bend',
+    device: 'ONU-017 (West Residential Block)',
+    description: 'Asymmetric signal loss pattern — micro-bend suspected',
+    metric: '−3.2 dB asymmetry',
+    threshold: 'Normal: < 0.5 dB',
+    duration: 'Trending 5 days',
+    detail: 'Signal polling over the last 5 days shows a consistently asymmetric RX/TX power pattern that is characteristic of a micro-bend or macro-bend in the drop fiber. The issue progressively worsens after 18:00 local time, suggesting thermal expansion stress on the cable at the building entry point.',
+    tips: [
+      'Inspect drop fiber at the building entry point for tight bends or kinks',
+      'Check for staples or cable clips squeezing the fiber too tightly',
+      'Verify the fiber is not pinched inside the cable tray or conduit',
+      'Replace the aerial drop if bend cannot be relieved without re-routing',
+    ],
+  },
+  {
+    id: 'd10',
+    severity: 'Major',
+    category: 'ONU Reboot Loop',
+    device: 'ONU-014 (City Council Offices)',
+    description: 'ONU detected in reboot loop — 7 reboots in 2 hours',
+    metric: '7 reboots',
+    threshold: 'Normal: 0–1/day',
+    duration: 'Since 09:12 today',
+    detail: 'ONU-014 has rebooted 7 times since 09:12, each session lasting 10–14 minutes before the next disconnect. This reboot loop pattern is consistent with a failing power supply, a firmware crash loop, or an upstream OLT PON port sending invalid provisioning frames. The affected customer (City Council) has reported complete internet outage.',
+    tips: [
+      'Check OLT-Core-01 PON-3 for invalid PLOAM or ranging errors in logs',
+      'Verify ONU firmware version — a known bug in v3.2.1 causes a crash loop on re-ranging',
+      'Swap power adapter — reboot loops under load often indicate power supply degradation',
+      'Provision a spare ONU on the same port to isolate hardware vs. config issue',
+      'If firmware is stale, perform remote flash upgrade during next stable session window',
+    ],
+  },
+  {
+    id: 'd11',
+    severity: 'Minor',
+    category: 'LAN Cable Issue',
+    device: 'Customer: Sunrise Medical Clinic',
+    description: 'Degraded LAN port — excessive errors on GE port 1',
+    metric: '12,400 CRC errors',
+    threshold: 'Normal: < 100',
+    duration: 'Last 6 hours',
+    detail: 'SNMP statistics from the ONU LAN port 1 show 12,400 CRC errors in the last 6 hours, indicating a physical layer issue on the customer-side Ethernet cable between the ONU and the network switch. The ONU fiber signal itself is clean at −21.8 dBm, ruling out a PON-side issue. No packet loss observed on the PON uplink.',
+    tips: [
+      'Replace the patch cable between the ONU LAN port and the customer switch',
+      'Test with a certified Cat6 cable — Cat5e cables often fail with higher-speed links',
+      'Inspect the RJ45 connector crimp on both ends — damaged pairs cause CRC errors',
+      'Check for interference near the cable route (power cables, fluorescent lighting)',
+      'If errors persist after cable swap, the ONU LAN port itself may need replacement',
+    ],
+  },
+];
+
+const PLACEHOLDER_MODULES = [
+  { icon: Layers, label: 'Optical Power Budget Analysis', desc: 'End-to-end loss budget vs actual measured loss across every PON port', status: 'Planned Q3' },
+  { icon: Activity, label: 'Jitter & Latency Heatmap', desc: 'Per-ONU RTT and jitter trending with time-of-day pattern detection', status: 'Planned Q3' },
+  { icon: Zap, label: 'VLAN Storm Detection', desc: 'Broadcast storm and multicast flood detection at the VLAN level', status: 'Planned Q4' },
+  { icon: Router, label: 'CPE Fleet Firmware Audit', desc: 'Bulk firmware version check against known-stable releases for all ONUs', status: 'Planned Q4' },
+  { icon: GitBranch, label: 'OTDR Simulation Trace', desc: 'Software-simulated OTDR trace using RX power deltas across the PON tree', status: 'Research' },
+  { icon: Thermometer, label: 'Thermal Stress Correlation', desc: 'Correlate ONU signal degradation with ambient temperature trends', status: 'Research' },
 ];
 
 const HEALTHY_CHECKS = [
@@ -182,6 +244,9 @@ const CAT_ICONS: Record<string, React.ElementType> = {
   'ONU Instability': Activity,
   'Router Instability': Router,
   'Fiber Issue': Stethoscope,
+  'Fiber Bend': GitBranch,
+  'ONU Reboot Loop': RotateCcw,
+  'LAN Cable Issue': Cable,
 };
 
 function DiagnosticCard({ card }: { card: DiagCard }) {
@@ -391,6 +456,35 @@ export default function SmartDiagnostics() {
               <span className="text-xs font-medium text-green-400">{check.value}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Upcoming diagnostic modules (placeholders) */}
+      <div className="space-y-3">
+        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+          <Layers className="h-4 w-4" /> Upcoming Diagnostic Modules
+        </h2>
+        <div className="rounded-xl border border-border/50 overflow-hidden divide-y divide-border/40">
+          {PLACEHOLDER_MODULES.map((m, i) => {
+            const Icon = m.icon;
+            const isPlanned = m.status.startsWith('Planned');
+            return (
+              <div key={i} className="flex items-center justify-between px-4 py-3 bg-muted/10 hover:bg-muted/20 transition-colors">
+                <div className="flex items-start gap-3">
+                  <div className="h-8 w-8 rounded-lg bg-muted/40 flex items-center justify-center shrink-0 mt-0.5">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">{m.label}</p>
+                    <p className="text-[11px] text-muted-foreground/60 mt-0.5">{m.desc}</p>
+                  </div>
+                </div>
+                <span className={`shrink-0 ml-4 px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wider ${isPlanned ? 'bg-primary/10 text-primary border-primary/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
+                  {m.status}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

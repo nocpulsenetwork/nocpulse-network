@@ -129,13 +129,22 @@ function HistoryEntryIcon({ type }: { type: HistoryEntry['type'] }) {
 function AlarmCard({
   alarm,
   tick,
+  viewed,
   onAcknowledge,
+  onView,
 }: {
   alarm: EnrichedAlarm;
   tick: number;
+  viewed?: boolean;
   onAcknowledge?: (id: string, staffId: string) => void;
+  onView?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+
+  const handleToggle = () => {
+    setExpanded(e => !e);
+    if (!expanded) onView?.();
+  };
   const [acknowledging, setAcknowledging] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState(NOC_STAFF[0].id);
 
@@ -188,6 +197,11 @@ function AlarmCard({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {viewed && !isActionable && (
+              <span className="px-2 py-0.5 rounded border bg-slate-500/10 text-slate-400 border-slate-500/20 text-[10px] font-bold uppercase tracking-wider">
+                Viewed
+              </span>
+            )}
             {isActionable && onAcknowledge && !acknowledging && (
               <Button
                 size="sm"
@@ -202,7 +216,7 @@ function AlarmCard({
               size="icon"
               variant="ghost"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
-              onClick={() => setExpanded(e => !e)}
+              onClick={handleToggle}
             >
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
@@ -496,9 +510,13 @@ export default function AlarmCenter() {
     }));
   };
 
+  const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
+  const markViewed = (id: string) => setViewedIds(prev => new Set([...prev, id]));
+
   const active = enriched.filter(a => a.verificationStatus === 'Active' || a.verificationStatus === 'Re-opened');
   const verifying = enriched.filter(a => a.verificationStatus === 'Verifying');
   const resolved = enriched.filter(a => a.verificationStatus === 'Resolved');
+  const inProgressCount = verifying.length;
 
   const criticalCount = active.filter(a => a.severity === 'Critical').length;
   const majorCount = active.filter(a => a.severity === 'Major').length;
@@ -566,8 +584,9 @@ export default function AlarmCenter() {
             { value: 'all', label: 'All Active', count: allActiveAndVerifying.length, countCls: 'bg-primary/15 text-primary', activeBorder: 'data-[state=active]:border-primary' },
             { value: 'critical', label: 'Critical', count: criticalCount, countCls: 'bg-red-500/20 text-red-400', activeBorder: 'data-[state=active]:border-red-500' },
             { value: 'warning', label: 'Warning', count: majorCount + minorCount, countCls: 'bg-amber-500/20 text-amber-400', activeBorder: 'data-[state=active]:border-amber-500' },
+            { value: 'inprogress', label: 'In Progress', count: inProgressCount, countCls: 'bg-amber-500/20 text-amber-400', activeBorder: 'data-[state=active]:border-amber-400' },
             { value: 'info', label: 'Info', count: infoCount, countCls: 'bg-slate-500/20 text-slate-400', activeBorder: 'data-[state=active]:border-slate-400' },
-            { value: 'resolved', label: 'Resolved', count: resolved.length, countCls: 'bg-green-500/15 text-green-400', activeBorder: 'data-[state=active]:border-green-500' },
+            { value: 'solved', label: 'Solved', count: resolved.length, countCls: 'bg-green-500/15 text-green-400', activeBorder: 'data-[state=active]:border-green-500' },
           ].map(tab => (
             <TabsTrigger
               key={tab.value}
@@ -590,7 +609,7 @@ export default function AlarmCenter() {
             <EmptyState icon={ShieldCheck} message="No active alarms — all systems operational" />
           ) : (
             allActiveAndVerifying.map(alarm => (
-              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} onAcknowledge={handleAcknowledge} />
+              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />
             ))
           )}
         </TabsContent>
@@ -602,7 +621,7 @@ export default function AlarmCenter() {
           ) : (
             allActiveAndVerifying
               .filter(a => a.severity === 'Critical')
-              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} onAcknowledge={handleAcknowledge} />)
+              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />)
           )}
         </TabsContent>
 
@@ -613,7 +632,24 @@ export default function AlarmCenter() {
           ) : (
             allActiveAndVerifying
               .filter(a => a.severity === 'Major' || a.severity === 'Minor')
-              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} onAcknowledge={handleAcknowledge} />)
+              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />)
+          )}
+        </TabsContent>
+
+        {/* IN PROGRESS (Verifying) */}
+        <TabsContent value="inprogress" className="space-y-3 m-0">
+          {verifying.length === 0 ? (
+            <EmptyState icon={RefreshCw} message="No alarms currently in verification" />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                {verifying.length} alarm{verifying.length > 1 ? 's' : ''} acknowledged and under active auto-verification
+              </div>
+              {verifying.map(alarm => (
+                <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />
+              ))}
+            </div>
           )}
         </TabsContent>
 
@@ -624,23 +660,22 @@ export default function AlarmCenter() {
           ) : (
             enriched
               .filter(a => a.severity === 'Info')
-              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} />)
+              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />)
           )}
         </TabsContent>
 
-        {/* RESOLVED */}
-        <TabsContent value="resolved" className="space-y-3 m-0">
+        {/* SOLVED */}
+        <TabsContent value="solved" className="space-y-3 m-0">
           {resolved.length === 0 ? (
-            <EmptyState icon={Activity} message="No resolved alarms yet" />
+            <EmptyState icon={Activity} message="No solved alarms yet" />
           ) : (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <Shield className="h-3.5 w-3.5" />
-                {resolved.length} alarm{resolved.length > 1 ? 's' : ''} verified and resolved —
-                all passed auto-verification check
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/5 border border-green-500/20 text-[11px] text-green-400">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {resolved.length} alarm{resolved.length > 1 ? 's' : ''} verified and solved — all passed auto-verification check
               </div>
               {resolved.map(alarm => (
-                <AlarmCard key={alarm.id} alarm={alarm} tick={tick} />
+                <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />
               ))}
             </div>
           )}

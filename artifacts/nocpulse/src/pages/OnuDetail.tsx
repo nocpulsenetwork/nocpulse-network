@@ -34,6 +34,10 @@ import {
   Minus,
   Gauge,
   GitBranch,
+  Download,
+  Upload,
+  Timer,
+  PackageX,
 } from 'lucide-react';
 
 const generateBandwidthData = () =>
@@ -84,6 +88,26 @@ export default function OnuDetail() {
   const onuIndex = onu.onuNo.split('/')[2] ?? '?';
 
   // Power delta vs offline snapshot
+  // Derived mock performance metrics (deterministic per ONU)
+  const seed = onu.id.charCodeAt(onu.id.length - 1);
+  const maxBwMbps = parseInt(onu.bandwidth.split('/')[0].replace(/[^0-9]/g, '')) || 1000;
+  const isUp = onu.status !== 'Offline';
+  const pingMs = !isUp ? null : onu.signalLevel > -25 ? 5 + (seed % 4) : onu.signalLevel > -28 ? 12 + (seed % 8) : 28 + (seed % 12);
+  const jitterMs = !isUp ? null : onu.signalLevel > -25 ? 1.2 : onu.signalLevel > -28 ? 4.5 : 9.8;
+  const lossRate = !isUp ? null : onu.signalLevel > -25 ? 0.04 : onu.signalLevel > -28 ? 2.8 : 8.2;
+  const dlMbps = !isUp ? 0 : Math.round(maxBwMbps * 0.62 + (seed % 25));
+  const ulMbps = !isUp ? 0 : Math.round(maxBwMbps * 0.23 + (seed % 12));
+  const lossColor = lossRate === null ? 'text-muted-foreground' : lossRate < 1 ? 'text-green-500' : lossRate < 5 ? 'text-amber-500' : 'text-red-500';
+  const pingColor = pingMs === null ? 'text-muted-foreground' : pingMs < 10 ? 'text-green-500' : pingMs < 20 ? 'text-amber-500' : 'text-red-500';
+
+  const lossReasons = [
+    { label: 'Fiber attenuation', prob: isPoorSignal ? 'High' : isWarningSignal ? 'Medium' : 'Low', pct: isPoorSignal ? 72 : isWarningSignal ? 38 : 8 },
+    { label: 'QoS / buffer congestion', prob: lossRate && lossRate > 5 ? 'Medium' : 'Low', pct: lossRate && lossRate > 5 ? 42 : 12 },
+    { label: 'Customer router overload', prob: onu.signalStability === 'Fluctuating' ? 'Medium' : 'Low', pct: onu.signalStability === 'Fluctuating' ? 35 : 10 },
+    { label: 'OLT PON port congestion', prob: 'Very Low', pct: 5 },
+    { label: 'Physical layer / connector', prob: isPoorSignal ? 'Medium' : 'Very Low', pct: isPoorSignal ? 30 : 4 },
+  ];
+
   const powerDelta = onu.lastOfflineRxPower !== null
     ? parseFloat((onu.signalLevel - onu.lastOfflineRxPower).toFixed(1))
     : null;
@@ -537,31 +561,90 @@ export default function OnuDetail() {
             </CardContent>
           </Card>
 
-          {/* Packet Stats + Solution Tips */}
+          {/* Download / Upload / Ping / Packet Loss speed-metric row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              {
+                icon: Download, label: 'Download', color: 'text-cyan-400', border: 'border-cyan-500/20', bg: 'bg-cyan-500/5',
+                value: isUp ? `${dlMbps}` : '—', unit: isUp ? 'Mbps' : '',
+                sub: isUp ? `of ${maxBwMbps} Mbps plan` : 'Device offline',
+                bar: isUp ? Math.min(100, (dlMbps / maxBwMbps) * 100) : 0, barColor: 'bg-cyan-500',
+              },
+              {
+                icon: Upload, label: 'Upload', color: 'text-violet-400', border: 'border-violet-500/20', bg: 'bg-violet-500/5',
+                value: isUp ? `${ulMbps}` : '—', unit: isUp ? 'Mbps' : '',
+                sub: isUp ? `of ${maxBwMbps} Mbps plan` : 'Device offline',
+                bar: isUp ? Math.min(100, (ulMbps / maxBwMbps) * 100) : 0, barColor: 'bg-violet-500',
+              },
+              {
+                icon: Timer, label: 'Ping Latency', color: pingColor, border: 'border-border/50', bg: 'bg-card/60',
+                value: pingMs !== null ? `${pingMs}` : '—', unit: pingMs !== null ? 'ms' : '',
+                sub: pingMs === null ? 'Offline' : pingMs < 10 ? 'Excellent' : pingMs < 20 ? 'Acceptable' : 'High latency',
+                bar: pingMs !== null ? Math.min(100, (pingMs / 50) * 100) : 0,
+                barColor: pingMs !== null && pingMs < 10 ? 'bg-green-500' : pingMs !== null && pingMs < 20 ? 'bg-amber-500' : 'bg-red-500',
+              },
+              {
+                icon: PackageX, label: 'Packet Loss', color: lossColor, border: 'border-border/50', bg: 'bg-card/60',
+                value: lossRate !== null ? `${lossRate}` : '—', unit: lossRate !== null ? '%' : '',
+                sub: lossRate === null ? 'Offline' : lossRate < 1 ? 'Normal' : lossRate < 5 ? 'Elevated' : 'Critical',
+                bar: lossRate !== null ? Math.min(100, (lossRate / 10) * 100) : 0,
+                barColor: lossRate !== null && lossRate < 1 ? 'bg-green-500' : lossRate !== null && lossRate < 5 ? 'bg-amber-500' : 'bg-red-500',
+              },
+            ].map(m => {
+              const Icon = m.icon;
+              return (
+                <div key={m.label} className={`rounded-xl border ${m.border} ${m.bg} p-4 space-y-2`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{m.label}</span>
+                    <Icon className={`h-3.5 w-3.5 ${m.color}`} />
+                  </div>
+                  <div className="flex items-baseline gap-1">
+                    <span className={`text-2xl font-bold font-mono ${m.color}`}>{m.value}</span>
+                    {m.unit && <span className="text-xs text-muted-foreground">{m.unit}</span>}
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${m.barColor} transition-all`} style={{ width: `${m.bar}%` }} />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">{m.sub}</p>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Packet Loss Analysis + Suggested Actions */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Card className="shadow-sm border-border/50">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Packet Statistics</CardTitle>
-                <CardDescription className="text-xs">Placeholder — connect to backend for live data</CardDescription>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <PackageX className="h-4 w-4 text-muted-foreground" />
+                  Packet Loss Analysis
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {lossRate !== null
+                    ? `Current: ${lossRate}% — Root causes ranked by probability`
+                    : 'Device offline — no packet data available'}
+                </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-3 gap-3 text-center mt-1">
-                  <div className="bg-muted/30 p-2.5 rounded-lg border">
-                    <p className="text-[10px] text-muted-foreground mb-1">TX Packets</p>
-                    <p className="font-semibold font-mono text-xs">1,248,392</p>
-                  </div>
-                  <div className="bg-muted/30 p-2.5 rounded-lg border">
-                    <p className="text-[10px] text-muted-foreground mb-1">RX Packets</p>
-                    <p className="font-semibold font-mono text-xs">1,247,891</p>
-                  </div>
-                  <div className="bg-muted/30 p-2.5 rounded-lg border border-green-500/20">
-                    <p className="text-[10px] text-muted-foreground mb-1">Loss Rate</p>
-                    <p className="font-semibold font-mono text-xs text-green-500">0.04%</p>
-                    <div className="mt-1.5 h-1 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-green-500 rounded-full" style={{ width: '0.04%' }} />
-                    </div>
-                  </div>
-                </div>
+              <CardContent className="space-y-2.5">
+                {lossRate === null ? (
+                  <p className="text-xs text-muted-foreground">Bring device online to run packet loss diagnostics.</p>
+                ) : (
+                  lossReasons.map(r => {
+                    const probColor = r.prob === 'High' ? 'text-red-400' : r.prob === 'Medium' ? 'text-amber-400' : r.prob === 'Low' ? 'text-blue-400' : 'text-muted-foreground';
+                    const barColor = r.prob === 'High' ? 'bg-red-500' : r.prob === 'Medium' ? 'bg-amber-500' : r.prob === 'Low' ? 'bg-blue-500' : 'bg-slate-600';
+                    return (
+                      <div key={r.label} className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-muted-foreground">{r.label}</span>
+                          <span className={`text-[10px] font-bold ${probColor}`}>{r.prob}</span>
+                        </div>
+                        <div className="h-1 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${r.pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </CardContent>
             </Card>
 
@@ -569,30 +652,62 @@ export default function OnuDetail() {
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   {isPoorSignal ? (
-                    <><AlertCircle className="h-4 w-4 text-red-500" /> Poor Signal</>
+                    <><AlertCircle className="h-4 w-4 text-red-500" /> Suggested Actions</>
                   ) : onu.status === 'Offline' ? (
-                    <><AlertTriangle className="h-4 w-4 text-amber-500" /> Device Offline</>
+                    <><AlertTriangle className="h-4 w-4 text-amber-500" /> Offline — Next Steps</>
                   ) : (
-                    <><CheckCircle2 className="h-4 w-4 text-green-500" /> All Normal</>
+                    <><CheckCircle2 className="h-4 w-4 text-green-500" /> All Systems Normal</>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-xs space-y-1.5 text-muted-foreground">
+                <div className="text-xs space-y-2 text-muted-foreground">
                   {isPoorSignal ? (
-                    <ul className="list-disc pl-4 space-y-1">
-                      <li>Check fiber splice quality and bend radius</li>
-                      <li>Clean all optical connectors</li>
-                      <li>Verify upstream splitters</li>
-                    </ul>
+                    <div className="space-y-1.5">
+                      {[
+                        'Inspect fiber splice at premises entry point',
+                        'Clean SC/APC optical connectors (ONU + OLT side)',
+                        'Check for excessive bend radius in the drop cable',
+                        'Verify upstream splitter ratio (1:8 vs 1:4)',
+                        'Compare RX delta vs last offline snapshot for trend',
+                      ].map((tip, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="h-4 w-4 shrink-0 rounded-full bg-red-500/15 border border-red-500/20 flex items-center justify-center text-[9px] font-bold text-red-400">{i + 1}</span>
+                          <span>{tip}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : onu.status === 'Offline' ? (
-                    <ul className="list-disc pl-4 space-y-1">
-                      <li>Verify customer premises power supply</li>
-                      <li>Check upstream OLT port status</li>
-                      <li>Run remote ping diagnostic</li>
-                    </ul>
+                    <div className="space-y-1.5">
+                      {[
+                        'Verify customer premises power supply and UPS',
+                        'Check upstream OLT PON port link status',
+                        'Run remote reachability ping from OLT side',
+                        'Dispatch field technician if power is confirmed OK',
+                      ].map((tip, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="h-4 w-4 shrink-0 rounded-full bg-amber-500/15 border border-amber-500/20 flex items-center justify-center text-[9px] font-bold text-amber-400">{i + 1}</span>
+                          <span>{tip}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
-                    <p className="text-foreground text-xs">No active issues detected. Signal parameters are within operational tolerances.</p>
+                    <div className="space-y-2">
+                      <p className="text-foreground text-xs">No active issues detected. Signal parameters are within operational tolerances.</p>
+                      <div className="pt-1 space-y-1.5">
+                        {[
+                          { label: 'Signal quality', val: 'Within range', ok: true },
+                          { label: 'Packet loss', val: `${lossRate ?? '—'}%`, ok: (lossRate ?? 0) < 1 },
+                          { label: 'Ping latency', val: `${pingMs ?? '—'} ms`, ok: (pingMs ?? 0) < 20 },
+                          { label: 'Jitter', val: `±${jitterMs ?? '—'} ms`, ok: (jitterMs ?? 0) < 5 },
+                        ].map(s => (
+                          <div key={s.label} className="flex items-center justify-between">
+                            <span className="text-[11px] text-muted-foreground">{s.label}</span>
+                            <span className={`text-[11px] font-medium ${s.ok ? 'text-green-400' : 'text-amber-400'}`}>{s.val}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               </CardContent>
