@@ -91,24 +91,33 @@ export default function OnuManagement() {
     if (p) setPonFilter(p);
   }, []);
 
+  // Precompute OLT name map for fast lookups
+  const oltNameMap = useMemo(() => {
+    const m: Record<string, string> = {};
+    olts.forEach(o => { m[o.id] = o.name.toLowerCase(); });
+    return m;
+  }, []);
+
   const filteredOnus = useMemo(() => {
     return onus.filter(onu => {
       const term = searchTerm.toLowerCase();
-      const matchesSearch =
+      const matchesSearch = !term ||
         onu.onuNo.toLowerCase().includes(term) ||
         onu.description.toLowerCase().includes(term) ||
         onu.macAddress.toLowerCase().includes(term) ||
         onu.clientMac.toLowerCase().includes(term) ||
         onu.customerName.toLowerCase().includes(term) ||
         onu.oltPort.toLowerCase().includes(term) ||
-        onu.vlanId.toString().includes(term);
+        onu.ponPort.toLowerCase().includes(term) ||
+        onu.vlanId.toString().includes(term) ||
+        (oltNameMap[onu.oltId] ?? '').includes(term);
       const matchesStatus = statusFilter === 'All Status' || onu.status === statusFilter;
       const matchesOlt = oltFilter === 'All OLTs' || onu.oltId === oltFilter;
       const matchesPon = ponFilter === 'All PONs' || onu.ponPort === ponFilter;
       const matchesStability = stabilityFilter === 'All' || onu.signalStability === stabilityFilter;
       return matchesSearch && matchesStatus && matchesOlt && matchesPon && matchesStability;
     });
-  }, [searchTerm, statusFilter, oltFilter, ponFilter, stabilityFilter]);
+  }, [searchTerm, statusFilter, oltFilter, ponFilter, stabilityFilter, oltNameMap]);
 
   const hasActiveFilters =
     searchTerm !== '' ||
@@ -302,6 +311,35 @@ export default function OnuManagement() {
             <SelectItem value="Offline">Offline</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Quick filter chips */}
+      <div className="flex flex-wrap items-center gap-2">
+        {([
+          { label: 'All', status: 'All Status', stability: 'All', color: 'border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary', activeColor: 'bg-primary/10 border-primary/50 text-primary' },
+          { label: 'Online', status: 'Online', stability: 'All', color: 'border-border/60 text-muted-foreground hover:border-green-500/40 hover:text-green-400', activeColor: 'bg-green-500/10 border-green-500/50 text-green-400' },
+          { label: 'Offline', status: 'Offline', stability: 'All', color: 'border-border/60 text-muted-foreground hover:border-red-500/40 hover:text-red-400', activeColor: 'bg-red-500/10 border-red-500/50 text-red-400' },
+          { label: 'Weak Signal', status: 'All Status', stability: 'Weak Signal', color: 'border-border/60 text-muted-foreground hover:border-amber-400/40 hover:text-amber-400', activeColor: 'bg-amber-400/10 border-amber-400/50 text-amber-400' },
+          { label: 'High Loss', status: 'All Status', stability: 'High Loss', color: 'border-border/60 text-muted-foreground hover:border-red-500/40 hover:text-red-500', activeColor: 'bg-red-500/10 border-red-500/50 text-red-500' },
+          { label: 'Unstable', status: 'All Status', stability: 'Unstable', color: 'border-border/60 text-muted-foreground hover:border-amber-500/40 hover:text-amber-500', activeColor: 'bg-amber-500/10 border-amber-500/50 text-amber-500' },
+        ] as const).map(chip => {
+          const isActive = chip.label === 'All'
+            ? statusFilter === 'All Status' && stabilityFilter === 'All'
+            : statusFilter === chip.status && stabilityFilter === chip.stability;
+          const count = chip.label === 'All'
+            ? onus.length
+            : onus.filter(o => (chip.status === 'All Status' || o.status === chip.status) && (chip.stability === 'All' || o.signalStability === chip.stability)).length;
+          return (
+            <button
+              key={chip.label}
+              onClick={() => { setStatusFilter(chip.status as string); setStabilityFilter(chip.stability as string); setPage(1); }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${isActive ? chip.activeColor : chip.color}`}
+            >
+              {chip.label}
+              <span className={`text-[10px] font-mono px-1 py-0.5 rounded ${isActive ? 'bg-current/10' : 'bg-muted/60'}`}>{count}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Table */}

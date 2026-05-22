@@ -176,7 +176,7 @@ export default function OnuDetail() {
             <Badge variant="outline" className={`text-[10px] ${stability.badge}`}>{stability.label}</Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-lg">{onu.description}</p>
-          <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground flex-wrap">
             <span className="font-mono bg-primary/10 text-primary border border-primary/20 rounded px-1.5 py-0.5">VLAN {onu.vlanId}</span>
             <span className="font-mono bg-muted/60 border border-border/40 rounded px-1.5 py-0.5">{onu.ponPort}</span>
             <span className="font-mono bg-muted/60 border border-border/40 rounded px-1.5 py-0.5">{onu.oltPort}</span>
@@ -188,6 +188,41 @@ export default function OnuDetail() {
             }`}>{onu.onuType}</span>
             <span className="text-muted-foreground/60">·</span>
             <span>{parentOlt?.brand ?? '—'} {parentOlt?.type ?? ''}</span>
+          </div>
+          <div className="flex items-center gap-4 mt-1.5 text-[11px] text-muted-foreground flex-wrap">
+            {onu.onlineDuration !== 'N/A' && (
+              <span className="flex items-center gap-1">
+                <Timer className="h-3 w-3 text-green-500" />
+                <span className="text-green-500 font-medium">Up {onu.onlineDuration}</span>
+              </span>
+            )}
+            {onu.lastLogoutTime !== 'N/A' && (
+              <span className="flex items-center gap-1">
+                <RefreshCw className="h-3 w-3" />
+                Last reboot: <span className="font-mono text-foreground/70">{onu.lastLogoutTime}</span>
+              </span>
+            )}
+            {onu.lastLogoutReason !== 'N/A' && (
+              <span className={`flex items-center gap-1 font-medium ${
+                onu.lastLogoutReason === 'Power Loss' ? 'text-red-400' :
+                onu.lastLogoutReason === 'Signal Lost' ? 'text-amber-400' :
+                'text-blue-400'
+              }`}>
+                <AlertCircle className="h-3 w-3" />
+                {onu.lastLogoutReason}
+              </span>
+            )}
+            {onu.lastOfflineRxPower !== null && (
+              <span className="flex items-center gap-1">
+                <Signal className="h-3 w-3" />
+                Snapshot: <span className="font-mono text-foreground/70">{onu.lastOfflineRxPower} dBm</span>
+                {powerDelta !== null && (
+                  <span className={`ml-0.5 ${powerImproved ? 'text-green-500' : 'text-red-400'}`}>
+                    ({powerImproved ? '+' : ''}{powerDelta})
+                  </span>
+                )}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">

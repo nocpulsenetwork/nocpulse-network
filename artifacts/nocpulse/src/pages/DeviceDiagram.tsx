@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { olts, onus } from '@/data/mockData';
-import { Server, Cpu, Wifi, WifiOff, GitBranch, ChevronRight, Circle } from 'lucide-react';
+import { Server, Cpu, Wifi, WifiOff, GitBranch, Circle, ZoomIn, ZoomOut, Maximize2, Map } from 'lucide-react';
 import { Link } from 'wouter';
-import { Badge } from '@/components/ui/badge';
+
+function onuCountForOlt(oltId: string) {
+  return onus.filter(o => o.oltId === oltId).length;
+}
 
 export default function DeviceDiagram() {
+  const [zoom, setZoom] = useState(100);
+  const [showMinimap, setShowMinimap] = useState(true);
+
+  const zoomIn = () => setZoom(z => Math.min(z + 20, 200));
+  const zoomOut = () => setZoom(z => Math.max(z - 20, 40));
+  const resetZoom = () => setZoom(100);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -19,67 +29,165 @@ export default function DeviceDiagram() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm overflow-x-auto">
-        <div className="min-w-[900px] p-8 space-y-8">
-          
-          <div className="flex flex-col items-center">
-            <div className="flex items-center gap-4">
-              <div className="px-6 py-3 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 text-primary font-bold text-sm flex items-center gap-2">
-                <GitBranch className="h-4 w-4" />
-                INTERNET UPLINK
-              </div>
-            </div>
-            <div className="w-0.5 h-8 bg-gradient-to-b from-primary/60 to-primary/20" />
+      <div className="rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm overflow-hidden relative">
+        {/* Toolbar */}
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-1">
+          <div className="flex items-center gap-1 bg-card/95 border border-border/60 rounded-lg px-2 py-1.5 shadow-lg backdrop-blur-sm">
+            <button onClick={zoomOut} disabled={zoom <= 40} className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted/60 disabled:opacity-30 transition-colors">
+              <ZoomOut className="h-3.5 w-3.5" />
+            </button>
+            <button onClick={resetZoom} className="text-[11px] font-mono min-w-[36px] text-center hover:bg-muted/60 rounded px-1 py-0.5 transition-colors">
+              {zoom}%
+            </button>
+            <button onClick={zoomIn} disabled={zoom >= 200} className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted/60 disabled:opacity-30 transition-colors">
+              <ZoomIn className="h-3.5 w-3.5" />
+            </button>
+            <div className="w-px h-4 bg-border/60 mx-1" />
+            <button onClick={resetZoom} className="h-6 w-6 flex items-center justify-center rounded hover:bg-muted/60 transition-colors" title="Fit to screen">
+              <Maximize2 className="h-3.5 w-3.5" />
+            </button>
           </div>
-
-          <div className="flex flex-col items-center">
-            <div className="px-8 py-4 rounded-xl border-2 border-primary/60 bg-primary/10 shadow-lg shadow-primary/20 flex flex-col items-center gap-1">
-              <Server className="h-6 w-6 text-primary" />
-              <span className="font-bold text-sm text-primary">CORE ROUTER</span>
-              <span className="text-[10px] text-primary/70 font-mono">10GE Backbone</span>
-            </div>
-            <div className="w-0.5 h-8 bg-border" />
-            <div className="w-full max-w-4xl h-0.5 bg-border/60" />
+          <div className="flex items-center gap-1 bg-card/95 border border-border/60 rounded-lg px-2 py-1.5 shadow-lg backdrop-blur-sm text-[10px] text-muted-foreground">
+            <span className="w-2 h-2 rounded-full bg-primary/60 inline-block" />
+            Drag to pan
           </div>
+        </div>
 
-          <div className="flex justify-center gap-6 flex-wrap">
-            {olts.map(olt => {
-              const statusStyles = {
-                Online: 'border-green-500/40 bg-green-500/5 text-green-400',
-                Offline: 'border-red-500/40 bg-red-500/5 text-red-400',
-                Degraded: 'border-amber-500/40 bg-amber-500/5 text-amber-400',
-              };
-              const connectedOnus = onus.filter(o => o.oltId === olt.id);
-              return (
-                <div key={olt.id} className="flex flex-col items-center">
-                  <div className="w-0.5 h-8 bg-border" />
-                  <Link href={`/olts/${olt.id}`}>
-                    <div className={`flex flex-col items-center gap-1 p-3 rounded-xl border cursor-pointer hover:scale-105 transition-transform ${statusStyles[olt.status]}`} style={{width: '120px'}}>
-                      <div className={`h-2 w-2 rounded-full ${olt.status === 'Online' ? 'bg-green-500 animate-pulse' : olt.status === 'Offline' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                      <Server className="h-5 w-5" />
-                      <span className="font-semibold text-[11px] text-center leading-tight truncate w-full">{olt.name}</span>
-                      <span className="text-[9px] font-mono opacity-70">{olt.ip}</span>
-                      <div className="flex gap-1 flex-wrap justify-center mt-1">
-                        <span className="text-[9px] px-1 rounded bg-current/10 border border-current/20">{olt.type}</span>
-                        <span className="text-[9px] opacity-60">{connectedOnus.length} ONU</span>
-                      </div>
-                    </div>
-                  </Link>
+        {/* Minimap toggle */}
+        <div className="absolute top-3 right-3 z-20">
+          <button
+            onClick={() => setShowMinimap(v => !v)}
+            className="flex items-center gap-1.5 bg-card/95 border border-border/60 rounded-lg px-2.5 py-1.5 shadow-lg backdrop-blur-sm text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Map className="h-3.5 w-3.5" />
+            Mini-map
+          </button>
+        </div>
 
-                  <div className="flex gap-1.5 mt-2 justify-center">
-                    {connectedOnus.slice(0, 3).map(onu => (
-                      <Link key={onu.id} href={`/onus/${onu.id}`}>
-                        <div className={`px-2 py-1.5 rounded-lg border text-center cursor-pointer hover:scale-105 transition-transform ${onu.status === 'Online' ? 'border-green-500/30 bg-green-500/5' : 'border-red-500/30 bg-red-500/5'}`} style={{width:'40px'}}>
-                          <Cpu className={`h-3 w-3 mx-auto ${onu.status === 'Online' ? 'text-green-400' : 'text-red-400'}`} />
-                        </div>
-                      </Link>
-                    ))}
+        {/* Minimap */}
+        {showMinimap && (
+          <div className="absolute bottom-3 right-3 z-20 w-[160px] h-[100px] bg-card/95 border border-border/60 rounded-lg shadow-lg backdrop-blur-sm overflow-hidden">
+            <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(6,182,212,0.8) 1px, transparent 0)', backgroundSize: '8px 8px' }} />
+            <svg className="w-full h-full" viewBox="0 0 700 480" preserveAspectRatio="xMidYMid meet">
+              <rect x="295" y="12" width="110" height="30" rx="4" fill="none" stroke="#06b6d4" strokeWidth="1.5" />
+              <line x1="350" y1="42" x2="350" y2="60" stroke="#334155" strokeWidth="1" />
+              <rect x="275" y="60" width="150" height="25" rx="4" fill="none" stroke="#3b82f6" strokeWidth="1.5" />
+              <line x1="100" y1="95" x2="600" y2="95" stroke="#334155" strokeWidth="1" />
+              {olts.map((olt, i) => {
+                const x = 80 + (i * 52);
+                const col = olt.status === 'Online' ? '#22c55e' : olt.status === 'Offline' ? '#ef4444' : '#f59e0b';
+                return (
+                  <g key={olt.id}>
+                    <line x1={x} y1="95" x2={x} y2="120" stroke="#334155" strokeWidth="1" />
+                    <rect x={x - 18} y="120" width="36" height="22" rx="3" fill="none" stroke={col} strokeWidth="1.5" />
+                    <circle cx={x + 12} cy="124" r="3" fill={col} />
+                  </g>
+                );
+              })}
+              {/* Viewport indicator */}
+              <rect x="150" y="30" width="400" height="300" rx="4" fill="none" stroke="#06b6d4" strokeWidth="1.5" strokeDasharray="4,2" opacity="0.6" />
+            </svg>
+            <div className="absolute bottom-1 left-0 right-0 text-center text-[9px] text-muted-foreground/60 font-mono">{zoom}%</div>
+          </div>
+        )}
+
+        <div className="overflow-auto" style={{ cursor: 'grab' }}>
+          <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', transition: 'transform 0.2s ease' }}>
+            <div className="min-w-[960px] p-8 space-y-8">
+
+              {/* Internet uplink */}
+              <div className="flex flex-col items-center">
+                <div className="flex items-center gap-4">
+                  <div className="px-6 py-3 rounded-xl border-2 border-dashed border-primary/40 bg-primary/5 text-primary font-bold text-sm flex items-center gap-2">
+                    <GitBranch className="h-4 w-4" />
+                    INTERNET UPLINK
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div className="relative flex flex-col items-center">
+                  <div className="w-0.5 h-8 bg-gradient-to-b from-primary/60 to-primary/20" />
+                  <span className="absolute left-3 top-2 text-[9px] font-mono text-primary/60 bg-card/80 px-1 rounded">100G WAN</span>
+                </div>
+              </div>
 
+              {/* Core Router */}
+              <div className="flex flex-col items-center">
+                <div className="px-8 py-4 rounded-xl border-2 border-primary/60 bg-primary/10 shadow-lg shadow-primary/20 flex flex-col items-center gap-1">
+                  <Server className="h-6 w-6 text-primary" />
+                  <span className="font-bold text-sm text-primary">CORE ROUTER</span>
+                  <span className="text-[10px] text-primary/70 font-mono">BGP / MPLS Backbone</span>
+                </div>
+                <div className="relative flex flex-col items-center w-full">
+                  <div className="w-0.5 h-6 bg-border" />
+                  <div className="w-full max-w-5xl h-0.5 bg-border/60" />
+                  <span className="absolute text-[9px] font-mono text-muted-foreground/60 bg-card/80 px-1 rounded -top-2.5">10GE Distribution</span>
+                </div>
+              </div>
+
+              {/* OLT Layer */}
+              <div className="flex justify-center gap-5 flex-wrap px-4">
+                {olts.map(olt => {
+                  const statusStyles = {
+                    Online: 'border-green-500/40 bg-green-500/5 text-green-400',
+                    Offline: 'border-red-500/40 bg-red-500/5 text-red-400',
+                    Degraded: 'border-amber-500/40 bg-amber-500/5 text-amber-400',
+                  };
+                  const connectedOnus = onus.filter(o => o.oltId === olt.id);
+                  const onlineCount = connectedOnus.filter(o => o.status === 'Online').length;
+                  const offlineCount = connectedOnus.filter(o => o.status !== 'Online').length;
+                  return (
+                    <div key={olt.id} className="flex flex-col items-center">
+                      <div className="relative">
+                        <div className="w-0.5 h-6 bg-border mx-auto" />
+                        <span className="absolute left-2 top-0 text-[8px] font-mono text-cyan-500/60 whitespace-nowrap">1GE/10GE</span>
+                      </div>
+                      <Link href={`/olts/${olt.id}`}>
+                        <div className={`flex flex-col items-center gap-1 p-3 rounded-xl border cursor-pointer hover:scale-105 transition-transform ${statusStyles[olt.status]}`} style={{width: '130px'}}>
+                          <div className={`h-2 w-2 rounded-full ${olt.status === 'Online' ? 'bg-green-500 animate-pulse' : olt.status === 'Offline' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                          <Server className="h-5 w-5" />
+                          <span className="font-semibold text-[11px] text-center leading-tight truncate w-full">{olt.name}</span>
+                          <span className="text-[9px] font-mono opacity-70">{olt.ip}</span>
+                          <div className="flex gap-1 flex-wrap justify-center mt-0.5">
+                            <span className={`text-[9px] px-1 rounded border ${olt.type === 'EPON' ? 'border-cyan-500/30 text-cyan-400 bg-cyan-500/10' : 'border-primary/30 text-primary bg-primary/10'}`}>{olt.type}</span>
+                            {olt.mode === 'BOTH' && <span className="text-[9px] px-1 rounded border border-purple-500/30 text-purple-400 bg-purple-500/10">BOTH</span>}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-[9px]">
+                            <span className="text-green-400">{onlineCount}↑</span>
+                            {offlineCount > 0 && <span className="text-red-400">{offlineCount}↓</span>}
+                          </div>
+                        </div>
+                      </Link>
+
+                      {/* PON connection label */}
+                      {connectedOnus.length > 0 && (
+                        <>
+                          <div className="relative">
+                            <div className="w-0.5 h-5 bg-border/60 mx-auto" />
+                            <span className="absolute left-2 top-1 text-[8px] font-mono text-muted-foreground/50 whitespace-nowrap">PON</span>
+                          </div>
+                          <div className="flex gap-1.5 justify-center flex-wrap max-w-[160px]">
+                            {connectedOnus.slice(0, 4).map(onu => (
+                              <Link key={onu.id} href={`/onus/${onu.id}`}>
+                                <div className={`px-2 py-1.5 rounded-lg border text-center cursor-pointer hover:scale-105 transition-transform ${onu.status === 'Online' ? 'border-green-500/30 bg-green-500/5' : onu.status === 'Offline' ? 'border-red-500/30 bg-red-500/5' : 'border-amber-500/30 bg-amber-500/5'}`} style={{width:'38px'}}>
+                                  <Cpu className={`h-3 w-3 mx-auto ${onu.status === 'Online' ? 'text-green-400' : onu.status === 'Offline' ? 'text-red-400' : 'text-amber-400'}`} />
+                                  <span className={`text-[8px] font-mono block mt-0.5 ${onu.status === 'Online' ? 'text-green-400/70' : 'text-red-400/70'}`}>{onu.onuNo.split('/')[2]}</span>
+                                </div>
+                              </Link>
+                            ))}
+                            {connectedOnus.length > 4 && (
+                              <div className="px-1.5 py-1.5 rounded-lg border border-border/40 bg-muted/30 text-center" style={{width:'38px'}}>
+                                <span className="text-[8px] text-muted-foreground font-mono">+{connectedOnus.length - 4}</span>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+            </div>
+          </div>
         </div>
       </div>
 
@@ -109,7 +217,7 @@ export default function DeviceDiagram() {
           <div className="space-y-3">
             {olts.slice(0, 5).map(olt => {
               const used = onuCountForOlt(olt.id);
-              const max = olt.ponPortCount * 64; 
+              const max = olt.ponPortCount * 64;
               const pct = max > 0 ? (used / max) * 100 : 0;
               return (
                 <div key={olt.id} className="space-y-1">
@@ -137,17 +245,17 @@ export default function DeviceDiagram() {
               <span className="text-sm text-muted-foreground">PON Ports Online</span>
               <span className="text-lg font-bold text-cyan-400">{olts.reduce((acc, o) => acc + (o.status === 'Online' ? o.ponPortCount : 0), 0)}</span>
             </div>
-            <div className="flex justify-between items-center pb-2">
+            <div className="flex justify-between items-center pb-2 border-b border-border/40">
               <span className="text-sm text-muted-foreground">ONU Attach Rate</span>
               <span className="text-lg font-bold text-amber-400">92%</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground flex items-center gap-1"><Wifi className="h-3.5 w-3.5 text-green-400" />ONUs Online</span>
+              <span className="text-lg font-bold text-green-400">{onus.filter(o => o.status === 'Online').length} <span className="text-xs text-muted-foreground">/ {onus.length}</span></span>
             </div>
           </div>
         </div>
       </div>
     </div>
   );
-}
-
-function onuCountForOlt(oltId: string) {
-  return onus.filter(o => o.oltId === oltId).length;
 }

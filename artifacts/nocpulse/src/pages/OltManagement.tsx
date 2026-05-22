@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useLocation } from 'wouter';
-import { olts, OltDevice } from '@/data/mockData';
+import { olts, onus, OltDevice } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -94,6 +94,19 @@ export default function OltManagement() {
 
   const brands = Array.from(new Set(olts.map(o => o.brand)));
 
+  // Per-OLT ONU stats derived from live data
+  const oltStats = useMemo(() => {
+    const stats: Record<string, { online: number; offline: number; total: number; usedPons: Set<string> }> = {};
+    onus.forEach(o => {
+      if (!stats[o.oltId]) stats[o.oltId] = { online: 0, offline: 0, total: 0, usedPons: new Set() };
+      stats[o.oltId].total++;
+      stats[o.oltId].usedPons.add(o.ponPort);
+      if (o.status === 'Online') stats[o.oltId].online++;
+      else stats[o.oltId].offline++;
+    });
+    return stats;
+  }, []);
+
   const filteredOlts = useMemo(() => {
     return olts.filter(olt => {
       const matchesSearch = 
@@ -177,56 +190,88 @@ export default function OltManagement() {
 
       {view === 'card' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredOlts.map((olt) => (
-            <div key={olt.id} onClick={() => navigate(`/olts/${olt.id}`)} className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-lg hover:border-primary/40 hover:shadow-primary/10 transition-all duration-200 cursor-pointer group p-5 space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold">{olt.name}</h3>
-                  <StatusBadge status={olt.status} className="mt-1" />
+          {filteredOlts.map((olt) => {
+            const s = oltStats[olt.id] ?? { online: 0, offline: 0, total: 0, usedPons: new Set<string>() };
+            const usedPon = s.usedPons.size;
+            const emptyPon = Math.max(0, olt.ponPortCount - usedPon);
+            return (
+              <div key={olt.id} onClick={() => navigate(`/olts/${olt.id}`)} className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-lg hover:border-primary/40 hover:shadow-primary/10 transition-all duration-200 cursor-pointer group p-4 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-bold text-sm">{olt.name}</h3>
+                    <StatusBadge status={olt.status} className="mt-1" />
+                  </div>
+                  <div onClick={e => e.stopPropagation()}>
+                    <OltActions olt={olt} onNavigate={(id) => navigate(`/olts/${id}`)} />
+                  </div>
                 </div>
-                <div onClick={e => e.stopPropagation()}>
-                  <OltActions olt={olt} onNavigate={(id) => navigate(`/olts/${id}`)} />
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <BrandBadge brand={olt.brand} />
+                  <TypeBadge type={olt.type} />
+                  {olt.mode === 'BOTH' && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border bg-purple-500/10 text-purple-400 border-purple-500/20">BOTH</span>
+                  )}
+                  <span className="text-[10px] text-muted-foreground ml-auto">{olt.location}</span>
+                </div>
+
+                <div className="font-mono text-[10px] text-muted-foreground">{olt.ip}</div>
+
+                <div className="h-px w-full bg-border/60" />
+
+                <div className="space-y-1.5">
+                  {olt.cpu === 0 && olt.memory === 0 ? (
+                    <div className="text-xs text-muted-foreground py-1 italic text-center">Metrics unavailable</div>
+                  ) : (
+                    <>
+                      <UsageBar value={olt.cpu} icon={Cpu} />
+                      <UsageBar value={olt.memory} icon={MemoryStick} />
+                      <div className="flex items-center gap-2">
+                        <Thermometer className="h-3 w-3 text-muted-foreground shrink-0" />
+                        <span className={`text-[11px] font-mono font-bold ${olt.temperature > 55 ? 'text-red-400' : olt.temperature > 45 ? 'text-amber-400' : 'text-green-400'}`}>
+                          {olt.temperature}°C
+                        </span>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="h-px w-full bg-border/60" />
+
+                {/* ONU counts */}
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground text-[10px]">Online</span>
+                    <span className="font-semibold text-green-400 font-mono">{s.online}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground text-[10px]">Offline</span>
+                    <span className={`font-semibold font-mono ${s.offline > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{s.offline}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground text-[10px]">Used PON</span>
+                    <span className="font-semibold font-mono">{usedPon}/{olt.ponPortCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground text-[10px]">Free PON</span>
+                    <span className={`font-semibold font-mono ${emptyPon === 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{emptyPon}</span>
+                  </div>
+                </div>
+
+                <div className="h-px w-full bg-border/60" />
+
+                <div className="flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <UplinkBadge status={olt.uplinkStatus} />
+                    <span className="font-mono text-[10px] text-muted-foreground">{olt.uplinkPort}</span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground text-right">
+                    Sync: {new Date(olt.lastSync).toLocaleDateString()}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <BrandBadge brand={olt.brand} />
-                <TypeBadge type={olt.type} />
-                <span className="text-xs text-muted-foreground ml-auto">{olt.location}</span>
-              </div>
-              <div className="font-mono text-xs text-muted-foreground">{olt.ip}</div>
-              <div className="h-px w-full bg-border/60" />
-              <div className="space-y-2">
-                {olt.cpu === 0 && olt.memory === 0 ? (
-                  <div className="text-xs text-muted-foreground py-2 italic text-center">Unavailable</div>
-                ) : (
-                  <>
-                    <UsageBar value={olt.cpu} icon={Cpu} />
-                    <UsageBar value={olt.memory} icon={MemoryStick} />
-                    <div className="flex items-center gap-2">
-                      <Thermometer className="h-3 w-3 text-muted-foreground shrink-0" />
-                      <span className={`text-[11px] font-mono font-bold ${olt.temperature > 55 ? 'text-red-400' : olt.temperature > 45 ? 'text-amber-400' : 'text-green-400'}`}>
-                        {olt.temperature}°C
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-              <div className="h-px w-full bg-border/60" />
-              <div className="flex items-center justify-between">
-                <div className="flex flex-col gap-0.5">
-                  <UplinkBadge status={olt.uplinkStatus} />
-                  <span className="font-mono text-[10px] text-muted-foreground">{olt.uplinkPort}</span>
-                </div>
-                <div className="text-right flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold">{olt.ponPortCount} PON</span>
-                  <span className="text-[10px] text-muted-foreground">{olt.activeOnus} ONUs</span>
-                </div>
-              </div>
-              <div className="text-[10px] text-muted-foreground text-center mt-2">
-                Sync: {new Date(olt.lastSync).toLocaleString()}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg">
