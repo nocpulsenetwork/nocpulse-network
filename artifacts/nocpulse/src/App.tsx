@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
 import OltManagement from "@/pages/OltManagement";
+import OltDetail from "@/pages/OltDetail";
 import OnuManagement from "@/pages/OnuManagement";
 import OnuDetail from "@/pages/OnuDetail";
 import DeviceDiagram from "@/pages/DeviceDiagram";
@@ -22,6 +23,7 @@ function Router() {
     <Layout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        <Route path="/olts/:id" component={OltDetail} />
         <Route path="/olts" component={OltManagement} />
         <Route path="/onus/:id" component={OnuDetail} />
         <Route path="/onus" component={OnuManagement} />

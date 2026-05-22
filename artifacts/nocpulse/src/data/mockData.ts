@@ -11,6 +11,15 @@ export interface OltDevice {
   uptime: string;
   lastSeen: string;
   location: string;
+  brand: string;
+  type: 'GPON' | 'EPON';
+  cpu: number;
+  memory: number;
+  temperature: number;
+  lastSync: string;
+  uplinkStatus: 'Active' | 'Standby' | 'Down';
+  uplinkPort: string;
+  ponPortCount: number;
 }
 
 export interface OnuDevice {
@@ -44,17 +53,17 @@ export interface Alarm {
 }
 
 export const olts: OltDevice[] = [
-  { id: 'olt-01', name: 'OLT-Core-01', ip: '10.0.1.10', portCount: 16, activeOnus: 450, status: 'Online', uptime: '45d 12h', lastSeen: 'Just now', location: 'Data Center Alpha' },
-  { id: 'olt-02', name: 'OLT-North-02', ip: '10.0.2.15', portCount: 8, activeOnus: 210, status: 'Online', uptime: '120d 4h', lastSeen: 'Just now', location: 'North Hub' },
-  { id: 'olt-03', name: 'OLT-South-01', ip: '10.0.3.20', portCount: 16, activeOnus: 380, status: 'Degraded', uptime: '15d 2h', lastSeen: '1m ago', location: 'South Node' },
-  { id: 'olt-04', name: 'OLT-East-01', ip: '10.0.4.11', portCount: 8, activeOnus: 150, status: 'Online', uptime: '90d 18h', lastSeen: 'Just now', location: 'East Hub' },
-  { id: 'olt-05', name: 'OLT-West-02', ip: '10.0.5.50', portCount: 16, activeOnus: 0, status: 'Offline', uptime: '0d 0h', lastSeen: '2h ago', location: 'West Node' },
-  { id: 'olt-06', name: 'OLT-Core-02', ip: '10.0.1.11', portCount: 16, activeOnus: 520, status: 'Online', uptime: '300d 5h', lastSeen: 'Just now', location: 'Data Center Alpha' },
-  { id: 'olt-07', name: 'OLT-Metro-01', ip: '10.0.6.10', portCount: 8, activeOnus: 195, status: 'Online', uptime: '45d 12h', lastSeen: 'Just now', location: 'Metro Exchange' },
-  { id: 'olt-08', name: 'OLT-Sub-01', ip: '10.0.7.22', portCount: 4, activeOnus: 85, status: 'Online', uptime: '12d 8h', lastSeen: 'Just now', location: 'Suburban Hub 1' },
-  { id: 'olt-09', name: 'OLT-North-03', ip: '10.0.2.16', portCount: 8, activeOnus: 0, status: 'Offline', uptime: '0d 0h', lastSeen: '1h ago', location: 'North Hub' },
-  { id: 'olt-10', name: 'OLT-South-02', ip: '10.0.3.21', portCount: 16, activeOnus: 200, status: 'Degraded', uptime: '2d 1h', lastSeen: '1m ago', location: 'South Node' },
-  { id: 'olt-11', name: 'OLT-East-02', ip: '10.0.4.12', portCount: 8, activeOnus: 110, status: 'Online', uptime: '10d 5h', lastSeen: 'Just now', location: 'East Hub' },
+  { id: 'olt-01', name: 'OLT-North-01', ip: '10.0.1.10', portCount: 16, activeOnus: 450, status: 'Online', uptime: '45d 12h', lastSeen: 'Just now', location: 'Data Center Alpha', brand: 'Huawei', type: 'GPON', cpu: 45, memory: 62, temperature: 48, lastSync: '2024-01-16T10:00:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/1', ponPortCount: 8 },
+  { id: 'olt-02', name: 'OLT-North-02', ip: '10.0.2.15', portCount: 8, activeOnus: 210, status: 'Online', uptime: '120d 4h', lastSeen: 'Just now', location: 'North Hub', brand: 'ZTE', type: 'GPON', cpu: 38, memory: 55, temperature: 44, lastSync: '2024-01-16T09:45:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/2', ponPortCount: 8 },
+  { id: 'olt-03', name: 'OLT-South-01', ip: '10.0.3.20', portCount: 16, activeOnus: 380, status: 'Degraded', uptime: '15d 2h', lastSeen: '1m ago', location: 'South Node', brand: 'Nokia', type: 'GPON', cpu: 72, memory: 78, temperature: 52, lastSync: '2024-01-16T09:30:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/1', ponPortCount: 16 },
+  { id: 'olt-04', name: 'OLT-South-02', ip: '10.0.4.11', portCount: 8, activeOnus: 150, status: 'Offline', uptime: '90d 18h', lastSeen: 'Just now', location: 'East Hub', brand: 'Huawei', type: 'EPON', cpu: 0, memory: 0, temperature: 0, lastSync: '2024-01-14T08:00:00Z', uplinkStatus: 'Down', uplinkPort: '10GE0/0/2', ponPortCount: 8 },
+  { id: 'olt-05', name: 'OLT-East-01', ip: '10.0.5.50', portCount: 16, activeOnus: 0, status: 'Online', uptime: '0d 0h', lastSeen: '2h ago', location: 'West Node', brand: 'Fiberhome', type: 'GPON', cpu: 55, memory: 67, temperature: 49, lastSync: '2024-01-16T09:50:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/1', ponPortCount: 8 },
+  { id: 'olt-06', name: 'OLT-East-02', ip: '10.0.1.11', portCount: 16, activeOnus: 520, status: 'Online', uptime: '300d 5h', lastSeen: 'Just now', location: 'Data Center Alpha', brand: 'ZTE', type: 'EPON', cpu: 12, memory: 35, temperature: 38, lastSync: '2024-01-16T09:55:00Z', uplinkStatus: 'Standby', uplinkPort: '10GE0/0/2', ponPortCount: 4 },
+  { id: 'olt-07', name: 'OLT-West-01', ip: '10.0.6.10', portCount: 8, activeOnus: 195, status: 'Online', uptime: '45d 12h', lastSeen: 'Just now', location: 'Metro Exchange', brand: 'Calix', type: 'GPON', cpu: 89, memory: 88, temperature: 61, lastSync: '2024-01-16T09:40:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/1', ponPortCount: 16 },
+  { id: 'olt-08', name: 'OLT-West-02', ip: '10.0.7.22', portCount: 4, activeOnus: 85, status: 'Offline', uptime: '12d 8h', lastSeen: 'Just now', location: 'Suburban Hub 1', brand: 'Huawei', type: 'GPON', cpu: 0, memory: 0, temperature: 0, lastSync: '2024-01-13T12:00:00Z', uplinkStatus: 'Down', uplinkPort: '10GE0/0/2', ponPortCount: 8 },
+  { id: 'olt-09', name: 'OLT-Core-01', ip: '10.0.2.16', portCount: 8, activeOnus: 0, status: 'Online', uptime: '0d 0h', lastSeen: '1h ago', location: 'North Hub', brand: 'Nokia', type: 'GPON', cpu: 34, memory: 48, temperature: 42, lastSync: '2024-01-16T10:05:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/1', ponPortCount: 32 },
+  { id: 'olt-10', name: 'OLT-Central-01', ip: '10.0.3.21', portCount: 16, activeOnus: 200, status: 'Online', uptime: '2d 1h', lastSeen: '1m ago', location: 'South Node', brand: 'Fiberhome', type: 'EPON', cpu: 67, memory: 71, temperature: 53, lastSync: '2024-01-16T09:58:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/1', ponPortCount: 16 },
+  { id: 'olt-11', name: 'OLT-Central-02', ip: '10.0.4.12', portCount: 8, activeOnus: 110, status: 'Online', uptime: '10d 5h', lastSeen: 'Just now', location: 'East Hub', brand: 'ZTE', type: 'GPON', cpu: 29, memory: 44, temperature: 41, lastSync: '2024-01-16T10:02:00Z', uplinkStatus: 'Active', uplinkPort: '10GE0/0/2', ponPortCount: 8 },
 ];
 
 export const onus: OnuDevice[] = [
@@ -101,6 +110,51 @@ export const alarms: Alarm[] = [
   { id: 'alm-105', severity: 'Major', deviceId: 'onu-009', deviceName: 'ONU (Valley High School)', timestamp: '2023-10-25T11:10:00Z', description: 'Signal degradation trend detected', acknowledged: false },
   { id: 'alm-106', severity: 'Critical', deviceId: 'olt-05', deviceName: 'OLT-West-02', timestamp: '2023-10-25T08:14:00Z', description: 'BGP session down', acknowledged: true },
   { id: 'alm-107', severity: 'Info', deviceId: 'sys', deviceName: 'System', timestamp: '2023-10-25T00:01:00Z', description: 'Daily report generated', acknowledged: true },
+  {
+    id: 'alarm-008',
+    deviceId: 'olt-07',
+    deviceName: 'OLT-West-01',
+    severity: 'Major',
+    description: 'CPU usage critical — 89% sustained for 15 minutes',
+    timestamp: '2024-01-16T08:30:00Z',
+    acknowledged: false,
+  },
+  {
+    id: 'alarm-009',
+    deviceId: 'onu-007',
+    deviceName: 'ONU (Bakery Shop)',
+    severity: 'Minor',
+    description: 'TX power slightly low — 0.8 dBm',
+    timestamp: '2024-01-16T07:45:00Z',
+    acknowledged: false,
+  },
+  {
+    id: 'alarm-010',
+    deviceId: 'olt-03',
+    deviceName: 'OLT-South-01',
+    severity: 'Minor',
+    description: 'Memory usage elevated — 78%',
+    timestamp: '2024-01-16T06:00:00Z',
+    acknowledged: true,
+  },
+  {
+    id: 'alarm-011',
+    deviceId: 'olt-09',
+    deviceName: 'OLT-Core-01',
+    severity: 'Info',
+    description: 'Scheduled maintenance window completed successfully',
+    timestamp: '2024-01-15T23:00:00Z',
+    acknowledged: true,
+  },
+  {
+    id: 'alarm-012',
+    deviceId: 'onu-004',
+    deviceName: 'ONU (Main Library)',
+    severity: 'Info',
+    description: 'ONU firmware upgraded to v3.2.1',
+    timestamp: '2024-01-15T22:30:00Z',
+    acknowledged: true,
+  }
 ];
 
 export const metrics = {

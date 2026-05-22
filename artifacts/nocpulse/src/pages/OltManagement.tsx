@@ -1,26 +1,98 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { olts } from '@/data/mockData';
+import { useState, useMemo } from 'react';
+import { useLocation } from 'wouter';
+import { olts, OltDevice } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Input } from '@/components/ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search } from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Search, LayoutGrid, List, Server, Cpu, MemoryStick, Thermometer, Activity, RefreshCw, Settings, Eye, MoreHorizontal, Wifi, WifiOff } from 'lucide-react';
+
+function BrandBadge({ brand }: { brand: string }) {
+  const colors: Record<string, string> = {
+    Huawei: 'bg-red-500/10 text-red-400 border-red-500/20',
+    ZTE: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    Nokia: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+    Fiberhome: 'bg-orange-500/10 text-orange-400 border-orange-500/20',
+    Calix: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${colors[brand] ?? 'bg-muted text-muted-foreground border-border'}`}>
+      {brand}
+    </span>
+  );
+}
+
+function TypeBadge({ type }: { type: 'GPON' | 'EPON' }) {
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+      type === 'GPON' ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' : 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+    }`}>
+      {type}
+    </span>
+  );
+}
+
+function UsageBar({ value, icon: Icon }: { value: number; icon: React.ElementType }) {
+  const color = value > 80 ? 'bg-red-500' : value > 60 ? 'bg-amber-500' : 'bg-green-500';
+  return (
+    <div className="flex items-center gap-2 min-w-0">
+      <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden min-w-[60px]">
+        <div className={`h-full rounded-full transition-all duration-500 ${color}`} style={{ width: `${value}%` }} />
+      </div>
+      <span className={`text-[11px] font-mono shrink-0 w-8 text-right ${value > 80 ? 'text-red-400' : value > 60 ? 'text-amber-400' : 'text-muted-foreground'}`}>{value}%</span>
+    </div>
+  );
+}
+
+export function UplinkBadge({ status }: { status: 'Active' | 'Standby' | 'Down' }) {
+  if (status === 'Active') return <span className="flex items-center gap-1 text-[11px] text-green-400"><Wifi className="h-3 w-3" />Active</span>;
+  if (status === 'Standby') return <span className="flex items-center gap-1 text-[11px] text-amber-400"><Activity className="h-3 w-3" />Standby</span>;
+  return <span className="flex items-center gap-1 text-[11px] text-red-400"><WifiOff className="h-3 w-3" />Down</span>;
+}
+
+function OltActions({ olt, onNavigate }: { olt: OltDevice; onNavigate: (id: string) => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-primary/10">
+          <MoreHorizontal className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuLabel className="text-xs text-muted-foreground">Actions</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onNavigate(olt.id); }} className="gap-2 cursor-pointer">
+          <Eye className="h-4 w-4" /> View Details
+        </DropdownMenuItem>
+        <DropdownMenuItem className="gap-2 cursor-pointer opacity-60" disabled>
+          <RefreshCw className="h-4 w-4" /> Reboot (soon)
+        </DropdownMenuItem>
+        <DropdownMenuItem className="gap-2 cursor-pointer opacity-60" disabled>
+          <Settings className="h-4 w-4" /> Configure (soon)
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export default function OltManagement() {
+  const [, navigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get('status');
 
+  const [view, setView] = useState<'card' | 'table'>('card');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>(
     initialStatus ? initialStatus.charAt(0).toUpperCase() + initialStatus.slice(1) : 'All Status'
   );
+  const [brandFilter, setBrandFilter] = useState<string>('All Brands');
+  const [typeFilter, setTypeFilter] = useState<string>('All Types');
 
-  useEffect(() => {
-    if (initialStatus) {
-      setStatusFilter(initialStatus.charAt(0).toUpperCase() + initialStatus.slice(1));
-    }
-  }, [initialStatus]);
+  const brands = Array.from(new Set(olts.map(o => o.brand)));
 
   const filteredOlts = useMemo(() => {
     return olts.filter(olt => {
@@ -30,36 +102,38 @@ export default function OltManagement() {
         olt.location.toLowerCase().includes(searchTerm.toLowerCase());
         
       const matchesStatus = statusFilter === 'All Status' || olt.status === statusFilter;
+      const matchesBrand = brandFilter === 'All Brands' || olt.brand === brandFilter;
+      const matchesType = typeFilter === 'All Types' || olt.type === typeFilter;
       
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesStatus && matchesBrand && matchesType;
     });
-  }, [searchTerm, statusFilter]);
+  }, [searchTerm, statusFilter, brandFilter, typeFilter]);
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">OLT Management</h1>
-          <div className="text-muted-foreground flex items-center gap-2 text-sm">
-            Manage and monitor Optical Line Terminals
-            <Badge variant="secondary" className="ml-2">Showing {filteredOlts.length} of {olts.length} OLTs</Badge>
+          <div className="text-muted-foreground flex items-center gap-2 text-sm mt-1">
+            Optical Line Terminals
+            <Badge variant="secondary">{filteredOlts.length} of {olts.length} OLTs</Badge>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 bg-card p-4 rounded-lg border shadow-sm">
-        <div className="relative w-full max-w-sm">
+      <div className="flex flex-wrap items-center gap-3 bg-card/60 backdrop-blur-sm p-4 rounded-xl border border-border/60">
+        <div className="relative w-full max-w-[240px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input 
-            placeholder="Search OLTs by name, IP, or location..." 
-            className="pl-8"
+            placeholder="Search OLTs..." 
+            className="pl-8 bg-background/50"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
         
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-[140px] bg-background/50">
             <SelectValue placeholder="All Status" />
           </SelectTrigger>
           <SelectContent>
@@ -69,46 +143,150 @@ export default function OltManagement() {
             <SelectItem value="Degraded">Degraded</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={brandFilter} onValueChange={setBrandFilter}>
+          <SelectTrigger className="w-[140px] bg-background/50">
+            <SelectValue placeholder="All Brands" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All Brands">All Brands</SelectItem>
+            {brands.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-[140px] bg-background/50">
+            <SelectValue placeholder="All Types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All Types">All Types</SelectItem>
+            <SelectItem value="GPON">GPON</SelectItem>
+            <SelectItem value="EPON">EPON</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center ml-auto gap-1 border border-border/60 p-1 rounded-md bg-background/50">
+          <Button variant={view === 'card' ? 'secondary' : 'ghost'} size="sm" onClick={() => setView('card')} className="h-7 px-2">
+            <LayoutGrid className="h-4 w-4" />
+          </Button>
+          <Button variant={view === 'table' ? 'secondary' : 'ghost'} size="sm" onClick={() => setView('table')} className="h-7 px-2">
+            <List className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/60">
-              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Name</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">IP Address</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Location</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Ports</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Active ONUs</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Status</TableHead>
-              <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Uptime</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filteredOlts.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                  No OLTs found matching your search.
-                </TableCell>
+      {view === 'card' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredOlts.map((olt) => (
+            <div key={olt.id} onClick={() => navigate(`/olts/${olt.id}`)} className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-lg hover:border-primary/40 hover:shadow-primary/10 transition-all duration-200 cursor-pointer group p-5 space-y-3">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold">{olt.name}</h3>
+                  <StatusBadge status={olt.status} className="mt-1" />
+                </div>
+                <div onClick={e => e.stopPropagation()}>
+                  <OltActions olt={olt} onNavigate={(id) => navigate(`/olts/${id}`)} />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <BrandBadge brand={olt.brand} />
+                <TypeBadge type={olt.type} />
+                <span className="text-xs text-muted-foreground ml-auto">{olt.location}</span>
+              </div>
+              <div className="font-mono text-xs text-muted-foreground">{olt.ip}</div>
+              <div className="h-px w-full bg-border/60" />
+              <div className="space-y-2">
+                {olt.cpu === 0 && olt.memory === 0 ? (
+                  <div className="text-xs text-muted-foreground py-2 italic text-center">Unavailable</div>
+                ) : (
+                  <>
+                    <UsageBar value={olt.cpu} icon={Cpu} />
+                    <UsageBar value={olt.memory} icon={MemoryStick} />
+                    <div className="flex items-center gap-2">
+                      <Thermometer className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <span className={`text-[11px] font-mono font-bold ${olt.temperature > 55 ? 'text-red-400' : olt.temperature > 45 ? 'text-amber-400' : 'text-green-400'}`}>
+                        {olt.temperature}°C
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+              <div className="h-px w-full bg-border/60" />
+              <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-0.5">
+                  <UplinkBadge status={olt.uplinkStatus} />
+                  <span className="font-mono text-[10px] text-muted-foreground">{olt.uplinkPort}</span>
+                </div>
+                <div className="text-right flex flex-col gap-0.5">
+                  <span className="text-xs font-semibold">{olt.ponPortCount} PON</span>
+                  <span className="text-[10px] text-muted-foreground">{olt.activeOnus} ONUs</span>
+                </div>
+              </div>
+              <div className="text-[10px] text-muted-foreground text-center mt-2">
+                Sync: {new Date(olt.lastSync).toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/60">
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Name</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Brand</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Type</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">IP Address</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Ports</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Active ONUs</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">CPU</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Uplink</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Status</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Last Sync</TableHead>
+                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground w-12"></TableHead>
               </TableRow>
-            ) : (
-              filteredOlts.map((olt) => (
-                <TableRow key={olt.id} className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group">
-                  <TableCell className="font-medium">{olt.name}</TableCell>
-                  <TableCell className="font-mono text-xs">{olt.ip}</TableCell>
-                  <TableCell>{olt.location}</TableCell>
-                  <TableCell>{olt.portCount}</TableCell>
-                  <TableCell>{olt.activeOnus}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={olt.status} />
+            </TableHeader>
+            <TableBody>
+              {filteredOlts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={11} className="text-center py-12 text-muted-foreground">
+                    No OLTs found matching your search.
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{olt.uptime}</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                filteredOlts.map((olt) => (
+                  <TableRow key={olt.id} onClick={() => navigate(`/olts/${olt.id}`)} className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group">
+                    <TableCell className="font-medium">{olt.name}</TableCell>
+                    <TableCell><BrandBadge brand={olt.brand} /></TableCell>
+                    <TableCell><TypeBadge type={olt.type} /></TableCell>
+                    <TableCell className="font-mono text-xs">{olt.ip}</TableCell>
+                    <TableCell>{olt.ponPortCount}</TableCell>
+                    <TableCell>{olt.activeOnus}</TableCell>
+                    <TableCell>
+                      {olt.cpu === 0 ? <span className="text-muted-foreground text-xs">--</span> : (
+                        <div className="flex items-center gap-2">
+                          <div className="w-10 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${olt.cpu > 80 ? 'bg-red-500' : olt.cpu > 60 ? 'bg-amber-500' : 'bg-green-500'}`} style={{width: `${olt.cpu}%`}} />
+                          </div>
+                          <span className="text-xs font-mono">{olt.cpu}%</span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell><UplinkBadge status={olt.uplinkStatus} /></TableCell>
+                    <TableCell>
+                      <StatusBadge status={olt.status} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs whitespace-nowrap">{new Date(olt.lastSync).toLocaleString()}</TableCell>
+                    <TableCell onClick={e => e.stopPropagation()}>
+                      <OltActions olt={olt} onNavigate={(id) => navigate(`/olts/${id}`)} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }
