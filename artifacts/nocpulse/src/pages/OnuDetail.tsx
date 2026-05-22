@@ -27,16 +27,21 @@ import {
   TrendingUp,
   Settings,
   ShieldCheck,
+  Network,
+  Tag,
+  PlugZap,
+  Layers,
+  Minus,
+  Gauge,
+  GitBranch,
 } from 'lucide-react';
 
-// Generate some dummy bandwidth data
-const generateBandwidthData = () => {
-  return Array.from({ length: 24 }).map((_, i) => ({
+const generateBandwidthData = () =>
+  Array.from({ length: 24 }).map((_, i) => ({
     time: `${i}:00`,
     download: Math.floor(Math.random() * 800) + 200,
     upload: Math.floor(Math.random() * 300) + 50,
   }));
-};
 
 const bandwidthData = generateBandwidthData();
 
@@ -74,19 +79,39 @@ export default function OnuDetail() {
   const parentOlt = olts.find(o => o.id === onu.oltId);
   const isPoorSignal = onu.signalLevel < -28;
   const isWarningSignal = onu.signalLevel >= -28 && onu.signalLevel < -25;
-  
-  const getLossRateColor = (rateStr: string) => {
-    const rate = parseFloat(rateStr);
-    if (rate > 5) return 'text-red-500';
-    if (rate > 1) return 'text-amber-500';
-    return 'text-green-500';
+  const ponNumber = onu.onuNo.split('/')[1] ?? '?';
+  const slotNumber = onu.onuNo.split('/')[0] ?? '?';
+  const onuIndex = onu.onuNo.split('/')[2] ?? '?';
+
+  // Power delta vs offline snapshot
+  const powerDelta = onu.lastOfflineRxPower !== null
+    ? parseFloat((onu.signalLevel - onu.lastOfflineRxPower).toFixed(1))
+    : null;
+  const powerImproved = powerDelta !== null && powerDelta > 0;
+  const powerWorsened = powerDelta !== null && powerDelta < 0;
+
+  const bars = 5;
+  const filledBars = onu.signalLevel > -20 ? 5 : onu.signalLevel > -25 ? 4 : onu.signalLevel > -28 ? 3 : onu.signalLevel > -32 ? 2 : 1;
+  const barColor = filledBars >= 4 ? 'bg-green-500' : filledBars === 3 ? 'bg-amber-500' : 'bg-red-500';
+  const qualityLabel = filledBars >= 4 ? 'Excellent' : filledBars === 3 ? 'Good' : filledBars === 2 ? 'Fair' : 'Poor';
+
+  const getStabilityConfig = () => {
+    switch (onu.signalStability) {
+      case 'Stable':
+        return { color: 'text-green-500', bg: 'bg-green-500/10', border: 'border-l-green-500', badge: 'bg-green-500/10 text-green-600 border-green-500/20', label: 'Stable', desc: 'Signal is consistent within ±0.5 dBm over the last 24h' };
+      case 'Fluctuating':
+        return { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-l-amber-500', badge: 'bg-amber-500/10 text-amber-600 border-amber-500/20', label: 'Fluctuating', desc: 'Signal varies ±2–4 dBm — possible micro-bend or loose connector' };
+      case 'Degrading':
+        return { color: 'text-red-500', bg: 'bg-red-500/10', border: 'border-l-red-500', badge: 'bg-red-500/10 text-red-600 border-red-500/20', label: 'Degrading', desc: 'Sustained signal decline — fiber inspection recommended' };
+    }
   };
+  const stability = getStabilityConfig();
 
   const getLogBadge = (level: string) => {
     switch (level) {
       case 'ERROR': return <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[10px]">ERROR</Badge>;
       case 'WARN': return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20 text-[10px]">WARN</Badge>;
-      case 'INFO': default: return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px]">INFO</Badge>;
+      default: return <Badge variant="outline" className="bg-blue-500/10 text-blue-600 border-blue-500/20 text-[10px]">INFO</Badge>;
     }
   };
 
@@ -94,20 +119,14 @@ export default function OnuDetail() {
     switch (level) {
       case 'ERROR': return 'border-l-2 border-l-red-500';
       case 'WARN': return 'border-l-2 border-l-amber-500';
-      case 'INFO': default: return 'border-l-2 border-l-blue-500';
+      default: return 'border-l-2 border-l-blue-500';
     }
   };
 
-  const bars = 5;
-  const filledBars = onu.signalLevel > -20 ? 5 : onu.signalLevel > -25 ? 4 : onu.signalLevel > -28 ? 3 : onu.signalLevel > -32 ? 2 : 1;
-  const barColor = filledBars >= 4 ? 'bg-green-500' : filledBars === 3 ? 'bg-amber-500' : 'bg-red-500';
-  const qualityLabel = filledBars >= 4 ? 'Excellent' : filledBars === 3 ? 'Good' : filledBars === 2 ? 'Fair' : 'Poor';
-
-
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-5 pb-10">
       {/* Breadcrumb */}
-      <div className="flex items-center text-sm text-muted-foreground mb-4">
+      <div className="flex items-center text-sm text-muted-foreground">
         <Link href="/" className="hover:text-foreground transition-colors">Dashboard</Link>
         <span className="mx-2">/</span>
         <Link href="/onus" className="hover:text-foreground transition-colors">ONU Management</Link>
@@ -115,28 +134,36 @@ export default function OnuDetail() {
         <span className="text-foreground font-medium">{onu.onuNo}</span>
       </div>
 
-      {/* Header Row */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight font-mono">{onu.onuNo}</h1>
             <StatusBadge status={onu.status} className="text-sm px-2.5 py-0.5" />
+            <Badge variant="outline" className={`text-[10px] ${stability.badge}`}>{stability.label}</Badge>
           </div>
           <p className="text-muted-foreground mt-1 text-lg">{onu.description}</p>
+          <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+            <span className="font-mono bg-primary/10 text-primary border border-primary/20 rounded px-1.5 py-0.5">VLAN {onu.vlanId}</span>
+            <span className="font-mono bg-muted/60 border border-border/40 rounded px-1.5 py-0.5">{onu.ponPort}</span>
+            <span className="font-mono bg-muted/60 border border-border/40 rounded px-1.5 py-0.5">{onu.oltPort}</span>
+            <span className="text-muted-foreground/60">·</span>
+            <span>{parentOlt?.brand ?? '—'} {parentOlt?.type ?? ''}</span>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => setLocation('/onus')}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to ONU List
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500/20"
             onClick={() => toast.success(`Reboot command sent to ${onu.onuNo}`)}
           >
             Reboot
           </Button>
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="bg-red-500/10 text-red-600 border-red-500/20 hover:bg-red-500/20"
             onClick={() => toast.success(`ONU disabled`)}
           >
@@ -145,197 +172,363 @@ export default function OnuDetail() {
         </div>
       </div>
 
-      {/* Section 1: Signal Cards (Row 1) */}
+      {/* Row 1: Core Signal Metrics */}
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card className="shadow-sm border-border/50 border-l-4 border-l-blue-500">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start pb-2">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">RX Power</p>
-              <div className="p-2 rounded-lg bg-blue-500/10 text-blue-500">
-                <Signal className="h-5 w-5" />
+              <div className="p-1.5 rounded-lg bg-blue-500/10 text-blue-500"><Signal className="h-4 w-4" /></div>
+            </div>
+            <div className={`text-3xl font-bold tracking-tight mt-1 ${isPoorSignal ? 'text-red-500' : isWarningSignal ? 'text-amber-500' : 'text-green-500'}`}>
+              {onu.signalLevel} <span className="text-base font-normal text-muted-foreground">dBm</span>
+            </div>
+            {powerDelta !== null && (
+              <div className={`flex items-center gap-1 mt-1.5 text-[11px] font-medium ${powerImproved ? 'text-green-500' : powerWorsened ? 'text-red-500' : 'text-muted-foreground'}`}>
+                {powerImproved ? <TrendingUp className="h-3 w-3" /> : powerWorsened ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                {powerImproved ? '+' : ''}{powerDelta} dBm vs snapshot
               </div>
-            </div>
-            <div className={`text-3xl font-bold tracking-tight mt-2 ${isPoorSignal ? 'text-red-500' : isWarningSignal ? 'text-amber-500' : 'text-green-500'}`}>
-              {onu.signalLevel} <span className="text-lg font-normal text-muted-foreground">dBm</span>
-            </div>
+            )}
           </CardContent>
         </Card>
-        
+
         <Card className="shadow-sm border-border/50 border-l-4 border-l-purple-500">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start pb-2">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">TX Power</p>
-              <div className="p-2 rounded-lg bg-purple-500/10 text-purple-500">
-                <Radio className="h-5 w-5" />
-              </div>
+              <div className="p-1.5 rounded-lg bg-purple-500/10 text-purple-500"><Radio className="h-4 w-4" /></div>
             </div>
-            <div className={`text-3xl font-bold tracking-tight mt-2 ${onu.txPower < -3 || onu.txPower > 5 ? 'text-red-500' : 'text-green-500'}`}>
-              {onu.txPower} <span className="text-lg font-normal text-muted-foreground">dBm</span>
+            <div className={`text-3xl font-bold tracking-tight mt-1 ${onu.txPower < -3 || onu.txPower > 5 ? 'text-red-500' : onu.txPower < 0 ? 'text-amber-500' : 'text-green-500'}`}>
+              {onu.txPower} <span className="text-base font-normal text-muted-foreground">dBm</span>
             </div>
+            <div className="text-[11px] text-muted-foreground mt-1.5">Normal range: −3 to +5 dBm</div>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-border/50 border-l-4 border-l-cyan-500">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start pb-2">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">Distance</p>
-              <div className="p-2 rounded-lg bg-cyan-500/10 text-cyan-500">
-                <Ruler className="h-5 w-5" />
-              </div>
+              <div className="p-1.5 rounded-lg bg-cyan-500/10 text-cyan-500"><Ruler className="h-4 w-4" /></div>
             </div>
-            <div className="text-3xl font-bold tracking-tight mt-2">
-              {onu.distance.replace(' km', '')} <span className="text-lg font-normal text-muted-foreground">km</span>
+            <div className="text-3xl font-bold tracking-tight mt-1">
+              {onu.distance.replace(' km', '')} <span className="text-base font-normal text-muted-foreground">km</span>
             </div>
+            <div className="text-[11px] text-muted-foreground mt-1.5">Optical fiber length</div>
           </CardContent>
         </Card>
 
         <Card className="shadow-sm border-border/50 border-l-4 border-l-green-500">
-          <CardContent className="p-6">
-            <div className="flex justify-between items-start pb-2">
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">Online Duration</p>
-              <div className="p-2 rounded-lg bg-green-500/10 text-green-500">
-                <Clock className="h-5 w-5" />
-              </div>
+              <div className="p-1.5 rounded-lg bg-green-500/10 text-green-500"><Clock className="h-4 w-4" /></div>
             </div>
-            <div className={`text-2xl font-bold tracking-tight mt-2 ${onu.status === 'Offline' ? 'text-muted-foreground' : 'text-foreground'}`}>
-              {onu.onlineDuration}
+            <div className={`text-2xl font-bold tracking-tight mt-1 ${onu.status === 'Offline' ? 'text-muted-foreground' : 'text-foreground'}`}>
+              {onu.onlineDuration === 'N/A' ? '—' : onu.onlineDuration}
             </div>
+            <div className="text-[11px] text-muted-foreground mt-1.5">Continuous uptime session</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Section 1.5: Extra Cards (Row 2) */}
-      <div className="grid gap-4 grid-cols-2">
+      {/* Row 2: Signal Quality | Signal Stability | Temperature */}
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-3">
         <Card className={`shadow-sm border-border/50 border-l-4 ${filledBars >= 4 ? 'border-l-green-500' : filledBars === 3 ? 'border-l-amber-500' : 'border-l-red-500'}`}>
-           <CardContent className="p-6">
-              <div className="flex justify-between items-start pb-2">
-                 <p className="text-sm font-medium text-muted-foreground">Signal Quality</p>
-                 <div className="p-2 rounded-lg bg-muted text-muted-foreground">
-                    <Activity className="h-5 w-5" />
-                 </div>
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start pb-1">
+              <p className="text-sm font-medium text-muted-foreground">Signal Quality</p>
+              <div className="p-1.5 rounded-lg bg-muted text-muted-foreground"><Activity className="h-4 w-4" /></div>
+            </div>
+            <div className="mt-2 flex items-center gap-3">
+              <div className="flex items-end gap-1 h-8">
+                {Array.from({ length: bars }).map((_, i) => (
+                  <div key={i} className={`w-2.5 rounded-sm ${i < filledBars ? barColor : 'bg-muted'}`} style={{ height: `${(i + 1) * 20}%` }} />
+                ))}
               </div>
-              <div className="mt-2 flex items-center gap-4">
-                 <div className="flex items-end gap-1 h-8">
-                    {Array.from({length: bars}).map((_, i) => (
-                       <div key={i} className={`w-2.5 rounded-sm transition-all ${i < filledBars ? barColor : 'bg-muted'}`} style={{height: `${(i+1) * 20}%`}} />
-                    ))}
-                 </div>
-                 <div className="text-2xl font-bold tracking-tight">{qualityLabel}</div>
+              <div className="text-2xl font-bold">{qualityLabel}</div>
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-2">{onu.signalLevel} dBm RX reading</div>
+          </CardContent>
+        </Card>
+
+        <Card className={`shadow-sm border-border/50 border-l-4 ${stability.border}`}>
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start pb-1">
+              <p className="text-sm font-medium text-muted-foreground">Signal Stability</p>
+              <div className={`p-1.5 rounded-lg ${stability.bg}`}>
+                <Gauge className={`h-4 w-4 ${stability.color}`} />
               </div>
-           </CardContent>
+            </div>
+            <div className={`text-2xl font-bold mt-2 ${stability.color}`}>{stability.label}</div>
+            <div className="text-[11px] text-muted-foreground mt-2 leading-relaxed">{stability.desc}</div>
+          </CardContent>
         </Card>
 
         <Card className="shadow-sm border-border/50 border-l-4 border-l-amber-500">
-           <CardContent className="p-6">
-              <div className="flex justify-between items-start pb-2">
-                 <p className="text-sm font-medium text-muted-foreground">Temperature</p>
-                 <div className="p-2 rounded-lg bg-amber-500/10 text-amber-500">
-                    <Thermometer className="h-5 w-5" />
-                 </div>
-              </div>
-              <div className="text-3xl font-bold tracking-tight mt-2 text-muted-foreground/50">
-                 -- <span className="text-lg font-normal text-muted-foreground">°C</span>
-              </div>
-              <p className="text-[10px] text-amber-500/80 font-medium mt-1 uppercase tracking-widest">Requires SNMP backend</p>
-           </CardContent>
+          <CardContent className="p-5">
+            <div className="flex justify-between items-start pb-1">
+              <p className="text-sm font-medium text-muted-foreground">Temperature</p>
+              <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500"><Thermometer className="h-4 w-4" /></div>
+            </div>
+            <div className="text-3xl font-bold mt-2 text-muted-foreground/50">
+              — <span className="text-base font-normal text-muted-foreground">°C</span>
+            </div>
+            <p className="text-[10px] text-amber-500/80 font-medium mt-2 uppercase tracking-widest">Requires SNMP backend</p>
+          </CardContent>
         </Card>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Section 2: ONU Information */}
-        <Card className="md:col-span-1 shadow-sm border-border/50 flex flex-col">
-          <CardHeader>
-            <CardTitle>Hardware Details</CardTitle>
-            <CardDescription>Identity and network binding</CardDescription>
+      {/* Row 3: Power Intelligence (only if offline snapshot exists) */}
+      {onu.lastOfflineRxPower !== null && (
+        <Card className="shadow-sm border-border/50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <PlugZap className="h-4 w-4 text-primary" />
+                  Power Intelligence — Offline Snapshot Comparison
+                </CardTitle>
+                <CardDescription>Comparing current RX power against last recorded offline snapshot</CardDescription>
+              </div>
+              <Badge variant="outline" className={`text-[10px] ${powerImproved ? 'bg-green-500/10 text-green-600 border-green-500/20' : powerWorsened ? 'bg-red-500/10 text-red-600 border-red-500/20' : 'bg-muted text-muted-foreground'}`}>
+                {powerImproved ? '▲ Improved' : powerWorsened ? '▼ Worsening' : '— Unchanged'}
+              </Badge>
+            </div>
           </CardHeader>
-          <CardContent className="flex-1 space-y-4">
-            <div className="grid grid-cols-2 gap-y-4 text-sm">
-              <div className="col-span-2 flex gap-4 bg-muted/30 p-3 rounded-lg border border-border/50 mb-2">
-                 <div className="flex-1">
-                    <p className="text-[10px] uppercase text-muted-foreground tracking-widest mb-1 font-bold">ONU Uptime</p>
-                    <p className="font-semibold">{onu.onlineDuration}</p>
-                 </div>
-                 <div className="w-px bg-border" />
-                 <div className="flex-1">
-                    <p className="text-[10px] uppercase text-muted-foreground tracking-widest mb-1 font-bold">Last Disconnect</p>
-                    <p className="font-semibold text-xs">{onu.lastLogoutReason}</p>
-                 </div>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              {/* Offline Snapshot */}
+              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-2 w-2 rounded-full bg-red-500" />
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Offline Snapshot</p>
+                </div>
+                <p className="text-2xl font-bold font-mono text-red-500">{onu.lastOfflineRxPower} <span className="text-sm font-normal text-muted-foreground">dBm</span></p>
+                <p className="text-[11px] text-muted-foreground mt-1">Last RX before disconnect</p>
               </div>
 
+              {/* Current Reading */}
+              <div className={`border rounded-lg p-4 ${isPoorSignal ? 'bg-red-500/5 border-red-500/20' : isWarningSignal ? 'bg-amber-500/5 border-amber-500/20' : 'bg-green-500/5 border-green-500/20'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={`h-2 w-2 rounded-full ${isPoorSignal ? 'bg-red-500' : isWarningSignal ? 'bg-amber-500' : 'bg-green-500'}`} />
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Current Reading</p>
+                </div>
+                <p className={`text-2xl font-bold font-mono ${isPoorSignal ? 'text-red-500' : isWarningSignal ? 'text-amber-500' : 'text-green-500'}`}>
+                  {onu.signalLevel} <span className="text-sm font-normal text-muted-foreground">dBm</span>
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">Live RX power reading</p>
+              </div>
+
+              {/* Delta */}
+              <div className={`border rounded-lg p-4 ${powerImproved ? 'bg-green-500/5 border-green-500/20' : powerWorsened ? 'bg-red-500/5 border-red-500/20' : 'bg-muted/30 border-border/50'}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  {powerImproved ? <TrendingUp className="h-3.5 w-3.5 text-green-500" /> : powerWorsened ? <TrendingDown className="h-3.5 w-3.5 text-red-500" /> : <Minus className="h-3.5 w-3.5 text-muted-foreground" />}
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Power Delta</p>
+                </div>
+                <p className={`text-2xl font-bold font-mono ${powerImproved ? 'text-green-500' : powerWorsened ? 'text-red-500' : 'text-muted-foreground'}`}>
+                  {powerDelta !== null && powerDelta > 0 ? '+' : ''}{powerDelta} <span className="text-sm font-normal text-muted-foreground">dBm</span>
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {powerImproved ? 'Signal recovered since last outage' : powerWorsened ? 'Signal has worsened — monitor closely' : 'No significant change'}
+                </p>
+              </div>
+            </div>
+
+            {/* Signal bar comparison */}
+            <div className="mt-4 grid grid-cols-2 gap-4">
               <div>
-                <p className="text-muted-foreground mb-1">ONU MAC</p>
-                <p className="font-mono text-xs font-medium bg-muted p-1 rounded inline-block">{onu.macAddress}</p>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Offline Snapshot Level</p>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-red-500 rounded-full transition-all"
+                    style={{ width: `${Math.max(0, Math.min(100, ((onu.lastOfflineRxPower! + 50) / 35) * 100))}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+                  <span>−50 dBm (worst)</span><span>−15 dBm (best)</span>
+                </div>
               </div>
               <div>
-                <p className="text-muted-foreground mb-1">Client MAC</p>
-                <p className="font-mono text-xs font-medium bg-muted p-1 rounded inline-block">{onu.clientMac}</p>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2">Current Signal Level</p>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${isPoorSignal ? 'bg-red-500' : isWarningSignal ? 'bg-amber-500' : 'bg-green-500'}`}
+                    style={{ width: `${Math.max(0, Math.min(100, ((onu.signalLevel + 50) / 35) * 100))}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
+                  <span>−50 dBm (worst)</span><span>−15 dBm (best)</span>
+                </div>
               </div>
-              
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Row 4: Network Configuration (VLAN / PON / OLT Port) */}
+      <div className="grid gap-4 grid-cols-2 sm:grid-cols-4">
+        <Card className="shadow-sm border-border/50 border-l-4 border-l-primary">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Tag className="h-3.5 w-3.5 text-primary" />
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">VLAN ID</p>
+            </div>
+            <p className="text-2xl font-bold font-mono text-primary">{onu.vlanId}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Service VLAN tag</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-border/50 border-l-4 border-l-indigo-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Layers className="h-3.5 w-3.5 text-indigo-500" />
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">PON Details</p>
+            </div>
+            <p className="text-2xl font-bold font-mono">{onu.ponPort}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">Slot {slotNumber} · PON {ponNumber} · ONU {onuIndex}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-border/50 border-l-4 border-l-violet-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <PlugZap className="h-3.5 w-3.5 text-violet-500" />
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">OLT Port</p>
+            </div>
+            <p className="text-sm font-bold font-mono text-violet-500">{onu.oltPort}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{parentOlt?.name ?? onu.oltId}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-border/50 border-l-4 border-l-teal-500">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <GitBranch className="h-3.5 w-3.5 text-teal-500" />
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Network Type</p>
+            </div>
+            <p className="text-2xl font-bold text-teal-500">{parentOlt?.type ?? '—'}</p>
+            <p className="text-[11px] text-muted-foreground mt-1">{onu.bandwidth} bandwidth plan</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Row 5: Hardware Details + Charts */}
+      <div className="grid gap-6 md:grid-cols-3">
+        {/* Hardware Details — enhanced */}
+        <Card className="md:col-span-1 shadow-sm border-border/50 flex flex-col">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Network className="h-4 w-4 text-muted-foreground" />
+              Hardware Details
+            </CardTitle>
+            <CardDescription>Identity, network binding, and port mapping</CardDescription>
+          </CardHeader>
+          <CardContent className="flex-1 space-y-3 text-sm">
+            {/* Uptime block */}
+            <div className="grid grid-cols-2 gap-3 bg-muted/30 p-3 rounded-lg border border-border/50">
               <div>
-                <p className="text-muted-foreground mb-1">Parent OLT</p>
-                <Link href="/olts" className="text-primary hover:underline font-medium">
-                  {parentOlt?.name || onu.oltId}
+                <p className="text-[10px] uppercase text-muted-foreground tracking-widest mb-1 font-bold">ONU Uptime</p>
+                <p className="font-semibold text-sm">{onu.onlineDuration === 'N/A' ? '—' : onu.onlineDuration}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase text-muted-foreground tracking-widest mb-1 font-bold">Last Disconnect</p>
+                <p className="font-semibold text-xs">{onu.lastLogoutReason}</p>
+              </div>
+            </div>
+
+            {/* MACs */}
+            <div className="space-y-2">
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">ONU MAC Address</p>
+                <p className="font-mono text-xs font-medium bg-muted p-1.5 rounded">{onu.macAddress}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Router MAC Address</p>
+                <p className="font-mono text-xs font-medium bg-muted p-1.5 rounded">{onu.clientMac}</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Network config */}
+            <div className="grid grid-cols-2 gap-y-3">
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">VLAN ID</p>
+                <p className="font-mono font-bold text-primary">{onu.vlanId}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">PON Port</p>
+                <p className="font-medium">{onu.ponPort}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">OLT Port</p>
+                <p className="font-mono text-xs font-medium">{onu.oltPort}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Port Type</p>
+                <p className="font-medium">{parentOlt?.type ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Parent OLT</p>
+                <Link href="/olts" className="text-primary hover:underline font-medium text-xs">
+                  {parentOlt?.name ?? onu.oltId}
                 </Link>
               </div>
               <div>
-                <p className="text-muted-foreground mb-1">PON Port</p>
-                <p className="font-medium">{onu.ponPort}</p>
-              </div>
-
-              <div>
-                <p className="text-muted-foreground mb-1">Bandwidth Limit</p>
+                <p className="text-muted-foreground text-xs mb-1">Bandwidth</p>
                 <p className="font-medium">{onu.bandwidth}</p>
               </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Customer</p>
-                <p className="font-medium">{onu.customerName}</p>
-              </div>
+            </div>
 
-              <div className="col-span-2 pt-2">
-                <Separator className="mb-4" />
-              </div>
+            <Separator />
 
+            {/* Logout details */}
+            <div className="grid grid-cols-2 gap-y-3">
               <div>
-                <p className="text-muted-foreground mb-1">Last Logout</p>
-                <p className={`font-medium ${onu.lastLogoutTime === 'N/A' ? 'text-muted-foreground' : ''}`}>{onu.lastLogoutTime}</p>
+                <p className="text-muted-foreground text-xs mb-1">Last Logout</p>
+                <p className={`text-xs font-medium ${onu.lastLogoutTime === 'N/A' ? 'text-muted-foreground' : ''}`}>
+                  {onu.lastLogoutTime}
+                </p>
               </div>
               <div>
-                <p className="text-muted-foreground mb-1">Logout Reason</p>
-                <p className="font-medium">{onu.lastLogoutReason}</p>
+                <p className="text-muted-foreground text-xs mb-1">Customer</p>
+                <p className="font-medium text-xs">{onu.customerName}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <div className="md:col-span-2 space-y-6 flex flex-col">
-          {/* Section 3: Live Bandwidth Usage */}
+        {/* Charts column */}
+        <div className="md:col-span-2 space-y-5 flex flex-col">
+          {/* Bandwidth Chart */}
           <Card className="shadow-sm border-border/50">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <div>
-                <CardTitle>Live Bandwidth Usage</CardTitle>
+                <CardTitle className="text-base">Live Bandwidth Usage</CardTitle>
                 <CardDescription>Real-time data will appear when connected to backend</CardDescription>
               </div>
               <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/20">DEMO DATA</Badge>
             </CardHeader>
-            <CardContent className="h-[250px]">
+            <CardContent className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={bandwidthData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorDownload" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorUpload" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.4} />
-                  <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
-                  <YAxis axisLine={false} tickLine={false} tick={{fill: 'hsl(var(--muted-foreground))', fontSize: 12}} />
-                  <Tooltip 
-                    contentStyle={{backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px'}}
-                    itemStyle={{color: 'hsl(var(--foreground))'}}
+                  <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', borderColor: 'hsl(var(--border))', borderRadius: '8px' }}
+                    itemStyle={{ color: 'hsl(var(--foreground))' }}
                   />
                   <Area type="monotone" dataKey="download" stroke="hsl(var(--chart-1))" strokeWidth={2} fillOpacity={1} fill="url(#colorDownload)" name="Download (Mbps)" />
                   <Area type="monotone" dataKey="upload" stroke="hsl(var(--chart-2))" strokeWidth={2} fillOpacity={1} fill="url(#colorUpload)" name="Upload (Mbps)" />
@@ -344,54 +537,48 @@ export default function OnuDetail() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {/* Section 4: Packet Loss */}
+          {/* Packet Stats + Solution Tips */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <Card className="shadow-sm border-border/50">
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Packet Statistics</CardTitle>
-                <CardDescription>Placeholder — connect to backend for live data</CardDescription>
+                <CardTitle className="text-sm">Packet Statistics</CardTitle>
+                <CardDescription className="text-xs">Placeholder — connect to backend for live data</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-3 gap-4 text-center mt-2">
-                  <div className="bg-muted/30 p-3 rounded-lg border">
-                    <p className="text-xs text-muted-foreground mb-1">TX Packets</p>
-                    <p className="font-semibold font-mono text-sm">1,248,392</p>
+                <div className="grid grid-cols-3 gap-3 text-center mt-1">
+                  <div className="bg-muted/30 p-2.5 rounded-lg border">
+                    <p className="text-[10px] text-muted-foreground mb-1">TX Packets</p>
+                    <p className="font-semibold font-mono text-xs">1,248,392</p>
                   </div>
-                  <div className="bg-muted/30 p-3 rounded-lg border">
-                    <p className="text-xs text-muted-foreground mb-1">RX Packets</p>
-                    <p className="font-semibold font-mono text-sm">1,247,891</p>
+                  <div className="bg-muted/30 p-2.5 rounded-lg border">
+                    <p className="text-[10px] text-muted-foreground mb-1">RX Packets</p>
+                    <p className="font-semibold font-mono text-xs">1,247,891</p>
                   </div>
-                  <div className="bg-muted/30 p-3 rounded-lg border border-green-500/20 text-left flex flex-col justify-center">
-                    <p className="text-xs text-muted-foreground mb-1 text-center">Loss Rate</p>
-                    <p className={`font-semibold font-mono text-sm text-center ${getLossRateColor("0.04")}`}>0.04%</p>
-                    <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden w-full">
-                       <div className="h-full bg-green-500 rounded-full" style={{width: '0.04%'}} />
+                  <div className="bg-muted/30 p-2.5 rounded-lg border border-green-500/20">
+                    <p className="text-[10px] text-muted-foreground mb-1">Loss Rate</p>
+                    <p className="font-semibold font-mono text-xs text-green-500">0.04%</p>
+                    <div className="mt-1.5 h-1 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-green-500 rounded-full" style={{ width: '0.04%' }} />
                     </div>
-                    <p className="text-[9px] text-muted-foreground mt-1 text-center truncate">of 1.25M pkts</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Section 5: Solution Tips */}
-            <Card className={`shadow-sm border ${
-              isPoorSignal ? 'border-red-500/30 bg-red-500/5' : 
-              onu.status === 'Offline' ? 'border-amber-500/30 bg-amber-500/5' : 
-              'border-green-500/30 bg-green-500/5'
-            }`}>
+            <Card className={`shadow-sm border ${isPoorSignal ? 'border-red-500/30 bg-red-500/5' : onu.status === 'Offline' ? 'border-amber-500/30 bg-amber-500/5' : 'border-green-500/30 bg-green-500/5'}`}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg flex items-center gap-2">
+                <CardTitle className="text-sm flex items-center gap-2">
                   {isPoorSignal ? (
-                    <><AlertCircle className="h-5 w-5 text-red-500" /> Poor Signal Quality</>
+                    <><AlertCircle className="h-4 w-4 text-red-500" /> Poor Signal</>
                   ) : onu.status === 'Offline' ? (
-                    <><AlertTriangle className="h-5 w-5 text-amber-500" /> Device Offline</>
+                    <><AlertTriangle className="h-4 w-4 text-amber-500" /> Device Offline</>
                   ) : (
-                    <><CheckCircle2 className="h-5 w-5 text-green-500" /> All Systems Normal</>
+                    <><CheckCircle2 className="h-4 w-4 text-green-500" /> All Normal</>
                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-sm space-y-2 text-muted-foreground">
+                <div className="text-xs space-y-1.5 text-muted-foreground">
                   {isPoorSignal ? (
                     <ul className="list-disc pl-4 space-y-1">
                       <li>Check fiber splice quality and bend radius</li>
@@ -405,7 +592,7 @@ export default function OnuDetail() {
                       <li>Run remote ping diagnostic</li>
                     </ul>
                   ) : (
-                    <p className="text-foreground">No active issues detected. Signal parameters are within operational tolerances.</p>
+                    <p className="text-foreground text-xs">No active issues detected. Signal parameters are within operational tolerances.</p>
                   )}
                 </div>
               </CardContent>
@@ -414,22 +601,22 @@ export default function OnuDetail() {
         </div>
       </div>
 
-      {/* Section 6: Event Logs */}
+      {/* Event Logs */}
       <Card className="shadow-sm border-border/50">
         <CardHeader>
-          <CardTitle>Recent Event Logs</CardTitle>
+          <CardTitle className="text-base">Recent Event Logs</CardTitle>
           <CardDescription>System and hardware events for this terminal</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className="rounded-md border overflow-hidden">
             <div className="overflow-x-auto w-full">
               <table className="w-full text-xs text-left">
                 <thead className="bg-muted/50 text-muted-foreground border-b">
                   <tr>
-                    <th className="px-4 py-3 font-medium whitespace-nowrap">Timestamp</th>
-                    <th className="px-4 py-3 font-medium whitespace-nowrap">Level</th>
-                    <th className="px-4 py-3 font-medium whitespace-nowrap">Event</th>
-                    <th className="px-4 py-3 font-medium">Details</th>
+                    <th className="px-4 py-2.5 font-medium whitespace-nowrap">Timestamp</th>
+                    <th className="px-4 py-2.5 font-medium whitespace-nowrap">Level</th>
+                    <th className="px-4 py-2.5 font-medium whitespace-nowrap">Event</th>
+                    <th className="px-4 py-2.5 font-medium">Details</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -448,115 +635,25 @@ export default function OnuDetail() {
         </CardContent>
       </Card>
 
-      {/* Section 7: ONU History Timeline */}
+      {/* Activity Timeline */}
       <Card className="shadow-sm border-border/50">
         <CardHeader>
-          <CardTitle>ONU Activity Timeline</CardTitle>
+          <CardTitle className="text-base">ONU Activity Timeline</CardTitle>
           <CardDescription>Full history — online/offline, signal, reboots, alarms, config changes</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-0">
             {[
-              {
-                type: 'online',
-                icon: Wifi,
-                iconCls: 'text-green-400 bg-green-500/10 border-green-500/20',
-                label: 'ONU came online',
-                detail: `Registered on OLT PON port ${onu.ponPort} — link established`,
-                time: '2 mins ago',
-                meta: 'Status: Online',
-                metaCls: 'text-green-400',
-              },
-              {
-                type: 'signal',
-                icon: TrendingUp,
-                iconCls: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
-                label: 'Signal normalized',
-                detail: `RX power recovered to ${onu.signalLevel} dBm after brief fluctuation`,
-                time: '18 mins ago',
-                meta: `${onu.signalLevel} dBm`,
-                metaCls: 'text-cyan-400',
-              },
-              {
-                type: 'signal_drop',
-                icon: TrendingDown,
-                iconCls: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-                label: 'Signal fluctuation detected',
-                detail: 'RX power dropped by 2 dBm transiently — possible fiber micro-bend',
-                time: '24 mins ago',
-                meta: '-2 dBm drop',
-                metaCls: 'text-amber-400',
-              },
-              {
-                type: 'offline',
-                icon: WifiOff,
-                iconCls: 'text-red-400 bg-red-500/10 border-red-500/20',
-                label: 'ONU went offline',
-                detail: 'Lost keep-alive — customer power interruption suspected',
-                time: '30 mins ago',
-                meta: 'Duration: 6m 42s',
-                metaCls: 'text-red-400',
-              },
-              {
-                type: 'alarm',
-                icon: Bell,
-                iconCls: 'text-red-400 bg-red-500/10 border-red-500/20',
-                label: 'Alarm triggered',
-                detail: 'Minor alarm: TX power slightly low — 0.8 dBm detected on this ONU',
-                time: '1 hour ago',
-                meta: 'Alarm: Minor',
-                metaCls: 'text-amber-400',
-              },
-              {
-                type: 'reboot',
-                icon: RefreshCw,
-                iconCls: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
-                label: 'Manual reboot issued',
-                detail: 'Remote reboot command sent by Sarah Chen (Admin) via NOCpulse',
-                time: '3 hours ago',
-                meta: 'Initiated by staff',
-                metaCls: 'text-purple-400',
-              },
-              {
-                type: 'config',
-                icon: Settings,
-                iconCls: 'text-primary bg-primary/10 border-primary/20',
-                label: 'Config pushed',
-                detail: 'Traffic profile updated — upstream bandwidth limit increased to match customer plan',
-                time: '5 hours ago',
-                meta: 'Policy update',
-                metaCls: 'text-primary',
-              },
-              {
-                type: 'signal',
-                icon: TrendingDown,
-                iconCls: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
-                label: 'Elevated signal degradation',
-                detail: 'Sustained RX fluctuation over 4-hour window — NOC notified via Telegram',
-                time: '8 hours ago',
-                meta: 'Notification sent',
-                metaCls: 'text-amber-400',
-              },
-              {
-                type: 'online',
-                icon: Power,
-                iconCls: 'text-green-400 bg-green-500/10 border-green-500/20',
-                label: 'ONU initial registration',
-                detail: `Authenticated with OLT — MAC ${onu.macAddress} registered on PON port ${onu.ponPort}`,
-                time: '2 days ago',
-                meta: 'First registration',
-                metaCls: 'text-green-400',
-              },
-              {
-                type: 'resolved',
-                icon: ShieldCheck,
-                iconCls: 'text-green-400 bg-green-500/10 border-green-500/20',
-                label: 'Previous alarm cleared',
-                detail: 'Signal check passed — optical link stable after splice repair',
-                time: '2 days ago',
-                meta: 'Resolved',
-                metaCls: 'text-green-400',
-              },
+              { icon: Wifi, iconCls: 'text-green-400 bg-green-500/10 border-green-500/20', label: 'ONU came online', detail: `Registered on ${onu.oltPort} → ${onu.ponPort} — link established`, time: '2 mins ago', meta: 'Status: Online', metaCls: 'text-green-400' },
+              { icon: TrendingUp, iconCls: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20', label: 'Signal normalized', detail: `RX power recovered to ${onu.signalLevel} dBm after brief fluctuation`, time: '18 mins ago', meta: `${onu.signalLevel} dBm`, metaCls: 'text-cyan-400' },
+              { icon: TrendingDown, iconCls: 'text-amber-400 bg-amber-500/10 border-amber-500/20', label: 'Signal fluctuation detected', detail: 'RX power dropped by 2 dBm transiently — possible fiber micro-bend', time: '24 mins ago', meta: '-2 dBm drop', metaCls: 'text-amber-400' },
+              { icon: WifiOff, iconCls: 'text-red-400 bg-red-500/10 border-red-500/20', label: 'ONU went offline', detail: 'Lost keep-alive — customer power interruption suspected', time: '30 mins ago', meta: 'Duration: 6m 42s', metaCls: 'text-red-400' },
+              { icon: Bell, iconCls: 'text-red-400 bg-red-500/10 border-red-500/20', label: 'Alarm triggered', detail: 'Minor alarm: TX power slightly low — 0.8 dBm detected on this ONU', time: '1 hour ago', meta: 'Alarm: Minor', metaCls: 'text-amber-400' },
+              { icon: RefreshCw, iconCls: 'text-purple-400 bg-purple-500/10 border-purple-500/20', label: 'Manual reboot issued', detail: 'Remote reboot command sent by Sarah Chen (Admin) via NOCpulse', time: '3 hours ago', meta: 'Initiated by staff', metaCls: 'text-purple-400' },
+              { icon: Settings, iconCls: 'text-primary bg-primary/10 border-primary/20', label: 'Config pushed', detail: `Traffic profile updated — VLAN ${onu.vlanId} upstream bandwidth limit increased to match customer plan`, time: '5 hours ago', meta: 'Policy update', metaCls: 'text-primary' },
+              { icon: TrendingDown, iconCls: 'text-amber-400 bg-amber-500/10 border-amber-500/20', label: 'Elevated signal degradation', detail: 'Sustained RX fluctuation over 4-hour window — NOC notified via Telegram', time: '8 hours ago', meta: 'Notification sent', metaCls: 'text-amber-400' },
+              { icon: Power, iconCls: 'text-green-400 bg-green-500/10 border-green-500/20', label: 'ONU initial registration', detail: `Authenticated with ${parentOlt?.name ?? onu.oltId} — MAC ${onu.macAddress} registered on ${onu.ponPort} (${onu.oltPort})`, time: '2 days ago', meta: 'First registration', metaCls: 'text-green-400' },
+              { icon: ShieldCheck, iconCls: 'text-green-400 bg-green-500/10 border-green-500/20', label: 'Previous alarm cleared', detail: 'Signal check passed — optical link stable after splice repair', time: '2 days ago', meta: 'Resolved', metaCls: 'text-green-400' },
             ].map((entry, idx, arr) => {
               const Icon = entry.icon;
               return (
@@ -565,18 +662,15 @@ export default function OnuDetail() {
                     <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${entry.iconCls}`}>
                       <Icon className="h-3.5 w-3.5" />
                     </div>
-                    {idx < arr.length - 1 && (
-                      <div className="w-0.5 h-6 bg-border/50 my-0.5" />
-                    )}
+                    {idx < arr.length - 1 && <div className="w-0.5 h-6 bg-border/50 my-0.5" />}
                   </div>
-                  <div className="pb-5 flex-1 min-w-0">
+                  <div className="pb-4 flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-medium leading-tight">{entry.label}</p>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className={`text-[10px] font-bold ${entry.metaCls}`}>{entry.meta}</span>
                         <span className="text-[10px] text-muted-foreground whitespace-nowrap flex items-center gap-1">
-                          <Clock className="h-2.5 w-2.5" />
-                          {entry.time}
+                          <Clock className="h-2.5 w-2.5" />{entry.time}
                         </span>
                       </div>
                     </div>

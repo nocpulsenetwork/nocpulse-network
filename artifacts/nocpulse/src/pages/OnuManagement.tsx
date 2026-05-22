@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { onus, olts } from '@/data/mockData';
+import { useState, useEffect, useMemo } from 'react';
+import { onus, olts, type SignalStability } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Search, WifiOff, MoreHorizontal, ChevronRight } from 'lucide-react';
+import { Search, WifiOff, MoreHorizontal, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLocation } from 'wouter';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -18,15 +18,47 @@ import {
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from 'sonner';
 
+const getRxColor = (power: number) => {
+  if (power > -25) return 'text-green-500';
+  if (power >= -28) return 'text-amber-500';
+  return 'text-red-500';
+};
+
+const getTxColor = (power: number) => {
+  if (power < -3 || power > 5) return 'text-red-500';
+  if (power < 0) return 'text-amber-500';
+  return 'text-green-500';
+};
+
+const getReasonBadgeColor = (reason: string) => {
+  switch (reason) {
+    case 'Power Loss': return 'bg-red-500/10 text-red-600 border-red-500/20';
+    case 'Signal Lost': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+    case 'Admin Reboot': return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
+    default: return 'bg-muted/50 text-muted-foreground border-border/40';
+  }
+};
+
+const getStabilityStyle = (stability: SignalStability) => {
+  switch (stability) {
+    case 'Stable': return 'bg-green-500/10 text-green-600 border-green-500/20';
+    case 'Fluctuating': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
+    case 'Degrading': return 'bg-red-500/10 text-red-600 border-red-500/20';
+  }
+};
+
 export default function OnuManagement() {
-  const [location, setLocation] = useLocation();
+  const [, setLocation] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get('status');
 
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>(initialStatus ? initialStatus.charAt(0).toUpperCase() + initialStatus.slice(1) : 'All Status');
+  const [statusFilter, setStatusFilter] = useState<string>(
+    initialStatus ? initialStatus.charAt(0).toUpperCase() + initialStatus.slice(1) : 'All Status'
+  );
   const [oltFilter, setOltFilter] = useState<string>('All OLTs');
   const [ponFilter, setPonFilter] = useState<string>('All PONs');
+  const [stabilityFilter, setStabilityFilter] = useState<string>('All');
 
   const [page, setPage] = useState(1);
   const [editingOnu, setEditingOnu] = useState<string | null>(null);
@@ -41,88 +73,78 @@ export default function OnuManagement() {
 
   const filteredOnus = useMemo(() => {
     return onus.filter(onu => {
-      const matchesSearch = 
-        onu.onuNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        onu.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        onu.macAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        onu.clientMac.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        onu.customerName.toLowerCase().includes(searchTerm.toLowerCase());
-      
+      const term = searchTerm.toLowerCase();
+      const matchesSearch =
+        onu.onuNo.toLowerCase().includes(term) ||
+        onu.description.toLowerCase().includes(term) ||
+        onu.macAddress.toLowerCase().includes(term) ||
+        onu.clientMac.toLowerCase().includes(term) ||
+        onu.customerName.toLowerCase().includes(term) ||
+        onu.oltPort.toLowerCase().includes(term) ||
+        onu.vlanId.toString().includes(term);
       const matchesStatus = statusFilter === 'All Status' || onu.status === statusFilter;
       const matchesOlt = oltFilter === 'All OLTs' || onu.oltId === oltFilter;
       const matchesPon = ponFilter === 'All PONs' || onu.ponPort === ponFilter;
-
-      return matchesSearch && matchesStatus && matchesOlt && matchesPon;
+      const matchesStability = stabilityFilter === 'All' || onu.signalStability === stabilityFilter;
+      return matchesSearch && matchesStatus && matchesOlt && matchesPon && matchesStability;
     });
-  }, [searchTerm, statusFilter, oltFilter, ponFilter]);
+  }, [searchTerm, statusFilter, oltFilter, ponFilter, stabilityFilter]);
 
-  const hasActiveFilters = searchTerm !== '' || statusFilter !== 'All Status' || oltFilter !== 'All OLTs' || ponFilter !== 'All PONs';
+  const hasActiveFilters =
+    searchTerm !== '' ||
+    statusFilter !== 'All Status' ||
+    oltFilter !== 'All OLTs' ||
+    ponFilter !== 'All PONs' ||
+    stabilityFilter !== 'All';
 
   const clearFilters = () => {
     setSearchTerm('');
     setStatusFilter('All Status');
     setOltFilter('All OLTs');
     setPonFilter('All PONs');
+    setStabilityFilter('All');
     setPage(1);
   };
 
   const paginatedOnus = filteredOnus.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
   const totalPages = Math.ceil(filteredOnus.length / ITEMS_PER_PAGE);
 
-  const getPowerColor = (power: number) => {
-    if (power > -25) return 'text-green-500';
-    if (power >= -28) return 'text-amber-500';
-    return 'text-red-500';
-  };
-
-  const getReasonBadgeColor = (reason: string) => {
-    switch (reason) {
-      case 'Power Loss': return 'bg-red-500/10 text-red-600 border-red-500/20';
-      case 'Signal Lost': return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
-      case 'Admin Reboot': return 'bg-blue-500/10 text-blue-600 border-blue-500/20';
-      default: return 'bg-slate-500/10 text-slate-500 border-slate-500/20';
-    }
-  };
-
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-5 pb-10">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">ONU Management</h1>
-          <div className="text-muted-foreground flex items-center gap-2 text-sm">
-            Monitor and manage customer premises equipment <Badge variant="secondary" className="ml-2">Total: {filteredOnus.length} ONUs</Badge>
+          <div className="text-muted-foreground flex items-center gap-2 text-sm mt-0.5">
+            Monitor and manage customer premises equipment
+            <Badge variant="secondary">Total: {filteredOnus.length} ONUs</Badge>
           </div>
         </div>
         <Button variant="outline" disabled className="opacity-50 cursor-not-allowed">Export CSV</Button>
       </div>
 
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 bg-card p-4 rounded-lg border shadow-sm">
-        <div className="relative w-full sm:w-[280px]">
+        <div className="relative w-full sm:w-[260px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search ONUs..." 
-            className="pl-8"
+          <Input
+            placeholder="Search ONU, MAC, VLAN, port..."
+            className="pl-8 text-sm"
             value={searchTerm}
             onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
           />
         </div>
-        
+
         <Select value={oltFilter} onValueChange={(v) => { setOltFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All OLTs" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[160px]"><SelectValue placeholder="All OLTs" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="All OLTs">All OLTs</SelectItem>
-            {olts.map(o => (
-              <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-            ))}
+            {olts.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
           </SelectContent>
         </Select>
 
         <Select value={ponFilter} onValueChange={(v) => { setPonFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="All PONs" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[120px]"><SelectValue placeholder="All PONs" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="All PONs">All PONs</SelectItem>
             <SelectItem value="PON-1">PON-1</SelectItem>
@@ -132,9 +154,7 @@ export default function OnuManagement() {
         </Select>
 
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[140px]">
-            <SelectValue placeholder="All Status" />
-          </SelectTrigger>
+          <SelectTrigger className="w-[130px]"><SelectValue placeholder="All Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="All Status">All Status</SelectItem>
             <SelectItem value="Online">Online</SelectItem>
@@ -143,36 +163,46 @@ export default function OnuManagement() {
           </SelectContent>
         </Select>
 
+        <Select value={stabilityFilter} onValueChange={(v) => { setStabilityFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[140px]"><SelectValue placeholder="All Stability" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="All">All Stability</SelectItem>
+            <SelectItem value="Stable">Stable</SelectItem>
+            <SelectItem value="Fluctuating">Fluctuating</SelectItem>
+            <SelectItem value="Degrading">Degrading</SelectItem>
+          </SelectContent>
+        </Select>
+
         {hasActiveFilters && (
-          <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground">
+          <Button variant="ghost" onClick={clearFilters} className="text-muted-foreground text-sm">
             Clear filters
           </Button>
         )}
       </div>
 
-      <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg">
+      {/* Table */}
+      <div className="rounded-xl border border-border/60 overflow-hidden bg-card/80 shadow-lg">
         <div className="overflow-x-auto w-full">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/60">
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">ONU No</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Description</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground text-right whitespace-nowrap">Distance</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">ONU MAC</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Client MAC</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">RX Power</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">TX Power</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">Last Logout Time</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">Last Logout Reason</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap">Online Duration</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">Status</TableHead>
-                <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground w-[80px]">Action</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">ONU / PON</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Customer</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">OLT / Port</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">MAC Addresses</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">RX Power</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">TX Power</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 text-right">Distance</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">Uptime / Reason</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">Stability</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Status</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground w-[60px] px-3">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedOnus.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="h-64 text-center">
+                  <TableCell colSpan={11} className="h-64 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground">
                       <WifiOff className="h-10 w-10 mb-4 opacity-20" />
                       <p className="text-lg font-medium text-foreground">No ONUs found</p>
@@ -184,127 +214,176 @@ export default function OnuManagement() {
                   </TableCell>
                 </TableRow>
               ) : (
-                paginatedOnus.map((onu) => (
-                  <TableRow 
-                    key={onu.id} 
-                    className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group"
-                    onClick={(e) => {
-                      if (!(e.target as HTMLElement).closest('.action-btn')) {
-                        setLocation(`/onus/${onu.id}`);
-                      }
-                    }}
-                  >
-                    <TableCell className="font-mono font-medium text-xs whitespace-nowrap">{onu.onuNo}</TableCell>
-                    <TableCell className="max-w-[200px] truncate" title={onu.description}>{onu.description}</TableCell>
-                    <TableCell className="text-right text-muted-foreground whitespace-nowrap">{onu.distance}</TableCell>
-                    <TableCell className="font-mono text-[10px] uppercase text-muted-foreground whitespace-nowrap">{onu.macAddress}</TableCell>
-                    <TableCell className="font-mono text-[10px] uppercase text-muted-foreground whitespace-nowrap">{onu.clientMac}</TableCell>
-                    <TableCell className={`font-medium whitespace-nowrap ${getPowerColor(onu.signalLevel)}`}>
-                      {onu.signalLevel} dBm
-                    </TableCell>
-                    <TableCell className={`font-medium whitespace-nowrap ${getPowerColor(onu.txPower)}`}>
-                      {onu.txPower} dBm
-                    </TableCell>
-                    <TableCell className={`whitespace-nowrap text-xs ${onu.lastLogoutTime === 'N/A' ? 'text-muted-foreground/50' : 'text-muted-foreground'}`}>
-                      {onu.lastLogoutTime}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <Badge variant="outline" className={`text-[10px] ${getReasonBadgeColor(onu.lastLogoutReason)}`}>
-                        {onu.lastLogoutReason}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className={`whitespace-nowrap text-xs ${onu.status === 'Online' ? 'text-green-500' : 'text-muted-foreground'}`}>
-                      {onu.onlineDuration}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={onu.status} />
-                    </TableCell>
-                    <TableCell className="action-btn" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center">
-                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity mr-1" />
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setLocation(`/onus/${onu.id}`)}>
-                              View ONU
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => toast.success(`Reboot command sent to ${onu.description}`)}>
-                              Reboot ONU
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} disabled`)} className="text-red-500">
-                              Disable ONU
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} enabled`)}>
-                              Enable ONU
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => {
-                              setEditingOnu(onu.id);
-                              setEditDesc(onu.description);
-                            }}>
-                              Edit Description
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
+                paginatedOnus.map((onu) => {
+                  const parentOlt = olts.find(o => o.id === onu.oltId);
+                  const ponNum = onu.onuNo.split('/')[1] ?? '?';
+                  const delta = onu.lastOfflineRxPower !== null
+                    ? parseFloat((onu.signalLevel - onu.lastOfflineRxPower).toFixed(1))
+                    : null;
+                  const improved = delta !== null && delta > 0;
+                  const worsened = delta !== null && delta < 0;
+
+                  return (
+                    <TableRow
+                      key={onu.id}
+                      className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group"
+                      onClick={(e) => {
+                        if (!(e.target as HTMLElement).closest('.action-col')) {
+                          setLocation(`/onus/${onu.id}`);
+                        }
+                      }}
+                    >
+                      {/* ONU / PON */}
+                      <TableCell className="px-3 py-2.5">
+                        <div className="font-mono font-bold text-xs">{onu.onuNo}</div>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-[9px] font-mono bg-primary/10 text-primary border border-primary/20 rounded px-1 py-0.5">VLAN {onu.vlanId}</span>
+                          <span className="text-[9px] text-muted-foreground bg-muted/50 border border-border/40 rounded px-1 py-0.5">PON {ponNum}</span>
+                        </div>
+                      </TableCell>
+
+                      {/* Customer */}
+                      <TableCell className="px-3 py-2.5 max-w-[160px]">
+                        <div className="text-xs font-medium truncate" title={onu.description}>{onu.description}</div>
+                        <div className="text-[10px] text-muted-foreground truncate mt-0.5">{onu.customerName}</div>
+                      </TableCell>
+
+                      {/* OLT / Port */}
+                      <TableCell className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="text-xs font-medium text-primary">{parentOlt?.name ?? onu.oltId}</div>
+                        <div className="text-[10px] font-mono text-muted-foreground mt-0.5">{onu.oltPort}</div>
+                      </TableCell>
+
+                      {/* MAC Addresses */}
+                      <TableCell className="px-3 py-2.5 whitespace-nowrap">
+                        <div className="text-[10px] font-mono text-muted-foreground">{onu.macAddress}</div>
+                        <div className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">{onu.clientMac}</div>
+                      </TableCell>
+
+                      {/* RX Power + delta */}
+                      <TableCell className="px-3 py-2.5 whitespace-nowrap">
+                        <div className={`text-xs font-semibold ${getRxColor(onu.signalLevel)}`}>
+                          {onu.signalLevel} dBm
+                        </div>
+                        {delta !== null ? (
+                          <div className={`flex items-center gap-0.5 mt-0.5 text-[10px] font-medium ${improved ? 'text-green-500' : worsened ? 'text-red-500' : 'text-muted-foreground'}`}>
+                            {improved ? <TrendingUp className="h-2.5 w-2.5" /> : worsened ? <TrendingDown className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
+                            {improved ? '+' : ''}{delta} vs snapshot
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-muted-foreground/40 mt-0.5">no snapshot</div>
+                        )}
+                      </TableCell>
+
+                      {/* TX Power */}
+                      <TableCell className="px-3 py-2.5 whitespace-nowrap">
+                        <div className={`text-xs font-semibold ${getTxColor(onu.txPower)}`}>
+                          {onu.txPower} dBm
+                        </div>
+                      </TableCell>
+
+                      {/* Distance */}
+                      <TableCell className="px-3 py-2.5 text-right whitespace-nowrap">
+                        <div className="text-xs text-muted-foreground font-mono">{onu.distance}</div>
+                      </TableCell>
+
+                      {/* Uptime / Reason */}
+                      <TableCell className="px-3 py-2.5 whitespace-nowrap">
+                        <div className={`text-xs font-medium ${onu.status === 'Online' ? 'text-green-500' : 'text-muted-foreground'}`}>
+                          {onu.onlineDuration === 'N/A' ? '—' : onu.onlineDuration}
+                        </div>
+                        {onu.lastLogoutReason !== 'N/A' && (
+                          <Badge variant="outline" className={`text-[9px] mt-1 ${getReasonBadgeColor(onu.lastLogoutReason)}`}>
+                            {onu.lastLogoutReason}
+                          </Badge>
+                        )}
+                      </TableCell>
+
+                      {/* Stability */}
+                      <TableCell className="px-3 py-2.5 whitespace-nowrap">
+                        <Badge variant="outline" className={`text-[9px] ${getStabilityStyle(onu.signalStability)}`}>
+                          {onu.signalStability}
+                        </Badge>
+                      </TableCell>
+
+                      {/* Status */}
+                      <TableCell className="px-3 py-2.5">
+                        <StatusBadge status={onu.status} />
+                      </TableCell>
+
+                      {/* Action */}
+                      <TableCell className="action-col px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center">
+                          <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-60 transition-opacity" />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => setLocation(`/onus/${onu.id}`)}>
+                                View ONU
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toast.success(`Reboot sent to ${onu.description}`)}>
+                                Reboot ONU
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => toast.success(`ONU ${onu.description} disabled`)}
+                                className="text-red-500"
+                              >
+                                Disable ONU
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => toast.success(`ONU ${onu.description} enabled`)}>
+                                Enable ONU
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => { setEditingOnu(onu.id); setEditDesc(onu.description); }}>
+                                Edit Description
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </div>
       </div>
 
+      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            Showing {(page - 1) * ITEMS_PER_PAGE + 1}-{Math.min(page * ITEMS_PER_PAGE, filteredOnus.length)} of {filteredOnus.length} ONUs
+            Showing {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, filteredOnus.length)} of {filteredOnus.length} ONUs
           </p>
           <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              disabled={page === 1}
-              onClick={() => setPage(p => p - 1)}
-            >
-              Previous
-            </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              disabled={page === totalPages}
-              onClick={() => setPage(p => p + 1)}
-            >
-              Next
-            </Button>
+            <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
+            <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
           </div>
         </div>
       )}
 
+      {/* Edit Description Dialog */}
       <Dialog open={!!editingOnu} onOpenChange={(open) => !open && setEditingOnu(null)}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Description</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <Input 
-              value={editDesc} 
-              onChange={(e) => setEditDesc(e.target.value)} 
+            <Input
+              value={editDesc}
+              onChange={(e) => setEditDesc(e.target.value)}
               placeholder="Enter new description"
             />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingOnu(null)}>Cancel</Button>
-            <Button onClick={() => {
-              toast.success("Description updated successfully");
-              setEditingOnu(null);
-            }}>Save</Button>
+            <Button onClick={() => { toast.success('Description updated successfully'); setEditingOnu(null); }}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
