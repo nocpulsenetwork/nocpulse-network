@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { LucideIcon } from 'lucide-react';
+import { Link } from 'wouter';
 
 export type AccentColor = 'cyan' | 'green' | 'red' | 'amber';
 
@@ -12,6 +13,7 @@ interface MetricCardProps {
   description?: string;
   pulse?: boolean;
   alert?: boolean;
+  href?: string;
 }
 
 const colorMap = {
@@ -48,12 +50,13 @@ export function MetricCard({
   accentColor, 
   description, 
   pulse, 
-  alert 
+  alert,
+  href
 }: MetricCardProps) {
   const styles = colorMap[accentColor] || colorMap.cyan;
 
-  return (
-    <Card className={`overflow-hidden transition-all border-l-4 ${styles.border} ${alert ? styles.alertClasses : ''}`}>
+  const cardContent = (
+    <Card className={`overflow-hidden transition-all border-l-4 ${styles.border} ${alert ? styles.alertClasses : ''} ${href ? 'cursor-pointer hover:brightness-110 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] duration-200' : ''}`}>
       <CardContent className="p-6">
         <div className="flex items-center justify-between space-y-0 pb-2">
           <p className="text-sm font-medium text-muted-foreground tracking-tight">{title}</p>
@@ -72,4 +75,14 @@ export function MetricCard({
       </CardContent>
     </Card>
   );
+
+  if (href) {
+    return (
+      <Link href={href}>
+        {cardContent}
+      </Link>
+    );
+  }
+
+  return cardContent;
 }
