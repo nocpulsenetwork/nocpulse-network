@@ -14,6 +14,8 @@ import {
   BellRing,
   Stethoscope,
   Users,
+  Building2,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -47,6 +49,7 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
   ];
 
   const systemItems = [
+    { href: '/subscribers', label: 'Subscribers', icon: Building2 },
     { href: '/staff', label: 'Staff & Permissions', icon: Users },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];

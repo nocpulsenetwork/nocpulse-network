@@ -33,6 +33,7 @@ export function Layout({ children }: LayoutProps) {
     if (location.startsWith('/diagram')) return 'Device Diagram';
     if (location.startsWith('/fiber-map')) return 'Fiber Map';
     if (location.startsWith('/alarms')) return 'Alarm Center';
+    if (location.startsWith('/subscribers')) return 'Subscribers';
     if (location.startsWith('/settings')) return 'Settings';
     return 'NOCpulse';
   };

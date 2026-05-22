@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
+import Login from "@/pages/Login";
 import OltManagement from "@/pages/OltManagement";
 import OltDetail from "@/pages/OltDetail";
 import OnuManagement from "@/pages/OnuManagement";
@@ -15,6 +16,7 @@ import FiberMap from "@/pages/FiberMap";
 import AlarmCenter from "@/pages/AlarmCenter";
 import Settings from "@/pages/Settings";
 import StaffManagement from "@/pages/StaffManagement";
+import SubscriberManagement from "@/pages/SubscriberManagement";
 import ActivityLogs from "@/pages/ActivityLogs";
 import NotificationCenter from "@/pages/NotificationCenter";
 import SmartDiagnostics from "@/pages/SmartDiagnostics";
@@ -24,24 +26,33 @@ const queryClient = new QueryClient();
 
 function Router() {
   return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={Dashboard} />
-        <Route path="/olts/:id" component={OltDetail} />
-        <Route path="/olts" component={OltManagement} />
-        <Route path="/onus/:id" component={OnuDetail} />
-        <Route path="/onus" component={OnuManagement} />
-        <Route path="/diagram" component={DeviceDiagram} />
-        <Route path="/fiber-map" component={FiberMap} />
-        <Route path="/alarms" component={AlarmCenter} />
-        <Route path="/activity-logs" component={ActivityLogs} />
-        <Route path="/notifications" component={NotificationCenter} />
-        <Route path="/diagnostics" component={SmartDiagnostics} />
-        <Route path="/staff" component={StaffManagement} />
-        <Route path="/settings" component={Settings} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
+    <Switch>
+      {/* Standalone routes — no sidebar/navbar */}
+      <Route path="/login" component={Login} />
+
+      {/* App routes — wrapped in Layout */}
+      <Route>
+        <Layout>
+          <Switch>
+            <Route path="/" component={Dashboard} />
+            <Route path="/olts/:id" component={OltDetail} />
+            <Route path="/olts" component={OltManagement} />
+            <Route path="/onus/:id" component={OnuDetail} />
+            <Route path="/onus" component={OnuManagement} />
+            <Route path="/diagram" component={DeviceDiagram} />
+            <Route path="/fiber-map" component={FiberMap} />
+            <Route path="/alarms" component={AlarmCenter} />
+            <Route path="/activity-logs" component={ActivityLogs} />
+            <Route path="/notifications" component={NotificationCenter} />
+            <Route path="/diagnostics" component={SmartDiagnostics} />
+            <Route path="/staff" component={StaffManagement} />
+            <Route path="/subscribers" component={SubscriberManagement} />
+            <Route path="/settings" component={Settings} />
+            <Route component={NotFound} />
+          </Switch>
+        </Layout>
+      </Route>
+    </Switch>
   );
 }
 
