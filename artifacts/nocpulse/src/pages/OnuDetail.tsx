@@ -1,4 +1,3 @@
-import React from 'react';
 import { useParams, useLocation, Link } from 'wouter';
 import { onus, olts } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -8,17 +7,26 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { toast } from 'sonner';
-import { 
-  Signal, 
-  Radio, 
-  Ruler, 
-  Clock, 
+import {
+  Signal,
+  Radio,
+  Ruler,
+  Clock,
   ArrowLeft,
   AlertTriangle,
   CheckCircle2,
   AlertCircle,
   Thermometer,
-  Activity
+  Activity,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Bell,
+  Power,
+  TrendingDown,
+  TrendingUp,
+  Settings,
+  ShieldCheck,
 } from 'lucide-react';
 
 // Generate some dummy bandwidth data
@@ -436,6 +444,147 @@ export default function OnuDetail() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section 7: ONU History Timeline */}
+      <Card className="shadow-sm border-border/50">
+        <CardHeader>
+          <CardTitle>ONU Activity Timeline</CardTitle>
+          <CardDescription>Full history — online/offline, signal, reboots, alarms, config changes</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-0">
+            {[
+              {
+                type: 'online',
+                icon: Wifi,
+                iconCls: 'text-green-400 bg-green-500/10 border-green-500/20',
+                label: 'ONU came online',
+                detail: `Registered on OLT PON port ${onu.ponPort} — link established`,
+                time: '2 mins ago',
+                meta: 'Status: Online',
+                metaCls: 'text-green-400',
+              },
+              {
+                type: 'signal',
+                icon: TrendingUp,
+                iconCls: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20',
+                label: 'Signal normalized',
+                detail: `RX power recovered to ${onu.signalLevel} dBm after brief fluctuation`,
+                time: '18 mins ago',
+                meta: `${onu.signalLevel} dBm`,
+                metaCls: 'text-cyan-400',
+              },
+              {
+                type: 'signal_drop',
+                icon: TrendingDown,
+                iconCls: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+                label: 'Signal fluctuation detected',
+                detail: 'RX power dropped by 2 dBm transiently — possible fiber micro-bend',
+                time: '24 mins ago',
+                meta: '-2 dBm drop',
+                metaCls: 'text-amber-400',
+              },
+              {
+                type: 'offline',
+                icon: WifiOff,
+                iconCls: 'text-red-400 bg-red-500/10 border-red-500/20',
+                label: 'ONU went offline',
+                detail: 'Lost keep-alive — customer power interruption suspected',
+                time: '30 mins ago',
+                meta: 'Duration: 6m 42s',
+                metaCls: 'text-red-400',
+              },
+              {
+                type: 'alarm',
+                icon: Bell,
+                iconCls: 'text-red-400 bg-red-500/10 border-red-500/20',
+                label: 'Alarm triggered',
+                detail: 'Minor alarm: TX power slightly low — 0.8 dBm detected on this ONU',
+                time: '1 hour ago',
+                meta: 'Alarm: Minor',
+                metaCls: 'text-amber-400',
+              },
+              {
+                type: 'reboot',
+                icon: RefreshCw,
+                iconCls: 'text-purple-400 bg-purple-500/10 border-purple-500/20',
+                label: 'Manual reboot issued',
+                detail: 'Remote reboot command sent by Sarah Chen (Admin) via NOCpulse',
+                time: '3 hours ago',
+                meta: 'Initiated by staff',
+                metaCls: 'text-purple-400',
+              },
+              {
+                type: 'config',
+                icon: Settings,
+                iconCls: 'text-primary bg-primary/10 border-primary/20',
+                label: 'Config pushed',
+                detail: 'Traffic profile updated — upstream bandwidth limit increased to match customer plan',
+                time: '5 hours ago',
+                meta: 'Policy update',
+                metaCls: 'text-primary',
+              },
+              {
+                type: 'signal',
+                icon: TrendingDown,
+                iconCls: 'text-amber-400 bg-amber-500/10 border-amber-500/20',
+                label: 'Elevated signal degradation',
+                detail: 'Sustained RX fluctuation over 4-hour window — NOC notified via Telegram',
+                time: '8 hours ago',
+                meta: 'Notification sent',
+                metaCls: 'text-amber-400',
+              },
+              {
+                type: 'online',
+                icon: Power,
+                iconCls: 'text-green-400 bg-green-500/10 border-green-500/20',
+                label: 'ONU initial registration',
+                detail: `Authenticated with OLT — MAC ${onu.macAddress} registered on PON port ${onu.ponPort}`,
+                time: '2 days ago',
+                meta: 'First registration',
+                metaCls: 'text-green-400',
+              },
+              {
+                type: 'resolved',
+                icon: ShieldCheck,
+                iconCls: 'text-green-400 bg-green-500/10 border-green-500/20',
+                label: 'Previous alarm cleared',
+                detail: 'Signal check passed — optical link stable after splice repair',
+                time: '2 days ago',
+                meta: 'Resolved',
+                metaCls: 'text-green-400',
+              },
+            ].map((entry, idx, arr) => {
+              const Icon = entry.icon;
+              return (
+                <div key={idx} className="flex items-start gap-3">
+                  <div className="flex flex-col items-center shrink-0">
+                    <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${entry.iconCls}`}>
+                      <Icon className="h-3.5 w-3.5" />
+                    </div>
+                    {idx < arr.length - 1 && (
+                      <div className="w-0.5 h-6 bg-border/50 my-0.5" />
+                    )}
+                  </div>
+                  <div className="pb-5 flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium leading-tight">{entry.label}</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] font-bold ${entry.metaCls}`}>{entry.meta}</span>
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap flex items-center gap-1">
+                          <Clock className="h-2.5 w-2.5" />
+                          {entry.time}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{entry.detail}</p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
