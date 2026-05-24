@@ -986,7 +986,7 @@ export default function OnuManagement() {
           })
         }
         title="Disable ONU"
-        description="This will administratively shut down the ONU on the OLT. The customer will lose all internet access immediately and remain offline until the ONU is manually re-enabled."
+        description="This action will immediately disconnect the customer ONU from the OLT network. Internet service will stop until the ONU is restored manually by an administrator."
         device={
           confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ""
         }
@@ -1004,7 +1004,7 @@ export default function OnuManagement() {
           })
         }
         title="Enable ONU"
-        description="This will bring the ONU back online and restore the customer's internet service. The ONU will re-register with the OLT and re-obtain its signal lock."
+        description="This action will restore ONU connectivity and allow the customer device to reconnect to the OLT network automatically."
         device={
           confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ""
         }

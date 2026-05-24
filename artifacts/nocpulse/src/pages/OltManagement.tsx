@@ -495,7 +495,7 @@ export default function OltManagement() {
                 filteredOlts.map((olt) => (
                   <TableRow
                     key={olt.id}
-                    onClick={() => navigate(`/olts/${olt.id}`)}
+                    onClick={() => navigate(`/onus?olt=${olt.id}`)}
                     className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group"
                   >
                     <TableCell className="font-medium">{olt.name}</TableCell>
