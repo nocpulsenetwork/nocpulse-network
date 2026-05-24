@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'wouter';
+import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   Server,
@@ -19,11 +19,15 @@ import {
   ShieldCheck,
   Shield,
   Lock,
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { alarms } from '@/data/mockData';
-import { useRole, type UserRole, ROLE_LABELS } from '@/contexts/RoleContext';
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { alarms } from "@/data/mockData";
+import { useRole, type UserRole, ROLE_LABELS } from "@/contexts/RoleContext";
 
 interface SidebarProps {
   className?: string;
@@ -38,9 +42,17 @@ type NavItem = {
   minRole?: UserRole;
 };
 
-const roleOrder: Record<UserRole, number> = { super_admin: 3, admin: 2, staff: 1 };
+const roleOrder: Record<UserRole, number> = {
+  super_admin: 3,
+  admin: 2,
+  staff: 1,
+};
 
-export function Sidebar({ className, collapsed = false, onToggleCollapse }: SidebarProps) {
+export function Sidebar({
+  className,
+  collapsed = false,
+  onToggleCollapse,
+}: SidebarProps) {
   const [location] = useLocation();
   const { role, setRole, isSuperAdmin, isAdmin, isStaff, user } = useRole();
 
@@ -50,57 +62,89 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
   };
 
   const mainItems: NavItem[] = [
-    { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/alarms', label: 'Alarm Center', icon: Bell },
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/alarms", label: "Alarm Center", icon: Bell },
   ];
 
   const networkItems: NavItem[] = [
-    { href: '/olts', label: 'OLT Management', icon: Server, minRole: 'admin' },
-    { href: '/onus', label: 'ONU Management', icon: Cpu },
-    { href: '/diagram', label: 'Device Diagram', icon: GitBranch, minRole: 'admin' },
-    { href: '/fiber-map', label: 'Fiber Map', icon: Map, minRole: 'admin' },
+    { href: "/olts", label: "OLT Management", icon: Server, minRole: "admin" },
+    { href: "/onus", label: "ONU Management", icon: Cpu },
+    {
+      href: "/diagram",
+      label: "Device Diagram",
+      icon: GitBranch,
+      minRole: "admin",
+    },
+    { href: "/fiber-map", label: "Fiber Map", icon: Map, minRole: "admin" },
   ];
 
   const operationsItems: NavItem[] = [
-    { href: '/activity-logs', label: 'Activity Logs', icon: ClipboardList },
-    { href: '/notifications', label: 'Notifications', icon: BellRing },
-    { href: '/diagnostics', label: 'Smart Diagnostics', icon: Stethoscope },
+    { href: "/activity-logs", label: "Activity Logs", icon: ClipboardList },
+    { href: "/notifications", label: "Notifications", icon: BellRing },
+    { href: "/diagnostics", label: "Smart Diagnostics", icon: Stethoscope },
   ];
 
   const systemItems: NavItem[] = [
-    { href: '/subscribers', label: 'Subscribers', icon: Building2, minRole: 'admin' },
-    { href: '/staff', label: 'Staff & Permissions', icon: Users, minRole: 'admin' },
-    { href: '/settings', label: 'Settings', icon: Settings, minRole: 'super_admin' },
+    {
+      href: "/subscribers",
+      label: "Subscribers",
+      icon: Building2,
+      minRole: "admin",
+    },
+    {
+      href: "/staff",
+      label: "Staff & Permissions",
+      icon: Users,
+      minRole: "admin",
+    },
+    {
+      href: "/settings",
+      label: "Settings",
+      icon: Settings,
+      minRole: "super_admin",
+    },
   ];
 
-  const unacknowledgedAlarmsCount = alarms.filter(a => !a.acknowledged).length;
+  const unacknowledgedAlarmsCount = alarms.filter(
+    (a) => !a.acknowledged,
+  ).length;
 
   const renderNavLinks = (items: NavItem[]) => {
     return items
-      .filter(item => canAccess(item.minRole))
+      .filter((item) => canAccess(item.minRole))
       .map((item) => {
-        const isActive = location === item.href || (item.href !== '/' && location.startsWith(item.href));
-        const showBadge = item.href === '/alarms' && unacknowledgedAlarmsCount > 0;
+        const isActive =
+          location === item.href ||
+          (item.href !== "/" && location.startsWith(item.href));
+        const showBadge =
+          item.href === "/alarms" && unacknowledgedAlarmsCount > 0;
 
         const navLink = (
           <Link key={item.href} href={item.href}>
             <span
               className={cn(
-                'flex items-center rounded-lg px-3 py-2 transition-all cursor-pointer border-l-2 relative',
+                "flex items-center rounded-lg px-3 py-2 transition-all cursor-pointer border-l-2 relative",
                 isActive
-                  ? 'border-primary bg-primary/10 text-primary font-semibold shadow-[inset_-2px_0_0_hsl(var(--primary)/0.3)]'
-                  : 'border-transparent text-muted-foreground hover:bg-sidebar-accent/60 hover:text-foreground',
-                collapsed ? 'justify-center px-0' : 'gap-3'
+                  ? "border-primary/50 bg-primary/5 text-slate-900 dark:text-white font-semibold"
+                  : "border-transparent text-slate-700 dark:text-slate-300 hover:bg-sidebar-accent/60 hover:text-foreground",
+                collapsed ? "justify-center px-0" : "gap-3",
               )}
-              data-testid={`nav-${item.label.toLowerCase().replace(/ /g, '-')}`}
+              data-testid={`nav-${item.label.toLowerCase().replace(/ /g, "-")}`}
             >
-              <item.icon className={cn('h-5 w-5 shrink-0', isActive ? 'text-primary' : '')} />
+              <item.icon
+                className={cn(
+                  "h-5 w-5 shrink-0",
+                  isActive ? "text-primary" : "",
+                )}
+              />
               {!collapsed && (
                 <span className="flex-1 flex items-center justify-between">
                   {item.label}
                   {showBadge && (
                     <span className="bg-destructive text-white text-[9px] rounded-full h-4 w-4 flex items-center justify-center font-bold shrink-0">
-                      {unacknowledgedAlarmsCount > 99 ? '99+' : unacknowledgedAlarmsCount}
+                      {unacknowledgedAlarmsCount > 99
+                        ? "99+"
+                        : unacknowledgedAlarmsCount}
                     </span>
                   )}
                 </span>
@@ -116,7 +160,10 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
           return (
             <Tooltip key={item.href} delayDuration={0}>
               <TooltipTrigger asChild>{navLink}</TooltipTrigger>
-              <TooltipContent side="right" className="font-semibold flex items-center gap-2">
+              <TooltipContent
+                side="right"
+                className="font-semibold flex items-center gap-2"
+              >
                 {item.label}
                 {showBadge && (
                   <span className="bg-destructive text-white text-[9px] rounded-full h-4 px-1.5 flex items-center justify-center font-bold">
@@ -144,7 +191,7 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
     );
   };
 
-  const systemVisible = systemItems.some(i => canAccess(i.minRole));
+  const systemVisible = systemItems.some((i) => canAccess(i.minRole));
 
   const RoleIcon = isSuperAdmin ? Crown : isAdmin ? ShieldCheck : Shield;
   const roleStyle = ROLE_LABELS[role];
@@ -152,20 +199,32 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
   return (
     <div
       className={cn(
-        'flex h-screen flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out relative',
-        collapsed ? 'w-16' : 'w-64',
-        className
+        "flex h-screen flex-col border-r bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out relative",
+        collapsed ? "w-16" : "w-64",
+        className,
       )}
     >
       {/* Brand header */}
-      <div className={cn('flex h-14 items-center border-b shrink-0', collapsed ? 'justify-center px-0' : 'px-4')}>
-        <Activity className={cn('text-primary shrink-0', collapsed ? 'h-6 w-6' : 'h-6 w-6 mr-2')} />
+      <div
+        className={cn(
+          "flex h-14 items-center border-b shrink-0",
+          collapsed ? "justify-center px-0" : "px-4",
+        )}
+      >
+        <Activity
+          className={cn(
+            "text-primary shrink-0",
+            collapsed ? "h-6 w-6" : "h-6 w-6 mr-2",
+          )}
+        />
         {!collapsed && (
           <div className="flex flex-1 items-center justify-between truncate">
             <span className="text-lg font-bold tracking-tight">NOCpulse</span>
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 shrink-0">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[9px] font-bold uppercase tracking-wider text-green-500">Live</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider text-green-500">
+                Live
+              </span>
             </div>
           </div>
         )}
@@ -200,7 +259,9 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
           <div className="mx-3 mt-4 mb-2 rounded-lg border border-slate-500/20 bg-slate-500/5 px-3 py-2.5 flex items-start gap-2">
             <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
             <div>
-              <p className="text-[10px] font-semibold text-slate-400">Restricted Access</p>
+              <p className="text-[10px] font-semibold text-slate-400">
+                Restricted Access
+              </p>
               <p className="text-[9px] text-muted-foreground leading-snug mt-0.5">
                 Some sections are hidden based on your Staff role.
               </p>
@@ -216,8 +277,16 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
             onClick={onToggleCollapse}
             className="flex items-center justify-center sm:justify-between w-full px-3 py-2 text-xs text-muted-foreground hover:text-foreground rounded-lg hover:bg-sidebar-accent/60 transition-colors"
           >
-            {!collapsed && <span className="uppercase tracking-widest font-bold text-[9px]">Collapse</span>}
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            {!collapsed && (
+              <span className="uppercase tracking-widest font-bold text-[9px]">
+                Collapse
+              </span>
+            )}
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
           </button>
         </div>
       )}
@@ -228,40 +297,60 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
           <div className="flex justify-center">
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <div className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center cursor-pointer hover:ring-2 ring-primary/50 transition-all shrink-0`}>
-                  <span className={`text-xs font-bold ${roleStyle.color}`}>{user.initials}</span>
+                <div
+                  className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center cursor-pointer hover:ring-2 ring-primary/50 transition-all shrink-0`}
+                >
+                  <span className={`text-xs font-bold ${roleStyle.color}`}>
+                    {user.initials}
+                  </span>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right">
                 <p className="font-semibold">{user.name}</p>
-                <p className={`text-[10px] ${roleStyle.color}`}>{roleStyle.label}</p>
+                <p className={`text-[10px] ${roleStyle.color}`}>
+                  {roleStyle.label}
+                </p>
               </TooltipContent>
             </Tooltip>
           </div>
         ) : (
           <div className="rounded-lg bg-card border shadow-sm p-2.5 space-y-2.5">
             <div className="flex items-center gap-2.5">
-              <div className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center shrink-0`}>
-                <span className={`text-xs font-bold ${roleStyle.color}`}>{user.initials}</span>
+              <div
+                className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center shrink-0`}
+              >
+                <span className={`text-xs font-bold ${roleStyle.color}`}>
+                  {user.initials}
+                </span>
               </div>
               <div className="flex flex-col truncate min-w-0">
-                <span className="text-xs font-semibold truncate">{user.name}</span>
+                <span className="text-xs font-semibold truncate">
+                  {user.name}
+                </span>
                 <div className="flex items-center gap-1 mt-0.5">
-                  <RoleIcon className={`h-2.5 w-2.5 shrink-0 ${roleStyle.color}`} />
-                  <span className={`text-[9px] font-bold uppercase tracking-wider ${roleStyle.color}`}>{roleStyle.label}</span>
+                  <RoleIcon
+                    className={`h-2.5 w-2.5 shrink-0 ${roleStyle.color}`}
+                  />
+                  <span
+                    className={`text-[9px] font-bold uppercase tracking-wider ${roleStyle.color}`}
+                  >
+                    {roleStyle.label}
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Demo role switcher */}
             <div className="space-y-1">
-              <p className="text-[8px] uppercase tracking-widest font-bold text-muted-foreground/50 px-0.5">Demo Role</p>
+              <p className="text-[8px] uppercase tracking-widest font-bold text-muted-foreground/50 px-0.5">
+                Demo Role
+              </p>
               <div className="flex gap-1">
-                {([
-                  { r: 'super_admin' as UserRole, label: 'SAdm', Icon: Crown },
-                  { r: 'admin'       as UserRole, label: 'Admin', Icon: ShieldCheck },
-                  { r: 'staff'       as UserRole, label: 'Staff', Icon: Shield },
-                ]).map(({ r, label, Icon }) => {
+                {[
+                  { r: "super_admin" as UserRole, label: "SAdm", Icon: Crown },
+                  { r: "admin" as UserRole, label: "Admin", Icon: ShieldCheck },
+                  { r: "staff" as UserRole, label: "Staff", Icon: Shield },
+                ].map(({ r, label, Icon }) => {
                   const rs = ROLE_LABELS[r];
                   const active = role === r;
                   return (
@@ -269,10 +358,10 @@ export function Sidebar({ className, collapsed = false, onToggleCollapse }: Side
                       key={r}
                       onClick={() => setRole(r)}
                       className={cn(
-                        'flex-1 flex items-center justify-center gap-0.5 px-1 py-1 rounded text-[9px] font-bold border transition-all',
+                        "flex-1 flex items-center justify-center gap-0.5 px-1 py-1 rounded text-[9px] font-bold border transition-all",
                         active
                           ? `${rs.bg} ${rs.color} ${rs.border}`
-                          : 'border-border/40 text-muted-foreground/50 hover:bg-muted/30 hover:text-muted-foreground'
+                          : "border-border/40 text-muted-foreground/50 hover:bg-muted/30 hover:text-muted-foreground",
                       )}
                       title={`Switch to ${rs.label}`}
                     >
