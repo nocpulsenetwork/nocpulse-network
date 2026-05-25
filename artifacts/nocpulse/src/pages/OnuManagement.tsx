@@ -50,15 +50,16 @@ import { toast } from "sonner";
 import { ConfirmModal } from "@/components/ConfirmModal";
 
 const getRxColor = (power: number) => {
-  if (power > -25) return "text-green-500";
-  if (power >= -28) return "text-amber-500";
+  if (power > -24) return "text-green-400";
+  if (power >= -27) return "text-yellow-400";
+  if (power >= -30) return "text-orange-400";
   return "text-red-500";
 };
 
 const getTxColor = (power: number) => {
-  if (power < -3 || power > 5) return "text-red-500";
-  if (power < 0) return "text-amber-500";
-  return "text-green-500";
+  if (power < -5 || power > 6) return "text-red-500";
+  if (power < -1 || power > 4) return "text-yellow-400";
+  return "text-green-400";
 };
 
 const getReasonBadgeColor = (reason: string) => {
@@ -69,6 +70,12 @@ const getReasonBadgeColor = (reason: string) => {
       return "bg-amber-500/10 text-amber-600 border-amber-500/20";
     case "Admin Reboot":
       return "bg-blue-500/10 text-blue-600 border-blue-500/20";
+
+    case "LOS":
+      return "bg-red-500/10 text-red-600 border-red-500/20";
+
+    case "Dying Gasp":
+      return "bg-orange-500/10 text-orange-600 border-orange-500/20";
     default:
       return "bg-muted/50 text-muted-foreground border-border/40";
   }
@@ -87,6 +94,18 @@ const getStabilityStyle = (stability: SignalStability) => {
     case "Offline":
       return "bg-slate-500/10 text-slate-400 border-slate-500/20";
   }
+};
+
+const getAutoStability = (onu: any): SignalStability => {
+  if (onu.status === "Offline") return "Offline";
+
+  if (onu.signalLevel <= -29) return "High Loss";
+
+  if (onu.signalLevel <= -27) return "Unstable";
+
+  if (onu.signalLevel <= -25) return "Weak Signal";
+
+  return "Stable";
 };
 
 const getOnuTypeBadgeClass = (type: string) => {
@@ -295,7 +314,7 @@ export default function OnuManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">ONU Management</h1>
+          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-primary to-cyan-400 bg-clip-text text-transparent">ONU Management</h1>
           <div className="text-muted-foreground flex items-center gap-2 text-sm mt-0.5">
             {activeOlt ? (
               <>
@@ -307,13 +326,14 @@ export default function OnuManagement() {
             ) : (
               "Monitor and manage customer premises equipment"
             )}
-            <Badge variant="secondary">Total: {filteredOnus.length} ONUs</Badge>
+              <Badge variant="secondary" className="animate-pulse">Total: {filteredOnus.length} ONUs</Badge>{" "}
+          
           </div>
         </div>
         <Button
           variant="outline"
           disabled
-          className="opacity-50 cursor-not-allowed"
+          className="opacity-50 cursor-not-allowed hover:scale-105 transition-all duration-200 hover:shadow-lg"
         >
           Export CSV
         </Button>
@@ -419,7 +439,7 @@ export default function OnuManagement() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search ONU, MAC, VLAN, port..."
-            className="pl-8 text-sm"
+            className="pl-8 text-sm focus:scale-[1.01] transition-all duration-200"
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
@@ -436,7 +456,7 @@ export default function OnuManagement() {
           }}
         >
           <SelectTrigger
-            className={`w-[160px] ${oltFilter !== "All OLTs" ? "border-primary/50 text-primary" : ""}`}
+            className={`w-[160px] ${oltFilter !== "All OLTs" ? "border-primary/50 text-primary" : ""} transition-all duration-200 hover:border-primary/60`}
           >
             <SelectValue placeholder="All OLTs" />
           </SelectTrigger>
@@ -522,7 +542,7 @@ export default function OnuManagement() {
       </div>
 
       {/* Quick filter chips */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 animate-in fade-in-50">
         {(
           [
             {
@@ -630,13 +650,13 @@ export default function OnuManagement() {
                   MAC Addresses
                 </TableHead>
                 <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">
-                  RX Power
+                  <span className="text-cyan-400">RX Power</span>
                 </TableHead>
                 <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">
-                  TX Power
+                  <span className="text-purple-400">TX Power</span>
                 </TableHead>
                 <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 text-right">
-                  Distance
+                  <span className="text-orange-400">Distance</span>
                 </TableHead>
                 <TableHead className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3">
                   Uptime / Reason
@@ -688,9 +708,7 @@ export default function OnuManagement() {
                   return (
                     <TableRow
                       key={onu.id}
-                      className="hover:bg-primary/5 hover:border-l-4 hover:border-l-primary hover:shadow-lg hover:scale-[1.01] hover:shadow-primary/10
-                      transition-all duration-200 border-b border-border/40
-                      cursor-pointer select-none hover:text-foreground group"
+                      className="hover:bg-primary/5 hover:border-l-4 hover:border-l-primary hover:shadow-lg hover:scale-[1.01] hover:shadow-primary/10 hover:shadow-xl transition-all duration-200 border-b border-border/40 cursor-pointer select-none hover:text-foreground group backdrop-blur-sm"
                       onClick={(e) => {
                         if (!(e.target as HTMLElement).closest(".action-col")) {
                           setLocation(`/onus/${onu.id}`);
@@ -708,9 +726,7 @@ export default function OnuManagement() {
                           <span className="text-[9px] text-muted-foreground bg-muted/50 border border-border/40 rounded px-1 py-0.5">
                             PON {ponNum}
                           </span>
-                          <span
-                            className={`text-[9px] font-bold border rounded px-1 py-0.5 ${getOnuTypeBadgeClass(onu.onuType)}`}
-                          >
+                          <span className="text-[9px] font-medium text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 rounded px-1.5 py-0.5 shadow-sm">
                             {onu.onuType}
                           </span>
                         </div>
@@ -748,7 +764,7 @@ export default function OnuManagement() {
 
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div
-                          className={`text-xs font-semibold ${getRxColor(onu.signalLevel)}`}
+                          className={`text-xs font-bold tracking-wide ${getRxColor(onu.signalLevel)}`}
                         >
                           {onu.signalLevel} dBm
                         </div>
@@ -775,16 +791,18 @@ export default function OnuManagement() {
 
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div
-                          className={`text-xs font-semibold ${getTxColor(onu.txPower)}`}
+                          className={`text-xs font-bold tracking-wide ${getTxColor(onu.txPower)}`}
                         >
                           {onu.txPower} dBm
                         </div>
                       </TableCell>
 
                       <TableCell className="px-3 py-2.5 text-right whitespace-nowrap">
-                        <div className="text-xs text-muted-foreground font-mono">
+                        <div className="text-xs font-semibold text-cyan-300 font-mono tracking-wide">
                           {onu.distance}
                         </div>
+
+                        {onu.distance}
                       </TableCell>
 
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
@@ -816,9 +834,12 @@ export default function OnuManagement() {
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <Badge
                           variant="outline"
-                          className={`text-[9px] ${getStabilityStyle(onu.signalStability)}`}
+                          className={
+                            "text-[9px] " +
+                            getStabilityStyle(getAutoStability(onu))
+                          }
                         >
-                          {onu.signalStability}
+                          {getAutoStability(onu)}
                         </Badge>
                       </TableCell>
 
@@ -827,11 +848,11 @@ export default function OnuManagement() {
                           status={onu.status}
                           className={
                             onu.status === "Online"
-                              ? "border-green-500/30 bg-green-500/10 text-green-500"
+                              ? "border-green-500/30 bg-green-500/10 text-green-400 shadow-green-500/20"
                               : onu.status === "Offline"
-                                ? "border-red-500/30 bg-red-500/10 text-red-500"
+                                ? "border-red-500/30 bg-red-500/10 text-red-400 shadow-red-500/20"
                                 : onu.status === "Degraded"
-                                  ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-500"
+                                  ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-400 shadow-yellow-500/20"
                                   : ""
                           }
                         />
@@ -857,7 +878,7 @@ export default function OnuManagement() {
                               className="w-56 rounded-xl border border-border/50 shadow-2xl"
                             >
                               <DropdownMenuItem
-                                onClick={() => setLocation(`/onus/${onu.id}`)}
+                                onClick={() => setLocation("/onus/" + onu.id)}
                               >
                                 View ONU Details
                               </DropdownMenuItem>
@@ -984,14 +1005,14 @@ export default function OnuManagement() {
         open={confirmAction?.type === "reboot"}
         onClose={() => setConfirmAction(null)}
         onConfirm={() =>
-          toast.success(`Reboot sent to ${confirmOnu?.description ?? "ONU"}`, {
+          toast.success("Reboot sent to ONU", {
             description: "ONU will restart within 30 seconds",
           })
         }
         title="Reboot ONU"
         description="This will send a remote reboot command to the ONU. The customer will lose connectivity for approximately 30–60 seconds while the device restarts."
         device={
-          confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ""
+          confirmOnu ? confirmOnu.onuNo + " - " + confirmOnu.description : ""
         }
         confirmLabel="Reboot ONU"
         variant="warning"
@@ -1002,14 +1023,14 @@ export default function OnuManagement() {
         open={confirmAction?.type === "disable"}
         onClose={() => setConfirmAction(null)}
         onConfirm={() =>
-          toast.error(`ONU disabled: ${confirmOnu?.description ?? "ONU"}`, {
+          toast.error("ONU disabled", {
             description: "Service suspended. Use Enable to restore.",
           })
         }
         title="Disable ONU"
         description="This action will immediately disconnect the customer ONU from the OLT network. Internet service will stop until the ONU is restored manually by an administrator."
         device={
-          confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ""
+          confirmOnu ? confirmOnu.onuNo + " - " + confirmOnu.description : ""
         }
         confirmLabel="Disable ONU"
         variant="danger"
@@ -1020,14 +1041,14 @@ export default function OnuManagement() {
         open={confirmAction?.type === "enable"}
         onClose={() => setConfirmAction(null)}
         onConfirm={() =>
-          toast.success(`ONU enabled: ${confirmOnu?.description ?? "ONU"}`, {
+          toast.success("ONU enabled", {
             description: "ONU is coming back online",
           })
         }
         title="Enable ONU"
         description="This action will restore ONU connectivity and allow the customer device to reconnect to the OLT network automatically."
         device={
-          confirmOnu ? `${confirmOnu.onuNo} — ${confirmOnu.description}` : ""
+          confirmOnu ? confirmOnu.onuNo + " - " + confirmOnu.description : ""
         }
         confirmLabel="Enable ONU"
         variant="warning"
