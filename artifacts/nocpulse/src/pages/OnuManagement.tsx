@@ -688,7 +688,9 @@ export default function OnuManagement() {
                   return (
                     <TableRow
                       key={onu.id}
-                      className="hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer group"
+                      className="hover:bg-primary/5 hover:border-l-4 hover:border-l-primary hover:shadow-lg hover:scale-[1.01] hover:shadow-primary/10
+                      transition-all duration-200 border-b border-border/40
+                      cursor-pointer select-none hover:text-foreground group"
                       onClick={(e) => {
                         if (!(e.target as HTMLElement).closest(".action-col")) {
                           setLocation(`/onus/${onu.id}`);
@@ -787,7 +789,15 @@ export default function OnuManagement() {
 
                       <TableCell className="px-3 py-2.5 whitespace-nowrap">
                         <div
-                          className={`text-xs font-medium ${onu.status === "Online" ? "text-green-500" : "text-muted-foreground"}`}
+                          className={`text-xs font-medium ${
+                            onu.status === "Online"
+                              ? "text-green-500"
+                              : onu.status === "Offline"
+                                ? "text-red-500"
+                                : onu.status === "Degraded"
+                                  ? "text-yellow-500"
+                                  : "text-muted-foreground"
+                          }`}
                         >
                           {onu.onlineDuration === "N/A"
                             ? "—"
@@ -813,7 +823,18 @@ export default function OnuManagement() {
                       </TableCell>
 
                       <TableCell className="px-3 py-2.5">
-                        <StatusBadge status={onu.status} />
+                        <StatusBadge
+                          status={onu.status}
+                          className={
+                            onu.status === "Online"
+                              ? "border-green-500/30 bg-green-500/10 text-green-500"
+                              : onu.status === "Offline"
+                                ? "border-red-500/30 bg-red-500/10 text-red-500"
+                                : onu.status === "Degraded"
+                                  ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-500"
+                                  : ""
+                          }
+                        />
                       </TableCell>
 
                       <TableCell
