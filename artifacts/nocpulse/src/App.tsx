@@ -4,7 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { RoleProvider } from "@/contexts/RoleContext";
-
+import { useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
 import Login from "@/pages/Login";
@@ -58,6 +58,36 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    const timeoutMinutes = 30;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const logout = () => {
+      localStorage.removeItem("auth-token");
+      localStorage.removeItem("user-role");
+      window.location.href = "/login";
+    };
+
+    const resetTimer = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(logout, timeoutMinutes * 60 * 1000);
+    };
+
+    const events = ["click", "keydown", "scroll", "mousemove", "touchstart"];
+
+    events.forEach((event) => {
+      window.addEventListener(event, resetTimer);
+    });
+
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeoutId);
+      events.forEach((event) => {
+        window.removeEventListener(event, resetTimer);
+      });
+    };
+  }, []);
   return (
     <ThemeProvider defaultTheme="dark" storageKey="nocpulse-theme">
       <RoleProvider>
