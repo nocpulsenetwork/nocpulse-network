@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatDistanceToNow } from 'date-fns';
 import {
   XCircle, AlertTriangle, AlertCircle, Info, CheckCircle2, Bell,
-  RefreshCw, RotateCcw, Shield, ChevronDown, ChevronUp, Clock,
+  RefreshCw, RotateCcw, ChevronDown, ChevronUp, Clock,
   User, AlertOctagon, Activity, ShieldCheck, ShieldAlert,
 } from 'lucide-react';
 
@@ -87,7 +87,12 @@ function SeverityBadge({ severity }: { severity: Alarm['severity'] }) {
 }
 
 function VerifStatusBadge({ status, secondsLeft }: { status: VerificationStatus; secondsLeft?: number }) {
-  if (status === 'Active') return null;
+  if (status === 'Active') return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20 text-[10px] font-bold uppercase tracking-wider">
+      <span className="h-1.5 w-1.5 rounded-full bg-red-400 animate-pulse" />
+      Unresolved
+    </span>
+  );
   if (status === 'Verifying') return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px] font-bold uppercase tracking-wider">
       <RefreshCw className="h-2.5 w-2.5 animate-spin" />
@@ -181,7 +186,11 @@ function AlarmCard({
 
   return (
     <div
-      className={`rounded-xl border border-border/60 border-l-4 ${sty.border} ${sty.bg} backdrop-blur-sm shadow-sm overflow-hidden transition-all duration-300 ${alarm.verificationStatus === 'Resolved' ? 'opacity-60' : ''}`}
+      className={`rounded-xl border border-l-4 backdrop-blur-sm shadow-sm overflow-hidden transition-all duration-200 ${
+        alarm.verificationStatus === 'Resolved'
+          ? 'border-green-500/20 border-l-green-500/50 bg-green-500/[0.03]'
+          : `border-border/60 ${sty.border} ${sty.bg}`
+      }`}
     >
       <div className="p-4 space-y-3">
         {/* Top row */}
@@ -529,6 +538,14 @@ export default function AlarmCenter() {
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
   const markViewed = (id: string) => setViewedIds(prev => new Set([...prev, id]));
 
+  const [severityFilter, setSeverityFilter] = useState<'All' | 'Critical' | 'Major' | 'Minor' | 'Info'>('All');
+
+  const sortByTime = (arr: EnrichedAlarm[]) =>
+    [...arr].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  const bySev = (arr: EnrichedAlarm[]) =>
+    severityFilter === 'All' ? arr : arr.filter(a => a.severity === severityFilter);
+
   const active = enriched.filter(a => a.verificationStatus === 'Active' || a.verificationStatus === 'Re-opened');
   const verifying = enriched.filter(a => a.verificationStatus === 'Verifying');
   const resolved = enriched.filter(a => a.verificationStatus === 'Resolved');
@@ -541,6 +558,14 @@ export default function AlarmCenter() {
   const reopenedCount = active.filter(a => a.verificationStatus === 'Re-opened').length;
 
   const allActiveAndVerifying = [...active, ...verifying];
+
+  // Sorted + filtered display slices
+  const displayAll      = bySev(sortByTime(allActiveAndVerifying));
+  const displayCritical = sortByTime(allActiveAndVerifying).filter(a => a.severity === 'Critical');
+  const displayWarning  = sortByTime(allActiveAndVerifying).filter(a => a.severity === 'Major' || a.severity === 'Minor');
+  const displayVerify   = bySev(sortByTime(verifying));
+  const displayInfo     = sortByTime(enriched.filter(a => a.severity === 'Info'));
+  const displayResolved = bySev(sortByTime(resolved));
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -594,6 +619,34 @@ export default function AlarmCenter() {
         </div>
       </div>
 
+      {/* Severity filter bar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground shrink-0">Filter:</span>
+        {([
+          { v: 'All',      label: 'All',      cls: 'border-primary/40 text-primary bg-primary/10',          inactive: 'border-border/40 text-muted-foreground hover:border-primary/20 hover:text-primary' },
+          { v: 'Critical', label: 'Critical', cls: 'border-red-500/40 text-red-400 bg-red-500/10',           inactive: 'border-border/40 text-muted-foreground hover:border-red-500/30 hover:text-red-400' },
+          { v: 'Major',    label: 'Major',    cls: 'border-amber-500/40 text-amber-400 bg-amber-500/10',     inactive: 'border-border/40 text-muted-foreground hover:border-amber-500/30 hover:text-amber-400' },
+          { v: 'Minor',    label: 'Minor',    cls: 'border-blue-500/40 text-blue-400 bg-blue-500/10',        inactive: 'border-border/40 text-muted-foreground hover:border-blue-500/30 hover:text-blue-400' },
+          { v: 'Info',     label: 'Info',     cls: 'border-slate-500/40 text-slate-400 bg-slate-500/10',     inactive: 'border-border/40 text-muted-foreground hover:border-slate-500/30 hover:text-slate-400' },
+        ] as const).map(({ v, label, cls, inactive }) => (
+          <button
+            key={v}
+            onClick={() => setSeverityFilter(v)}
+            className={`px-2.5 py-1 rounded text-xs font-semibold border transition-colors ${severityFilter === v ? cls : inactive}`}
+          >
+            {label}
+          </button>
+        ))}
+        {severityFilter !== 'All' && (
+          <button
+            onClick={() => setSeverityFilter('All')}
+            className="ml-1 text-[10px] text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       <Tabs defaultValue="all" className="w-full">
         <TabsList className="bg-transparent border-b border-border/60 rounded-none h-auto p-0 gap-0 w-full justify-start mb-6">
           {[
@@ -621,10 +674,10 @@ export default function AlarmCenter() {
 
         {/* ALL ACTIVE */}
         <TabsContent value="all" className="space-y-3 m-0">
-          {allActiveAndVerifying.length === 0 ? (
-            <EmptyState icon={ShieldCheck} message="No active alarms — all systems operational" />
+          {displayAll.length === 0 ? (
+            <EmptyState icon={ShieldCheck} message={severityFilter !== 'All' ? `No active ${severityFilter} alarms` : 'No active alarms — all systems operational'} />
           ) : (
-            allActiveAndVerifying.map(alarm => (
+            displayAll.map(alarm => (
               <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />
             ))
           )}
@@ -632,37 +685,37 @@ export default function AlarmCenter() {
 
         {/* CRITICAL */}
         <TabsContent value="critical" className="space-y-3 m-0">
-          {allActiveAndVerifying.filter(a => a.severity === 'Critical').length === 0 ? (
+          {displayCritical.length === 0 ? (
             <EmptyState icon={ShieldCheck} message="No critical alarms" />
           ) : (
-            allActiveAndVerifying
-              .filter(a => a.severity === 'Critical')
-              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />)
+            displayCritical.map(alarm => (
+              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />
+            ))
           )}
         </TabsContent>
 
         {/* WARNING */}
         <TabsContent value="warning" className="space-y-3 m-0">
-          {allActiveAndVerifying.filter(a => a.severity === 'Major' || a.severity === 'Minor').length === 0 ? (
+          {displayWarning.length === 0 ? (
             <EmptyState icon={ShieldCheck} message="No warnings" />
           ) : (
-            allActiveAndVerifying
-              .filter(a => a.severity === 'Major' || a.severity === 'Minor')
-              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />)
+            displayWarning.map(alarm => (
+              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />
+            ))
           )}
         </TabsContent>
 
         {/* IN PROGRESS (Verifying) */}
         <TabsContent value="inprogress" className="space-y-3 m-0">
-          {verifying.length === 0 ? (
+          {displayVerify.length === 0 ? (
             <EmptyState icon={RefreshCw} message="No alarms currently in verification" />
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                 <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-400" />
-                {verifying.length} alarm{verifying.length > 1 ? 's' : ''} acknowledged and under active auto-verification
+                {displayVerify.length} alarm{displayVerify.length > 1 ? 's' : ''} acknowledged and under active auto-verification
               </div>
-              {verifying.map(alarm => (
+              {displayVerify.map(alarm => (
                 <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />
               ))}
             </div>
@@ -671,26 +724,26 @@ export default function AlarmCenter() {
 
         {/* INFO */}
         <TabsContent value="info" className="space-y-3 m-0">
-          {enriched.filter(a => a.severity === 'Info').length === 0 ? (
+          {displayInfo.length === 0 ? (
             <EmptyState icon={Info} message="No info events" />
           ) : (
-            enriched
-              .filter(a => a.severity === 'Info')
-              .map(alarm => <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />)
+            displayInfo.map(alarm => (
+              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />
+            ))
           )}
         </TabsContent>
 
         {/* SOLVED */}
         <TabsContent value="solved" className="space-y-3 m-0">
-          {resolved.length === 0 ? (
-            <EmptyState icon={Activity} message="No solved alarms yet" />
+          {displayResolved.length === 0 ? (
+            <EmptyState icon={Activity} message={severityFilter !== 'All' ? `No resolved ${severityFilter} alarms` : 'No solved alarms yet'} />
           ) : (
             <div className="space-y-3">
               <div className="flex items-center gap-2 p-3 rounded-lg bg-green-500/5 border border-green-500/20 text-[11px] text-green-400">
                 <ShieldCheck className="h-3.5 w-3.5" />
-                {resolved.length} alarm{resolved.length > 1 ? 's' : ''} verified and solved — all passed auto-verification check
+                {displayResolved.length} alarm{displayResolved.length > 1 ? 's' : ''} verified and solved — all passed auto-verification check
               </div>
-              {resolved.map(alarm => (
+              {displayResolved.map(alarm => (
                 <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />
               ))}
             </div>

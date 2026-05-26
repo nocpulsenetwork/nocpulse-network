@@ -155,7 +155,17 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
               value={searchQuery}
               onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
               onFocus={() => setSearchOpen(true)}
-              className="w-48 lg:w-64 bg-card pl-9 border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && searchResults.length > 0) {
+                  navigate(searchResults[0].href);
+                  setSearchOpen(false);
+                  setSearchQuery('');
+                } else if (e.key === 'Escape') {
+                  setSearchOpen(false);
+                  setSearchQuery('');
+                }
+              }}
+              className="w-52 lg:w-72 bg-card pl-9 border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
             />
           </div>
           {searchOpen && searchResults.length > 0 && (
@@ -191,8 +201,14 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
             </div>
           )}
           {searchOpen && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
-            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-lg shadow-xl p-4 text-center">
-              <p className="text-sm text-muted-foreground">No devices found for "{searchQuery}"</p>
+            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-lg shadow-xl overflow-hidden">
+              <div className="px-3 py-1.5 border-b border-border/50">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">No results</span>
+              </div>
+              <div className="px-3 py-3 text-center">
+                <p className="text-xs text-muted-foreground">No devices match <span className="font-medium text-foreground">"{searchQuery}"</span></p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">Try an IP, MAC, ONU ID, or customer name</p>
+              </div>
             </div>
           )}
         </div>
