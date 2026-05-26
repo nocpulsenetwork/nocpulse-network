@@ -26,6 +26,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 
 import {
   Signal,
+  Pencil,
   Radio,
   Ruler,
   Clock,
@@ -122,11 +123,13 @@ export default function OnuDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [modal, setModal] = useState<
-    "reboot" | "disable" | "enable" | "router" | null
+    "reboot" | "disable" | "enable" | "router" | "description" | null
   >(null);
 
   const id = params?.id;
   const onu = onus.find((o) => o.id === id);
+
+  const displayDescription = onu?.customerName || onu?.onuNo || "Unknown ONU";
 
   if (!onu) {
     return (
@@ -451,7 +454,7 @@ export default function OnuDetail() {
                 <Signal className="h-3 w-3" />
                 Snapshot:{" "}
                 <span className="font-mono break-all text-foreground/70">
-                  {onu.lastOfflineRxPower} dBm
+                  {onu.lastOfflineRxPower ?? "N/A"} dBm
                 </span>
                 {powerDelta !== null && (
                   <span
@@ -465,11 +468,16 @@ export default function OnuDetail() {
             )}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" onClick={() => setLocation("/onus")}>
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setLocation("/onus")}
+          >
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to ONU List
           </Button>
           <Button
+            size="sm"
             variant="outline"
             className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20"
             onClick={() => setModal("reboot")}
@@ -477,36 +485,21 @@ export default function OnuDetail() {
             <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Reboot
           </Button>
           <Button
+            size="sm"
             variant="outline"
-            className="bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20"
-            onClick={() => setModal("router")}
+            className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20 hover:bg-cyan-500/20"
+            onClick={() => setModal("description")}
           >
-            <Settings className="mr-1.5 h-3.5 w-3.5" /> Reboot Router
+            <Pencil className="mr-1.5 h-3.5 w-3.5" />
+            Edit
           </Button>
-          {onu.status === "Offline" ? (
-            <Button
-              variant="outline"
-              className="bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20"
-              onClick={() => setModal("enable")}
-            >
-              <Power className="mr-1.5 h-3.5 w-3.5" /> Enable
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              className="bg-red-500/10 text-red-500 border-red-500/20 hover:bg-red-500/20"
-              onClick={() => setModal("disable")}
-            >
-              <PowerOff className="mr-1.5 h-3.5 w-3.5" /> Disable
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Row 1: Core Signal Metrics */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-4">
         <Card className="shadow-sm border-border/50 border-l-4 border-l-blue-500">
-            <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">
                 RX Power
@@ -542,7 +535,7 @@ export default function OnuDetail() {
         </Card>
 
         <Card className="shadow-sm border-border/50 border-l-4 border-l-purple-500">
-            <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">
                 TX Power
@@ -566,7 +559,7 @@ export default function OnuDetail() {
         </Card>
 
         <Card className="shadow-sm border-border/50 border-l-4 border-l-cyan-500">
-            <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">
                 Distance
@@ -588,7 +581,7 @@ export default function OnuDetail() {
         </Card>
 
         <Card className="shadow-sm border-border/50 border-l-4 border-l-green-500">
-            <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">
                 Online Duration
@@ -614,7 +607,7 @@ export default function OnuDetail() {
         <Card
           className={`shadow-sm border-border/50 border-l-4 ${filledBars >= 4 ? "border-l-green-500" : filledBars === 3 ? "border-l-amber-500" : "border-l-red-500"}`}
         >
-            <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">
                 Signal Quality
@@ -644,7 +637,7 @@ export default function OnuDetail() {
         <Card
           className={`shadow-sm border-border/50 border-l-4 ${stability.border}`}
         >
-            <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">
                 Signal Stability
@@ -663,7 +656,7 @@ export default function OnuDetail() {
         </Card>
 
         <Card className="shadow-sm border-border/50 border-l-4 border-l-amber-500">
-            <CardContent className="p-4 sm:p-5">
+          <CardContent className="p-4 sm:p-5">
             <div className="flex justify-between items-start pb-1">
               <p className="text-sm font-medium text-muted-foreground">
                 Temperature
@@ -686,7 +679,7 @@ export default function OnuDetail() {
       </div>
 
       {/* Row 3: Power Intelligence (only if offline snapshot exists) */}
-      {onu.lastOfflineRxPower !== null && (
+      {
         <Card className="shadow-sm border-border/50">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -836,704 +829,544 @@ export default function OnuDetail() {
                   </span>
                 </div>
               </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  PPPoE Username
-                </p>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4 mt-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Client Device
+              </p>
 
-                <div className="text-lg font-bold text-violet-400 font-mono break-all">
-                  client_{onu.id}
-                </div>
-
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Broadband authentication account
-                </p>
-
-                <div className="mt-3 pt-3 border-t border-border/40">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-muted-foreground">Router MAC</span>
-
-                    <span className="font-mono break-all text-cyan-300">
-                      A4:C3:F0:85:12:33
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] mt-2">
-                    <span className="text-muted-foreground">Login Server</span>
-
-                    <span className="font-mono break-all text-green-400">
-                      radius-main-01
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4 mt-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Client Device
-                </p>
-
-                <div className="text-lg font-bold text-cyan-300">
-                  Auto Detected Device
-                </div>
-
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Connected customer endpoint
-                </p>
-
-                <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Device Type
-                    </span>
-
-                    <span className="text-[11px] font-medium text-primary">
-                      Router / ONU Client
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Connection
-                    </span>
-
-                    <span className="text-[11px] font-medium text-green-400">
-                      Active
-                    </span>
-                  </div>
-                </div>
+              <div className="text-lg font-bold text-cyan-300">
+                Auto Detected Device
               </div>
 
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Last Login IP
-                </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Connected customer endpoint
+              </p>
 
-                <div className="text-xl font-bold text-amber-400 font-mono break-all">
-                  {lastLoginIp}
+              <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Device Type
+                  </span>
+
+                  <span className="text-[11px] font-medium text-primary">
+                    Router / ONU Client
+                  </span>
                 </div>
 
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Last authenticated session
-                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Connection
+                  </span>
+
+                  <span className="text-[11px] font-medium text-green-400">
+                    Active
+                  </span>
+                </div>
               </div>
-              <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-green-400 mb-2">
-                  Session Status
-                </p>
+            </div>
+
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Last Login IP
+              </p>
+
+              <div className="text-xl font-bold text-amber-400 font-mono break-all">
+                {lastLoginIp}
+              </div>
+
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Last authenticated session
+              </p>
+            </div>
+            <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-green-400 mb-2">
+                Session Status
+              </p>
+
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+
+                <span className="text-lg font-bold text-green-400">
+                  Active Session
+                </span>
+                <span className="text-[10px] text-green-300 animate-pulse ml-2">
+                  LIVE
+                </span>
+              </div>
+              <div className="mt-3 flex items-center justify-between border border-border/40 rounded-lg px-3 py-2 bg-background/40">
+                <div>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Session Status
+                  </p>
+
+                  <p className="text-sm font-semibold text-green-400">
+                    Connected Securely
+                  </p>
+                </div>
 
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
 
-                  <span className="text-lg font-bold text-green-400">
-                    Active Session
-                  </span>
-                  <span className="text-[10px] text-green-300 animate-pulse ml-2">
-                    LIVE
-                  </span>
-                </div>
-                <div className="mt-3 flex items-center justify-between border border-border/40 rounded-lg px-3 py-2 bg-background/40">
-                  <div>
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                      Session Status
-                    </p>
-
-                    <p className="text-sm font-semibold text-green-400">
-                      Connected Securely
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-
-                    <span className="text-[11px] text-muted-foreground">
-                      Realtime Monitoring
-                    </span>
-                  </div>
-                </div>
-
-                <p className="text-[11px] text-muted-foreground mt-2">
-                  Auto logout after 30 minutes inactivity
-                </p>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4 mt-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Traffic Usage
-                </p>
-
-                <div className="text-xl font-bold text-primary">128.4 GB</div>
-
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Total bandwidth consumed
-                </p>
-
-                <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Download
-                    </span>
-
-                    <span className="text-[11px] font-medium text-cyan-300">
-                      104.7 GB
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Upload
-                    </span>
-
-                    <span className="text-[11px] font-medium text-violet-300">
-                      23.7 GB
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Live Internet Activity
-                </p>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-                  <div className="rounded-lg bg-cyan-500/10 border border-cyan-500/20 p-3">
-                    <p className="text-[10px] text-muted-foreground">
-                      Download
-                    </p>
-
-                    <div className="text-xl font-bold text-cyan-300 mt-1">
-                      92 Mbps
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg bg-violet-500/10 border border-violet-500/20 p-3">
-                    <p className="text-[10px] text-muted-foreground">Upload</p>
-
-                    <div className="text-xl font-bold text-violet-300 mt-1">
-                      24 Mbps
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-3">
-                    <p className="text-[10px] text-muted-foreground">Ping</p>
-
-                    <div className="text-xl font-bold text-green-300 mt-1">
-                      4 ms
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
-                    <p className="text-[10px] text-muted-foreground">
-                      Packet Loss
-                    </p>
-
-                    <div className="text-xl font-bold text-amber-300 mt-1">
-                      0.2%
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground">
-                    Session Health
+                    Realtime Monitoring
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground mt-2">
+                Auto logout after 30 minutes inactivity
+              </p>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4 mt-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Traffic Usage
+              </p>
+
+              <div className="text-xl font-bold text-primary">128.4 GB</div>
+
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Total bandwidth consumed
+              </p>
+
+              <div className="mt-3 pt-3 border-t border-border/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Download
                   </span>
 
-                  <span className="text-[11px] px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                  <span className="text-[11px] font-medium text-cyan-300">
+                    104.7 GB
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Upload
+                  </span>
+
+                  <span className="text-[11px] font-medium text-violet-300">
+                    23.7 GB
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Live Internet Activity
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                <div className="rounded-lg bg-cyan-500/10 border border-cyan-500/20 p-3">
+                  <p className="text-[10px] text-muted-foreground">Download</p>
+
+                  <div className="text-xl font-bold text-cyan-300 mt-1">
+                    92 Mbps
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-violet-500/10 border border-violet-500/20 p-3">
+                  <p className="text-[10px] text-muted-foreground">Upload</p>
+
+                  <div className="text-xl font-bold text-violet-300 mt-1">
+                    24 Mbps
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-3">
+                  <p className="text-[10px] text-muted-foreground">Ping</p>
+
+                  <div className="text-xl font-bold text-green-300 mt-1">
+                    4 ms
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3">
+                  <p className="text-[10px] text-muted-foreground">
+                    Packet Loss
+                  </p>
+
+                  <div className="text-xl font-bold text-amber-300 mt-1">
+                    0.2%
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">
+                  Session Health
+                </span>
+
+                <span className="text-[11px] px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
+                  Excellent
+                </span>
+              </div>
+            </div>
+            {/* Offline Snapshot */}
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                  Offline Snapshot
+                </p>
+              </div>
+              <p className="text-xl font-bold font-mono break-all text-red-500">
+                {onu.lastOfflineRxPower ?? "N/A"}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  dBm
+                </span>
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Last RX before disconnect
+              </p>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Connection Intelligence
+              </p>
+
+              <div className="space-y-3 mt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Last Disconnect
+                  </span>
+
+                  <span className="text-[11px] font-medium text-red-400">
+                    Fiber Power Loss
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Last Reboot
+                  </span>
+
+                  <span className="text-[11px] font-medium text-cyan-300">
+                    3h 24m ago
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Session Stability
+                  </span>
+
+                  <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
+                    Excellent
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Fiber Health
+                  </span>
+
+                  <span className="px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[10px]">
+                    Clean Signal
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Live Traffic Usage
+              </p>
+
+              <div className="space-y-3 mt-3">
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-muted-foreground">Download</span>
+
+                    <span className="text-cyan-300 font-semibold text-sm">
+                      1.24 GB
+                    </span>
+                  </div>
+
+                  <div className="h-1.5 rounded-full" bg-muted overflow-hidden>
+                    <div className="h-full w-[84%] bg-cyan-400 rounded-full" />
+                  </div>
+                </div>
+
+                <div>
+                  <div className="flex justify-between text-[11px] mb-1">
+                    <span className="text-muted-foreground">Upload</span>
+
+                    <span className="text-cyan-300 font-semibold text-sm">
+                      680 MB
+                    </span>
+                  </div>
+
+                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full w-[22%] bg-violet-400 rounded-full" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                  <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Monthly Usage
+                    </p>
+
+                    <p className="text-lg font-bold text-green-400 mt-1">
+                      482 GB
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-border/40 bg-background/40 p-3">
+                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Bandwidth Profile
+                    </p>
+
+                    <p className="text-lg font-bold text-cyan-300 mt-1">
+                      100M / 100M
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Security Protection
+              </p>
+
+              <div className="space-y-2 mt-2 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Session Encryption
+                  </span>
+
+                  <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
+                    AES Protected
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Firewall Status
+                  </span>
+
+                  <span className="px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[10px]">
+                    Active
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Unauthorized Login
+                  </span>
+
+                  <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
+                    Not Detected
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Auto Logout
+                  </span>
+
+                  <span className="text-[11px] font-medium text-amber-300">
+                    30 Minutes Idle
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Trusted Device
+                  </span>
+
+                  <span className="text-[11px] font-medium text-violet-300">
+                    Verified
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Device & Fiber Information
+              </p>
+
+              <div className="space-y-3 mt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    ONU Model
+                  </span>
+
+                  <span className="text-[11px] font-medium text-cyan-300">
+                    Huawei HG8145X6
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Firmware Version
+                  </span>
+
+                  <span className="text-[11px] font-medium text-green-400">
+                    V5R021C00
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Fiber Length
+                  </span>
+
+                  <span className="text-[11px] font-medium text-amber-300">
+                    1.24 KM
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    PON Port
+                  </span>
+
+                  <span className="text-[11px] font-medium text-violet-300">
+                    GPON 0/1/0
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Vendor OUI
+                  </span>
+
+                  <span className="text-[11px] font-medium text-cyan-300">
+                    A4:C3:F0
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">
+                    Authentication
+                  </span>
+
+                  <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
+                    PPPoE Verified
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
+              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
+                Network Quality Analytics
+              </p>
+
+              <div className="space-y-2 mt-2 text-[11px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">
+                    Jitter
+                  </span>
+
+                  <span className="text-[10px] font-medium text-cyan-300">
+                    1.8 ms
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">
+                    DNS Response
+                  </span>
+
+                  <span className="text-[10px] font-medium text-green-400">
+                    12 ms
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">
+                    Packet Retry
+                  </span>
+
+                  <span className="text-[10px] font-medium text-amber-300">
+                    0.3%
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">
+                    Fiber CRC Errors
+                  </span>
+
+                  <span className="text-[10px] font-medium text-red-400">
+                    0
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">
+                    Session Quality
+                  </span>
+
+                  <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
                     Excellent
                   </span>
                 </div>
               </div>
-              {/* Offline Snapshot */}
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-2 w-2 rounded-full bg-red-500" />
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                    Offline Snapshot
-                  </p>
-                </div>
-                <p className="text-xl font-bold font-mono break-all text-red-500">
-                  {onu.lastOfflineRxPower}{" "}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    dBm
-                  </span>
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Last RX before disconnect
-                </p>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Connection Intelligence
-                </p>
-
-                <div className="space-y-3 mt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Last Disconnect
-                    </span>
-
-                    <span className="text-[11px] font-medium text-red-400">
-                      Fiber Power Loss
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Last Reboot
-                    </span>
-
-                    <span className="text-[11px] font-medium text-cyan-300">
-                      3h 24m ago
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Session Stability
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
-                      Excellent
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Fiber Health
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[10px]">
-                      Clean Signal
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Realtime Diagnostics
-                </p>
-
-                <div className="space-y-3 mt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Optical Status
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
-                      Operational
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      ONU Temperature
-                    </span>
-
-                    <span className="text-[11px] font-medium text-amber-300">
-                      42°C
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Supply Voltage
-                    </span>
-
-                    <span className="text-[11px] font-medium text-cyan-300">
-                      3.31V
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Laser Bias Current
-                    </span>
-
-                    <span className="text-[11px] font-medium text-violet-300">
-                      8.4 mA
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Link Quality
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[10px]">
-                      Excellent
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Login & Action History
-                </p>
-
-                <div className="space-y-3 mt-3">
-                  <div className="border-l-2 border-green-500/40 pl-3">
-                    <p className="text-[11px] font-medium text-green-400">
-                      Admin logged in
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      IP: 192.168.0.12 · Chrome Windows · 10 min ago
-                    </p>
-                  </div>
-
-                  <div className="border-l-2 border-cyan-500/40 pl-3">
-                    <p className="text-[11px] font-medium text-cyan-300">
-                      ONU diagnostics viewed
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      User: Admin · Source IP: 192.168.0.12
-                    </p>
-                  </div>
-
-                  <div className="border-l-2 border-amber-500/40 pl-3">
-                    <p className="text-[11px] font-medium text-amber-300">
-                      Auto logout rule active
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      30 min inactivity timeout enabled
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Live Traffic Usage
-                </p>
-
-                <div className="space-y-4 mt-3">
-                  <div>
-                    <div className="flex justify-between text-[11px] mb-1">
-                      <span className="text-muted-foreground">Download</span>
-
-                      <span className="text-cyan-300 font-medium">84 Mbps</span>
-                    </div>
-
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full w-[84%] bg-cyan-400 rounded-full" />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-[11px] mb-1">
-                      <span className="text-muted-foreground">Upload</span>
-
-                      <span className="text-violet-300 font-medium">
-                        22 Mbps
-                      </span>
-                    </div>
-
-                    <div className="h-2 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full w-[22%] bg-violet-400 rounded-full" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Monthly Usage
-                      </p>
-
-                      <p className="text-lg font-bold text-green-400 mt-1">
-                        482 GB
-                      </p>
-                    </div>
-
-                    <div className="rounded-lg border border-border/40 bg-background/40 p-3">
-                      <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                        Bandwidth Profile
-                      </p>
-
-                      <p className="text-lg font-bold text-cyan-300 mt-1">
-                        100M / 100M
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Security Protection
-                </p>
-
-                <div className="space-y-2 mt-2 text-[11px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Session Encryption
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
-                      AES Protected
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Firewall Status
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[10px]">
-                      Active
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Unauthorized Login
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
-                      Not Detected
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Auto Logout
-                    </span>
-
-                    <span className="text-[11px] font-medium text-amber-300">
-                      30 Minutes Idle
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Trusted Device
-                    </span>
-
-                    <span className="text-[11px] font-medium text-violet-300">
-                      Verified
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Device & Fiber Information
-                </p>
-
-                <div className="space-y-3 mt-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      ONU Model
-                    </span>
-
-                    <span className="text-[11px] font-medium text-cyan-300">
-                      Huawei HG8145X6
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Firmware Version
-                    </span>
-
-                    <span className="text-[11px] font-medium text-green-400">
-                      V5R021C00
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Fiber Length
-                    </span>
-
-                    <span className="text-[11px] font-medium text-amber-300">
-                      1.24 KM
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      PON Port
-                    </span>
-
-                    <span className="text-[11px] font-medium text-violet-300">
-                      GPON 0/1/0
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Vendor OUI
-                    </span>
-
-                    <span className="text-[11px] font-medium text-cyan-300">
-                      A4:C3:F0
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">
-                      Authentication
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
-                      PPPoE Verified
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                  Network Quality Analytics
-                </p>
-
-                <div className="space-y-2 mt-2 text-[11px]">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">
-                      Jitter
-                    </span>
-
-                    <span className="text-[10px] font-medium text-cyan-300">
-                      1.8 ms
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">
-                      DNS Response
-                    </span>
-
-                    <span className="text-[10px] font-medium text-green-400">
-                      12 ms
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">
-                      Packet Retry
-                    </span>
-
-                    <span className="text-[10px] font-medium text-amber-300">
-                      0.3%
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">
-                      Fiber CRC Errors
-                    </span>
-
-                    <span className="text-[10px] font-medium text-red-400">
-                      0
-                    </span>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-muted-foreground">
-                      Session Quality
-                    </span>
-
-                    <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
-                      Excellent
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Current Reading */}
-              <div
-                className={`border rounded-lg p-4 ${isPoorSignal ? "bg-red-500/5 border-red-500/20" : isWarningSignal ? "bg-amber-500/5 border-amber-500/20" : "bg-green-500/5 border-green-500/20"}`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <div
-                    className={`h-2 w-2 rounded-full ${isPoorSignal ? "bg-red-500" : isWarningSignal ? "bg-amber-500" : "bg-green-500"}`}
-                  />
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                    Current Reading
-                  </p>
-                </div>
-                <p
-                  className={`text-xl font-bold font-mono break-all ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}
-                >
-                  {onu.signalLevel}{" "}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    dBm
-                  </span>
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Live RX power reading
-                </p>
-              </div>
-
-              {/* Delta */}
-              <div
-                className={`border rounded-lg p-4 ${powerImproved ? "bg-green-500/5 border-green-500/20" : powerWorsened ? "bg-red-500/5 border-red-500/20" : "bg-muted/30 border-border/50"}`}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  {powerImproved ? (
-                    <TrendingUp className="h-3.5 w-3.5 text-green-500" />
-                  ) : powerWorsened ? (
-                    <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-                  ) : (
-                    <Minus className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
-                    Power Delta
-                  </p>
-                </div>
-                <p
-                  className={`text-xl font-bold font-mono break-all ${powerImproved ? "text-green-500" : powerWorsened ? "text-red-500" : "text-muted-foreground"}`}
-                >
-                  {powerDelta !== null && powerDelta > 0 ? "+" : ""}
-                  {powerDelta}{" "}
-                  <span className="text-sm font-normal text-muted-foreground">
-                    dBm
-                  </span>
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  {powerImproved
-                    ? "Signal recovered since last outage"
-                    : powerWorsened
-                      ? "Signal has worsened — monitor closely"
-                      : "No significant change"}
-                </p>
-              </div>
             </div>
 
-            {/* Signal bar comparison */}
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2">
-                  Offline Snapshot Level
+            {/* Current Reading */}
+            <div
+              className={`border rounded-lg p-3 ${isPoorSignal ? "bg-red-500/5 border-red-500/20" : isWarningSignal ? "bg-amber-500/5 border-amber-500/20" : "bg-green-500/5 border-green-500/20"}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div
+                  className={`h-2 w-2 rounded-full ${isPoorSignal ? "bg-red-500" : isWarningSignal ? "bg-amber-500" : "bg-green-500"}`}
+                />
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                  Current Reading
                 </p>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-red-500 rounded-full transition-all"
-                    style={{
-                      width: `${Math.max(0, Math.min(100, ((onu.lastOfflineRxPower! + 50) / 35) * 100))}%`,
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
-                  <span>−50 dBm (worst)</span>
-                  <span>−15 dBm (best)</span>
-                </div>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold mb-2">
-                  Current Signal Level
+              <p
+                className={`text-3xl font-bold tracking-tight font-mono break-all ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}
+              >
+                {onu.signalLevel} dBm
+                
+                
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Live RX power reading
+              </p>
+            </div>
+
+            {/* Delta */}
+            <div
+              className={`border rounded-lg p-3 ${powerImproved ? "bg-green-500/5 border-green-500/20" : powerWorsened ? "bg-red-500/5 border-red-500/20" : "bg-muted/30 border-border/50"}`}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                {powerImproved ? (
+                  <TrendingUp className="h-3.5 w-3.5 text-green-500" />
+                ) : powerWorsened ? (
+                  <TrendingDown className="h-3.5 w-3.5 text-red-500" />
+                ) : (
+                  <Minus className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">
+                  Power Delta
                 </p>
-                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all ${isPoorSignal ? "bg-red-500" : isWarningSignal ? "bg-amber-500" : "bg-green-500"}`}
-                    style={{
-                      width: `${Math.max(0, Math.min(100, ((onu.signalLevel + 50) / 35) * 100))}%`,
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between text-[9px] text-muted-foreground mt-1">
-                  <span>−50 dBm (worst)</span>
-                  <span>−15 dBm (best)</span>
-                </div>
               </div>
+              <p
+                className={`text-xl font-bold font-mono break-all ${powerImproved ? "text-green-500" : powerWorsened ? "text-red-500" : "text-muted-foreground"}`}
+              >
+                {powerDelta !== null && powerDelta > 0 ? "+" : ""}
+                {powerDelta}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  dBm
+                </span>
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {powerImproved
+                  ? "Signal recovered since last outage"
+                  : powerWorsened
+                    ? "Signal has worsened — monitor closely"
+                    : "No significant change"}
+              </p>
             </div>
           </CardContent>
         </Card>
-      )}
+      }
 
       {/* Row 4: Network Configuration (VLAN / PON / OLT Port) */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 sm:grid-cols-4">
@@ -1562,7 +1395,9 @@ export default function OnuDetail() {
                 PON Details
               </p>
             </div>
-            <p className="text-xl font-bold font-mono break-all">{onu.ponPort}</p>
+            <p className="text-xl font-bold font-mono break-all">
+              {onu.ponPort}
+            </p>
             <p className="text-[11px] text-muted-foreground mt-1">
               Slot {slotNumber} · PON {ponNumber} · ONU {onuIndex}
             </p>
@@ -1662,7 +1497,9 @@ export default function OnuDetail() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3">
               <div>
                 <p className="text-muted-foreground text-xs mb-1">VLAN ID</p>
-                <p className="font-mono break-all font-bold text-primary">{onu.vlanId}</p>
+                <p className="font-mono break-all font-bold text-primary">
+                  {onu.vlanId}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs mb-1">PON Port</p>
@@ -1670,7 +1507,9 @@ export default function OnuDetail() {
               </div>
               <div>
                 <p className="text-muted-foreground text-xs mb-1">OLT Port</p>
-                <p className="font-mono break-all text-xs font-medium">{onu.oltPort}</p>
+                <p className="font-mono break-all text-xs font-medium">
+                  {onu.oltPort}
+                </p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs mb-1">Port Type</p>
@@ -1707,7 +1546,7 @@ export default function OnuDetail() {
               </div>
               <div>
                 <p className="text-muted-foreground text-xs mb-1">Customer</p>
-                <p className="font-medium text-xs">{onu.customerName}</p>
+                <p className="font-medium text-xs">{displayDescription}</p>
               </div>
             </div>
           </CardContent>
@@ -1921,7 +1760,9 @@ export default function OnuDetail() {
                     <Icon className={`h-3.5 w-3.5 ${m.color}`} />
                   </div>
                   <div className="flex items-baseline gap-1">
-                    <span className={`text-xl font-bold font-mono break-all ${m.color}`}>
+                    <span
+                      className={`text-xl font-bold font-mono break-all ${m.color}`}
+                    >
                       {m.value}
                     </span>
                     {m.unit && (
