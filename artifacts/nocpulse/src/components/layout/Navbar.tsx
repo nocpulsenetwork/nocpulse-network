@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Bell, Sun, Moon, Menu, User, Settings as SettingsIcon, Crown, LogOut, ShieldCheck, Shield } from 'lucide-react';
+import { Search, Bell, Menu, User, Settings as SettingsIcon, Crown, LogOut, ShieldCheck, Shield } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useTheme } from '@/contexts/ThemeContext';
 import { Link, useLocation } from 'wouter';
 import {
   DropdownMenu,
@@ -21,7 +20,6 @@ interface NavbarProps {
 }
 
 export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
-  const { theme, setTheme } = useTheme();
   const { role, user } = useRole();
   const roleStyle = ROLE_LABELS[role];
   const RoleIcon = role === 'super_admin' ? Crown : role === 'admin' ? ShieldCheck : Shield;

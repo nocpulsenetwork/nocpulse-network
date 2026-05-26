@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Stethoscope, Signal, WifiOff, PackageX, AlertTriangle,
   CheckCircle2, XCircle, AlertCircle, Lightbulb, RefreshCw,

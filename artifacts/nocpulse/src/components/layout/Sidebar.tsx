@@ -130,6 +130,10 @@ export function Sidebar({
                 collapsed ? "justify-center px-0" : "gap-3",
               )}
               data-testid={`nav-${item.label.toLowerCase().replace(/ /g, "-")}`}
+              onClick={() => {
+                const main = document.getElementById('nocpulse-main');
+                if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
             >
               <item.icon
                 className={cn(
