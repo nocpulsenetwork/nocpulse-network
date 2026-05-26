@@ -190,7 +190,8 @@ function AlarmCard({
         alarm.verificationStatus === 'Resolved'
           ? 'border-green-500/20 border-l-green-500/50 bg-green-500/[0.03]'
           : `border-border/60 ${sty.border} ${sty.bg}`
-      }`}
+      } ${deviceHref ? 'cursor-pointer' : ''}`}
+      onClick={() => { if (deviceHref) navigate(deviceHref); }}
     >
       <div className="p-4 space-y-3">
         {/* Top row */}
@@ -199,16 +200,9 @@ function AlarmCard({
             <SevIcon className={`h-4 w-4 shrink-0 mt-0.5 ${sty.iconColor}`} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                {deviceHref ? (
-                  <button
-                    onClick={() => navigate(deviceHref)}
-                    className="font-semibold text-sm hover:text-primary hover:underline underline-offset-2 transition-colors cursor-pointer"
-                  >
-                    {alarm.deviceName}
-                  </button>
-                ) : (
-                  <span className="font-semibold text-sm">{alarm.deviceName}</span>
-                )}
+                <span className={`font-semibold text-sm ${deviceHref ? 'group-hover:text-primary' : ''}`}>
+                  {alarm.deviceName}
+                </span>
                 <SeverityBadge severity={alarm.severity} />
                 <VerifStatusBadge status={alarm.verificationStatus} secondsLeft={secondsLeft} />
                 {alarm.reopenCount > 0 && (
@@ -221,7 +215,7 @@ function AlarmCard({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
             {viewed && !isActionable && (
               <span className="px-2 py-0.5 rounded border bg-slate-500/10 text-slate-400 border-slate-500/20 text-[10px] font-bold uppercase tracking-wider">
                 Viewed
@@ -250,7 +244,7 @@ function AlarmCard({
 
         {/* Acknowledge inline form */}
         {acknowledging && (
-          <div className="ml-7 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-3">
+          <div className="ml-7 p-3 rounded-lg border border-primary/20 bg-primary/5 space-y-3" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2">
               <User className="h-3.5 w-3.5 text-primary" />
               <span className="text-xs font-semibold text-primary">Acknowledging alarm</span>

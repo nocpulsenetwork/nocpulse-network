@@ -33,6 +33,7 @@ interface SidebarProps {
   className?: string;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  onNavClick?: () => void;
 }
 
 type NavItem = {
@@ -52,6 +53,7 @@ export function Sidebar({
   className,
   collapsed = false,
   onToggleCollapse,
+  onNavClick,
 }: SidebarProps) {
   const [location] = useLocation();
   const { role, setRole, isSuperAdmin, isAdmin, isStaff, user } = useRole();
@@ -133,6 +135,7 @@ export function Sidebar({
               onClick={() => {
                 const main = document.getElementById('nocpulse-main');
                 if (main) main.scrollTo({ top: 0, behavior: 'smooth' });
+                onNavClick?.();
               }}
             >
               <item.icon
