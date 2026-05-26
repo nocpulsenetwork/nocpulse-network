@@ -373,7 +373,7 @@ export default function OnuDetail() {
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight font-mono break-all">
+            <h1 className="text-2xl font-bold tracking-tight font-mono break-all">
               {onu.onuNo}
             </h1>
             <StatusBadge
@@ -509,7 +509,7 @@ export default function OnuDetail() {
               </div>
             </div>
             <div
-              className={`text-3xl font-bold tracking-tight mt-1 ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}
+              className={`text-2xl font-bold tracking-tight mt-1 ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}
             >
               {onu.signalLevel}{" "}
               <span className="text-base font-normal text-muted-foreground">
@@ -545,7 +545,7 @@ export default function OnuDetail() {
               </div>
             </div>
             <div
-              className={`text-3xl font-bold tracking-tight mt-1 ${onu.txPower < -3 || onu.txPower > 5 ? "text-red-500" : onu.txPower < 0 ? "text-amber-500" : "text-green-500"}`}
+              className={`text-2xl font-bold tracking-tight mt-1 ${onu.txPower < -3 || onu.txPower > 5 ? "text-red-500" : onu.txPower < 0 ? "text-amber-500" : "text-green-500"}`}
             >
               {onu.txPower}{" "}
               <span className="text-base font-normal text-muted-foreground">
@@ -568,7 +568,7 @@ export default function OnuDetail() {
                 <Ruler className="h-4 w-4" />
               </div>
             </div>
-            <div className="text-3xl font-bold tracking-tight mt-1">
+            <div className="text-2xl font-bold tracking-tight mt-1">
               {onu.distance.replace(" km", "")}{" "}
               <span className="text-base font-normal text-muted-foreground">
                 km
@@ -665,7 +665,7 @@ export default function OnuDetail() {
                 <Thermometer className="h-4 w-4" />
               </div>
             </div>
-            <div className="text-3xl font-bold mt-2 text-muted-foreground/50">
+            <div className="text-2xl font-bold mt-2 text-muted-foreground/50">
               —{" "}
               <span className="text-base font-normal text-muted-foreground">
                 °C
@@ -1263,7 +1263,7 @@ export default function OnuDetail() {
                 </p>
               </div>
               <p
-                className={`text-3xl font-bold tracking-tight font-mono break-all ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}
+                className={`text-2xl font-bold tracking-tight font-mono break-all ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}
               >
                 {onu.signalLevel} dBm
               </p>
