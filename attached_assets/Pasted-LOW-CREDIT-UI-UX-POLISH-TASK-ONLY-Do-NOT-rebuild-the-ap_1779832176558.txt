@@ -1,0 +1,63 @@
+LOW-CREDIT UI/UX POLISH TASK ONLY.
+
+Do NOT rebuild the app.
+Do NOT redesign pages.
+Do NOT touch backend/package.json/routes unless required.
+
+Only improve existing behavior and UI polish.
+
+TASKS:
+
+1. Global scroll-to-top behavior:
+- When user clicks current page name/menu again from sidebar or header, page should instantly scroll to top.
+- Apply to Dashboard, ONU Management, OLT pages, Alarm pages, Settings, ONU Details, OLT Details.
+- Use lightweight smooth scrolling.
+
+2. Move dark/light mode control:
+- Remove main-board theme toggle if duplicated.
+- Theme switching should be controlled from Settings page.
+- Persist selected theme in localStorage.
+- Existing theme state must still work globally.
+
+3. ONU Management row hover polish:
+- Add clear hover effect on ONU rows/cards.
+- Use subtle premium glow/border/background so user understands which row is focused.
+- Must work for mouse hover and touch feel.
+- No heavy glassmorphism or expensive blur.
+
+4. ONU pagination:
+- Default page size = 100 ONU per page.
+- Add pagination:
+  1,2,3,4...
+- Add page-size selector:
+  25 / 50 / 100 / 200 / 300 / 500 / 1000
+- Keep default = 100.
+- Use lightweight frontend-only pagination with existing mock data.
+
+5. ONU Name column width:
+- Slightly reduce ONU Name column width.
+- Improve table balance and spacing.
+
+6. ONU Action button visibility:
+- Make Action button visually clearer.
+- Add subtle highlight/background/border/icon visibility.
+- Ensure user understands it is clickable.
+
+7. Smart Diagnostic sync:
+- “Run Sync” button must work.
+- Clicking Run Sync should simulate lightweight sync action using existing mock data.
+- Add loading state:
+  Syncing...
+  Completed
+- Auto sync once when user logs in/open dashboard.
+- No real backend calls.
+- No heavy polling.
+
+RULES:
+- Keep CPU low.
+- No heavy animations.
+- No large refactor.
+- No new dependencies.
+- Fix TypeScript warnings/errors.
+- App must run without red overlay.
+- Preserve existing design style.
