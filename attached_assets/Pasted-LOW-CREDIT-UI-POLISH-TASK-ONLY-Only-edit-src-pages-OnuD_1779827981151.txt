@@ -1,0 +1,97 @@
+LOW-CREDIT UI POLISH TASK ONLY.
+
+Only edit:
+src/pages/OnuDetail.tsx
+
+Do NOT rebuild the page.
+Do NOT edit Dashboard, OLT pages, ONU List, routes, backend, package.json, charts library, or mock database.
+Keep all existing working logic.
+
+Goal:
+Finish premium ONU Details polishing using the current layout.
+
+1. Move “Network Quality Overview” ABOVE:
+- Activity Timeline
+- Last Disconnect Details
+
+Final order:
+- Realtime Internet Usage
+- Current Optical Reading + Last Offline Snapshot
+- Network Quality Overview
+- Activity Timeline + Last Disconnect Details
+
+2. Network Quality Overview must include:
+- Ping Report
+- Packet Loss
+- Router Overload
+- Fiber Attenuation
+- Signal Quality
+- Stability
+
+Use compact premium colored status pills:
+Green = Excellent
+Yellow/Amber = Warning
+Red = Critical
+Blue/Cyan = Info
+
+3. Router Overload logic:
+- If ONU is online:
+show values like:
+Low / Medium / High
+- If ONU is offline:
+show:
+Offline
+Router Unreachable
+No Response
+
+Use red badge when offline.
+
+4. Last Disconnect Details card:
+Add AI Generated Solution section.
+
+Example:
+AI Suggested Solution:
+- Check fiber connector cleanliness
+- Verify ONU optical patch cord
+- Check splitter power level
+- Restart ONU if signal restored
+
+Keep it compact and premium.
+
+5. Last Offline Snapshot power colors:
+Current issue:
+Power text not visible in light/day mode.
+
+Fix:
+- Good power => GREEN
+- Medium/warning => YELLOW
+- Bad/critical => RED
+
+Apply both:
+- text color
+- small status badge
+
+Must work in both dark and light mode.
+
+6. Keep colors visible:
+Do not use pale low-contrast colors.
+Ensure readability in:
+- dark mode
+- light mode
+
+7. Important:
+- no extra charts
+- no heavy animations
+- no glassmorphism
+- no giant sections
+- no duplicate cards
+- no unnecessary refactor
+
+8. Keep CPU low:
+- static/mock values only
+- no polling loop
+- no interval spam
+- no complex effects
+
+9. Fix all TypeScript/JSX issues.
+App must run without red overlay.

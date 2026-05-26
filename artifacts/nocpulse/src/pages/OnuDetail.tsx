@@ -148,6 +148,43 @@ export default function OnuDetail() {
             ? "Signal recovered after reconnect. No action required."
             : "ONU offline. Investigate fiber path and customer premises.";
 
+  const aiSuggestions =
+    onu.lastLogoutReason === "Power Loss"
+      ? [
+          "Verify UPS battery health at customer premises",
+          "Check mains circuit breaker status at CPE location",
+          "Confirm ONU power adapter output is within spec",
+          "Schedule field visit if power loss recurs",
+        ]
+      : onu.lastLogoutReason === "Signal Lost"
+        ? [
+            "Inspect fiber connector cleanliness at ONU port",
+            "Verify ONU optical patch cord condition and bend radius",
+            "Check splitter port power level distribution",
+            "Restart ONU if signal has since recovered",
+          ]
+        : onu.lastLogoutReason === "Admin Reboot"
+          ? [
+              "Confirm ONU returned online within expected timeframe",
+              "Check firmware update logs post-reboot",
+              "Verify PPPoE sessions were restored correctly",
+              "Flag for monitoring if unplanned reboots recur",
+            ]
+          : [
+              "Check fiber connector at ONU port and splitter",
+              "Verify RX power is within acceptable range (−8 to −27 dBm)",
+              "Inspect for physical damage along the cable run",
+              "Escalate to field team if issue persists beyond 1 hour",
+            ];
+
+  const routerOverload = !isUp
+    ? { display: "N/A", pill: "Router Unreachable", status: "bad" as const }
+    : isPoorSignal
+      ? { display: "High", pill: "High", status: "bad" as const }
+      : onu.signalStability === "Unstable" || isWarningSignal
+        ? { display: "Medium", pill: "Medium", status: "warn" as const }
+        : { display: "Low", pill: "Low", status: "good" as const };
+
   const filledBars =
     onu.signalLevel > -20 ? 5
       : onu.signalLevel > -25 ? 4
@@ -568,13 +605,18 @@ export default function OnuDetail() {
           <CardContent className="px-4 pb-4">
             {onu.lastOfflineRxPower !== null ? (
               <>
-                <div className="flex items-end gap-4 mb-3">
+                <div className="flex items-end gap-3 mb-3 flex-wrap">
                   <div>
-                    <div className="text-3xl font-bold text-slate-300">{onu.lastOfflineRxPower}</div>
+                    <div className={`text-3xl font-bold ${onu.lastOfflineRxPower > -25 ? "text-green-600 dark:text-green-400" : onu.lastOfflineRxPower > -28 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400"}`}>
+                      {onu.lastOfflineRxPower}
+                    </div>
                     <div className="text-xs text-muted-foreground">dBm at last offline</div>
                   </div>
+                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border mb-1 ${onu.lastOfflineRxPower > -25 ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/25" : onu.lastOfflineRxPower > -28 ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/25" : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/25"}`}>
+                    {onu.lastOfflineRxPower > -25 ? "Good" : onu.lastOfflineRxPower > -28 ? "Warning" : "Critical"}
+                  </span>
                   {powerDelta !== null && (
-                    <div className={`text-sm font-semibold mb-1 ${powerImproved ? "text-green-500" : "text-red-400"}`}>
+                    <div className={`text-sm font-semibold mb-1 ${powerImproved ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
                       {powerImproved ? "+" : ""}{powerDelta} dBm vs now
                     </div>
                   )}
@@ -601,6 +643,77 @@ export default function OnuDetail() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Network Quality Overview ── */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-primary" /> Network Quality Overview
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4">
+          <div className="space-y-1">
+            {([
+              {
+                label: "Ping Report",
+                display: pingMs !== null ? `${pingMs} ms` : "—",
+                pill: pingMs === null ? "Offline" : pingMs < 10 ? "Excellent" : pingMs < 20 ? "Acceptable" : "High Latency",
+                status: pingMs === null ? "neutral" : pingMs < 10 ? "good" : pingMs < 20 ? "warn" : "bad",
+              },
+              {
+                label: "Packet Loss",
+                display: lossRate !== null ? `${lossRate}%` : "—",
+                pill: lossRate === null ? "Offline" : lossRate < 1 ? "Negligible" : lossRate < 5 ? "Moderate" : "High Loss",
+                status: lossRate === null ? "neutral" : lossRate < 1 ? "good" : lossRate < 5 ? "warn" : "bad",
+              },
+              {
+                label: "Router Overload",
+                display: routerOverload.display,
+                pill: routerOverload.pill,
+                status: routerOverload.status,
+              },
+              {
+                label: "Fiber Attenuation",
+                display: isPoorSignal ? "High" : isWarningSignal ? "Moderate" : "Normal",
+                pill: isPoorSignal ? "Critical" : isWarningSignal ? "Monitor" : "Normal",
+                status: isPoorSignal ? "bad" : isWarningSignal ? "warn" : "good",
+              },
+              {
+                label: "Signal Quality",
+                display: `${onu.signalLevel} dBm`,
+                pill: filledBars >= 4 ? "Excellent" : filledBars === 3 ? "Good" : filledBars === 2 ? "Fair" : "Poor",
+                status: (filledBars >= 4 ? "good" : filledBars === 3 ? "warn" : "bad") as "good" | "warn" | "bad" | "neutral",
+              },
+              {
+                label: "Stability",
+                display: onu.signalStability,
+                pill: onu.signalStability === "Stable" ? "Stable" : onu.signalStability === "Offline" ? "Offline" : onu.signalStability === "High Loss" ? "Critical" : "Warning",
+                status: (onu.signalStability === "Stable" ? "good" : onu.signalStability === "Offline" || onu.signalStability === "High Loss" ? "bad" : "warn") as "good" | "warn" | "bad" | "neutral",
+              },
+            ]).map(({ label, display, pill, status }) => {
+              const pillCls = {
+                good:    "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
+                warn:    "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+                bad:     "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
+                neutral: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/20",
+              }[status];
+              const dotCls = { good: "bg-green-500", warn: "bg-amber-500", bad: "bg-red-500", neutral: "bg-slate-400" }[status];
+              return (
+                <div key={label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotCls}`} />
+                    <span className="text-xs text-muted-foreground">{label}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-xs font-mono font-medium text-foreground">{display}</span>
+                    <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${pillCls}`}>{pill}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* ── Activity Timeline + Last Disconnect Details ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -650,13 +763,13 @@ export default function OnuDetail() {
             {onu.lastLogoutTime !== "N/A" ? (
               <div className="space-y-3">
                 {/* Status badge */}
-                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${disconnectResolved ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"}`}>
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${disconnectResolved ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/25" : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/25"}`}>
                   <span className={`h-1.5 w-1.5 rounded-full ${disconnectResolved ? "bg-green-500" : "bg-red-500"}`} />
                   {disconnectResolved ? "Resolved" : "Active Fault"}
                 </div>
 
                 {/* Key fields */}
-                <div className="space-y-2 text-xs">
+                <div className="space-y-1.5 text-xs">
                   {([
                     { label: "Date / Time", value: onu.lastLogoutTime, mono: true },
                     { label: "Duration", value: disconnectDuration ?? "—", mono: true },
@@ -667,16 +780,32 @@ export default function OnuDetail() {
                   ] as { label: string; value: string; mono?: boolean }[]).map(({ label, value, mono }) => (
                     <div key={label} className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground shrink-0">{label}</span>
-                      <span className={`font-medium text-right ${mono ? "font-mono" : ""} ${label === "Power Delta" ? (powerImproved ? "text-green-500" : powerWorsened ? "text-red-400" : "text-muted-foreground") : ""}`}>
+                      <span className={`font-medium text-right ${mono ? "font-mono" : ""} ${label === "Power Delta" ? (powerImproved ? "text-green-600 dark:text-green-400" : powerWorsened ? "text-red-600 dark:text-red-400" : "text-muted-foreground") : ""}`}>
                         {value}
                       </span>
                     </div>
                   ))}
                 </div>
 
-                {/* Note */}
-                <div className={`rounded-lg border p-2.5 text-[11px] leading-relaxed ${disconnectResolved ? "bg-green-500/5 border-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/5 border-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
+                {/* Disconnect note */}
+                <div className={`rounded-lg border p-2.5 text-[11px] leading-relaxed ${disconnectResolved ? "bg-green-500/8 border-green-500/20 text-green-800 dark:text-green-300" : "bg-amber-500/8 border-amber-500/20 text-amber-800 dark:text-amber-300"}`}>
                   {disconnectNote}
+                </div>
+
+                {/* AI Suggested Solution */}
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Activity className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className="text-[11px] font-semibold text-primary">AI Suggested Solution</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {aiSuggestions.map((s, i) => (
+                      <li key={i} className="text-[11px] text-foreground/75 flex items-start gap-1.5">
+                        <span className="text-primary font-bold mt-px shrink-0">›</span>
+                        {s}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               </div>
             ) : (
@@ -689,81 +818,6 @@ export default function OnuDetail() {
           </CardContent>
         </Card>
       </div>
-
-      {/* ── Network Quality Overview ── */}
-      <Card>
-        <CardHeader className="pb-2 pt-4 px-4">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Gauge className="h-4 w-4 text-primary" /> Network Quality Overview
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="px-4 pb-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {([
-              {
-                label: "Ping Latency",
-                value: pingMs !== null ? `${pingMs} ms` : "—",
-                sub: pingMs === null ? "Offline" : pingMs < 10 ? "Excellent" : pingMs < 20 ? "Acceptable" : "High",
-                status: pingMs === null ? "neutral" : pingMs < 10 ? "good" : pingMs < 20 ? "warn" : "bad",
-                Icon: Timer,
-              },
-              {
-                label: "Packet Loss",
-                value: lossRate !== null ? `${lossRate}%` : "—",
-                sub: lossRate === null ? "Offline" : lossRate < 1 ? "Negligible" : lossRate < 5 ? "Moderate" : "High",
-                status: lossRate === null ? "neutral" : lossRate < 1 ? "good" : lossRate < 5 ? "warn" : "bad",
-                Icon: TrendingDown,
-              },
-              {
-                label: "Router Overload",
-                value: onu.signalStability === "Unstable" ? "Possible" : "None",
-                sub: onu.signalStability === "Unstable" ? "Check CPU" : "Normal",
-                status: onu.signalStability === "Unstable" ? "warn" : "good",
-                Icon: Activity,
-              },
-              {
-                label: "Fiber Attenuation",
-                value: isPoorSignal ? "High" : isWarningSignal ? "Moderate" : "Normal",
-                sub: isPoorSignal ? "Inspect fiber" : isWarningSignal ? "Monitor" : "Within range",
-                status: isPoorSignal ? "bad" : isWarningSignal ? "warn" : "good",
-                Icon: Signal,
-              },
-              {
-                label: "Signal Quality",
-                value: filledBars >= 4 ? "Excellent" : filledBars === 3 ? "Good" : filledBars === 2 ? "Fair" : "Poor",
-                sub: `${onu.signalLevel} dBm`,
-                status: filledBars >= 4 ? "good" : filledBars === 3 ? "warn" : "bad",
-                Icon: Radio,
-              },
-              {
-                label: "Stability",
-                value: onu.signalStability,
-                sub: stabilityConfig.desc,
-                status: onu.signalStability === "Stable" ? "good" : onu.signalStability === "Offline" || onu.signalStability === "High Loss" ? "bad" : "warn",
-                Icon: Gauge,
-              },
-            ] as { label: string; value: string; sub: string; status: "good" | "warn" | "bad" | "neutral"; Icon: React.ElementType }[]).map(({ label, value, sub, status, Icon }) => {
-              const cls = {
-                good: { dot: "bg-green-500", val: "text-green-600 dark:text-green-400", bg: "bg-green-500/10 dark:bg-green-500/10", border: "border-green-500/25" },
-                warn: { dot: "bg-amber-500", val: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10 dark:bg-amber-500/10", border: "border-amber-500/25" },
-                bad:  { dot: "bg-red-500",   val: "text-red-600 dark:text-red-400",     bg: "bg-red-500/10 dark:bg-red-500/10",     border: "border-red-500/25"   },
-                neutral: { dot: "bg-slate-400", val: "text-muted-foreground", bg: "bg-muted/30", border: "border-border/40" },
-              }[status];
-              return (
-                <div key={label} className={`rounded-xl border p-3 ${cls.bg} ${cls.border}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <Icon className={`h-3.5 w-3.5 ${cls.val}`} />
-                    <span className={`h-2 w-2 rounded-full ${cls.dot}`} />
-                  </div>
-                  <div className={`text-sm font-bold leading-tight ${cls.val}`}>{value}</div>
-                  <div className="text-[10px] font-medium text-foreground/70 mt-0.5">{label}</div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{sub}</div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
 
       {/* ── Confirmation Modals ── */}
       <ConfirmModal
