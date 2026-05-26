@@ -496,7 +496,7 @@ export default function OltDetail() {
             </div>
 
             {/* PON table */}
-            <div className={olt.ponPortCount > 8 ? 'max-h-64 overflow-y-auto' : ''}>
+            <div className={`overflow-x-auto${olt.ponPortCount > 8 ? ' max-h-64 overflow-y-auto' : ''}`}>
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/20 hover:bg-muted/20 border-b border-border/50">

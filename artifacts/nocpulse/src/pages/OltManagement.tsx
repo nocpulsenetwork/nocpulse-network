@@ -246,19 +246,19 @@ export default function OltManagement() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 bg-card/60 backdrop-blur-sm p-4 rounded-xl border border-border/60">
-        <div className="relative w-full max-w-[240px]">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-card/60 backdrop-blur-sm p-3 sm:p-4 rounded-xl border border-border/60">
+        <div className="relative flex-1 min-w-[140px] sm:flex-none sm:w-full sm:max-w-[240px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search OLTs..."
-            className="pl-8 bg-background/50"
+            className="pl-8 bg-background/50 w-full"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[140px] bg-background/50">
+          <SelectTrigger className="w-full sm:w-[130px] bg-background/50 min-w-[100px] flex-1 sm:flex-none">
             <SelectValue placeholder="All Status" />
           </SelectTrigger>
           <SelectContent>
@@ -270,7 +270,7 @@ export default function OltManagement() {
         </Select>
 
         <Select value={brandFilter} onValueChange={setBrandFilter}>
-          <SelectTrigger className="w-[140px] bg-background/50">
+          <SelectTrigger className="w-full sm:w-[130px] bg-background/50 min-w-[100px] flex-1 sm:flex-none">
             <SelectValue placeholder="All Brands" />
           </SelectTrigger>
           <SelectContent>
@@ -284,7 +284,7 @@ export default function OltManagement() {
         </Select>
 
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[140px] bg-background/50">
+          <SelectTrigger className="w-full sm:w-[120px] bg-background/50 min-w-[100px] flex-1 sm:flex-none">
             <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent>
@@ -294,7 +294,7 @@ export default function OltManagement() {
           </SelectContent>
         </Select>
 
-        <div className="flex items-center ml-auto gap-1 border border-border/60 p-1 rounded-md bg-background/50">
+        <div className="flex items-center ml-auto gap-1 border border-border/60 p-1 rounded-md bg-background/50 shrink-0">
           <Button
             variant={view === "card" ? "secondary" : "ghost"}
             size="sm"
@@ -444,8 +444,8 @@ export default function OltManagement() {
           })}
         </div>
       ) : (
-        <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg">
-          <Table>
+        <div className="rounded-xl border border-border/60 overflow-hidden backdrop-blur-sm bg-card/80 shadow-lg overflow-x-auto">
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow className="bg-muted/30 hover:bg-muted/30 border-b border-border/60">
                 <TableHead className="text-[11px] uppercase tracking-widest font-semibold text-muted-foreground">

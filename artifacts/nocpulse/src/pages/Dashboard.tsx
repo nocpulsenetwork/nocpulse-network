@@ -99,8 +99,8 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <Card className="col-span-4 shadow-sm border-border/50 flex flex-col">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-7">
+        <Card className="lg:col-span-4 shadow-sm border-border/50 flex flex-col">
           <CardHeader>
             <CardTitle>OLT Status Distribution</CardTitle>
             <CardDescription>Current operational state of all OLT devices</CardDescription>
@@ -126,7 +126,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="col-span-3 flex flex-col shadow-sm border-border/50">
+        <Card className="lg:col-span-3 flex flex-col shadow-sm border-border/50">
           <CardHeader className="pb-3 flex flex-row items-center justify-between border-b shrink-0">
             <div>
               <CardTitle>Recent Alarms</CardTitle>

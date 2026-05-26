@@ -57,17 +57,17 @@ export function MetricCard({
 
   const cardContent = (
     <Card className={`overflow-hidden transition-all border-l-4 ${styles.border} ${alert ? styles.alertClasses : ''} ${href ? 'cursor-pointer hover:brightness-110 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] duration-200' : ''}`}>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between space-y-0 pb-2">
-          <p className="text-sm font-medium text-muted-foreground tracking-tight">{title}</p>
-          <div className={`p-2 rounded-lg ${styles.bg} ${styles.text} ${pulse ? 'animate-pulse' : ''}`}>
-            <Icon className="w-5 h-5" />
+      <CardContent className="p-3 sm:p-4 md:p-5">
+        <div className="flex items-center justify-between space-y-0 pb-1.5 sm:pb-2">
+          <p className="text-xs sm:text-sm font-medium text-muted-foreground tracking-tight leading-tight">{title}</p>
+          <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${styles.bg} ${styles.text} ${pulse ? 'animate-pulse' : ''}`}>
+            <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
-        <div className="flex flex-col mt-2">
-          <div className="text-3xl font-bold tracking-tight">{value}</div>
+        <div className="flex flex-col mt-1 sm:mt-2">
+          <div className="text-2xl sm:text-3xl font-bold tracking-tight">{value}</div>
           {description && (
-            <p className="text-xs text-muted-foreground mt-1.5 flex items-center">
+            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-1.5 flex items-center leading-tight">
               {description}
             </p>
           )}

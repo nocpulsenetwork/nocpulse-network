@@ -100,8 +100,50 @@ function SubscriberRow({ sub, expanded, onToggle }: { sub: Subscriber; expanded:
 
   return (
     <div className={`rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm overflow-hidden transition-all ${sub.status === 'Expired' || sub.status === 'Suspended' ? 'opacity-60' : ''}`}>
-      {/* Row summary */}
-      <div className="grid grid-cols-12 gap-3 items-center px-4 py-3">
+      {/* ── Mobile card layout (hidden on sm+) ── */}
+      <div className="sm:hidden px-3 py-3 space-y-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold truncate">{sub.name}</p>
+            <p className="text-[10px] text-muted-foreground truncate">{sub.email}</p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-bold ${status.cls}`}>
+              <StatusIcon className="h-2.5 w-2.5" /> {sub.status}
+            </span>
+            <button
+              onClick={onToggle}
+              className="h-7 w-7 rounded-lg border border-border/60 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+            >
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`inline-flex items-center px-2 py-0.5 rounded border text-[10px] font-bold uppercase tracking-wider ${plan.cls}`}>
+            {sub.plan} · {plan.price}
+          </span>
+          <span className="text-[10px] text-muted-foreground">{sub.region}</span>
+          <span className="text-[10px] font-mono text-muted-foreground ml-auto">Exp: {sub.expiry}</span>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1">
+              <Server className="h-2.5 w-2.5" /> OLT
+            </p>
+            <UsageBar used={sub.oltUsed} limit={sub.oltLimit} color="bg-primary" />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1">
+              <Cpu className="h-2.5 w-2.5" /> ONU
+            </p>
+            <UsageBar used={sub.onuUsed} limit={sub.onuLimit} color="bg-cyan-500" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Desktop grid layout (hidden on mobile) ── */}
+      <div className="hidden sm:grid grid-cols-12 gap-3 items-center px-4 py-3">
         {/* Name + Email */}
         <div className="col-span-3 min-w-0">
           <p className="text-sm font-semibold truncate">{sub.name}</p>
