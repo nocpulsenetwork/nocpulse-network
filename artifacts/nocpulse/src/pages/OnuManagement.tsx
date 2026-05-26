@@ -140,11 +140,10 @@ export default function OnuManagement() {
   const [ponFilter,       setPonFilter]       = useState<string>(initialPon ?? "All PONs");
   const [stabilityFilter, setStabilityFilter] = useState<string>("All");
   const [page,            setPage]            = useState(1);
+  const [pageSize,        setPageSize]        = useState(100);
   const [editingOnu,      setEditingOnu]      = useState<string | null>(null);
   const [editDesc,        setEditDesc]        = useState("");
   const [confirmAction,   setConfirmAction]   = useState<ConfirmAction>(null);
-
-  const ITEMS_PER_PAGE = 10;
 
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -200,8 +199,8 @@ export default function OnuManagement() {
     setPage(1);
   };
 
-  const totalPages   = Math.ceil(filteredOnus.length / ITEMS_PER_PAGE);
-  const paginatedOnus = filteredOnus.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);
+  const totalPages   = Math.ceil(filteredOnus.length / pageSize);
+  const paginatedOnus = filteredOnus.slice((page - 1) * pageSize, page * pageSize);
   const activeOlt    = olts.find((o) => o.id === oltFilter);
 
   const availablePonPorts = useMemo(() => {
@@ -542,7 +541,7 @@ export default function OnuManagement() {
                   return (
                     <TableRow
                       key={onu.id}
-                      className="border-b border-border/30 cursor-pointer select-none group transition-colors duration-100 hover:bg-primary/[0.04] dark:hover:bg-primary/[0.06]"
+                      className="border-b border-border/30 cursor-pointer select-none group transition-all duration-100 hover:bg-primary/[0.07] dark:hover:bg-primary/[0.09] border-l-2 border-l-transparent hover:border-l-primary/50"
                       onClick={(e) => {
                         if (!(e.target as HTMLElement).closest(".action-col")) {
                           setLocation(`/onus/${onu.id}`);
@@ -566,7 +565,7 @@ export default function OnuManagement() {
                       </TableCell>
 
                       {/* Customer */}
-                      <TableCell className="px-4 py-3.5 max-w-[160px]">
+                      <TableCell className="px-4 py-3.5 max-w-[120px]">
                         <div className="text-sm font-medium truncate" title={onu.description}>
                           {onu.description}
                         </div>
@@ -646,8 +645,8 @@ export default function OnuManagement() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
-                              variant="ghost"
-                              className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity data-[state=open]:opacity-100"
+                              variant="outline"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground border-border/50 hover:border-border bg-transparent hover:bg-muted/60 transition-colors data-[state=open]:bg-muted/60 data-[state=open]:border-border"
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
@@ -706,11 +705,23 @@ export default function OnuManagement() {
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {totalPages >= 1 && (
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <p className="text-xs text-muted-foreground">
-            Showing <span className="font-medium text-foreground">{(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, filteredOnus.length)}</span> of <span className="font-medium text-foreground">{filteredOnus.length}</span> ONUs
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">
+              Showing <span className="font-medium text-foreground">{filteredOnus.length === 0 ? 0 : (page - 1) * pageSize + 1}–{Math.min(page * pageSize, filteredOnus.length)}</span> of <span className="font-medium text-foreground">{filteredOnus.length}</span> ONUs
+            </p>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+              <SelectTrigger className="h-7 w-[90px] text-xs bg-background border-border/60">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[25, 50, 100, 200, 300, 500, 1000].map(n => (
+                  <SelectItem key={n} value={String(n)} className="text-xs">{n} / page</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"

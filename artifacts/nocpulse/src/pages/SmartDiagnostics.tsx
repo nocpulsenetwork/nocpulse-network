@@ -334,8 +334,33 @@ function DiagnosticCard({ card }: { card: DiagCard }) {
   );
 }
 
+function fmtTime(d: Date) {
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
 export default function SmartDiagnostics() {
-  const [lastScan] = useState('10:24:11 AM');
+  const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'done'>('idle');
+  const [lastScan, setLastScan] = useState('');
+  const hasAutoSynced = useRef(false);
+
+  const runSync = () => {
+    if (syncState === 'syncing') return;
+    setSyncState('syncing');
+    setTimeout(() => {
+      setSyncState('done');
+      setLastScan(fmtTime(new Date()));
+      setTimeout(() => setSyncState('idle'), 2500);
+    }, 1800);
+  };
+
+  useEffect(() => {
+    if (!hasAutoSynced.current) {
+      hasAutoSynced.current = true;
+      runSync();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const critical = DIAG_CARDS.filter(c => c.severity === 'Critical');
   const major = DIAG_CARDS.filter(c => c.severity === 'Major');
   const minor = DIAG_CARDS.filter(c => c.severity === 'Minor');
@@ -352,10 +377,20 @@ export default function SmartDiagnostics() {
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <Clock className="h-3 w-3" />
-            Last scan: {lastScan}
+            {syncState === 'syncing'
+              ? 'Syncing…'
+              : lastScan
+                ? `Last scan: ${lastScan}`
+                : 'Not yet scanned'}
           </div>
-          <Button size="sm" className="gap-1.5 text-xs">
-            <RefreshCw className="h-3.5 w-3.5" /> Run Scan
+          <Button
+            size="sm"
+            className="gap-1.5 text-xs"
+            onClick={runSync}
+            disabled={syncState === 'syncing'}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncState === 'syncing' ? 'animate-spin' : ''}`} />
+            {syncState === 'syncing' ? 'Syncing…' : syncState === 'done' ? 'Completed' : 'Run Scan'}
           </Button>
         </div>
       </div>

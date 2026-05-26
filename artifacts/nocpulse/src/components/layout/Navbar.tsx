@@ -188,38 +188,6 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
           )}
         </div>
         
-        <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="relative text-muted-foreground hover:text-foreground group border border-border/60 rounded-lg px-3 py-1.5 flex items-center gap-1.5 text-xs font-medium hidden sm:flex shrink-0"
-          title="Toggle theme"
-        >
-          {theme === 'dark' ? (
-            <>
-              <Sun className="h-4 w-4 transition-transform duration-300 group-hover:rotate-180" />
-              <span>Light</span>
-            </>
-          ) : (
-            <>
-              <Moon className="h-4 w-4 transition-transform duration-300 group-hover:rotate-180" />
-              <span>Dark</span>
-            </>
-          )}
-        </button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="relative text-muted-foreground hover:text-foreground group sm:hidden shrink-0"
-          title="Toggle theme"
-        >
-          {theme === 'dark' ? (
-            <Sun className="h-5 w-5 transition-transform duration-300 group-hover:rotate-180" />
-          ) : (
-            <Moon className="h-5 w-5 transition-transform duration-300 group-hover:rotate-180" />
-          )}
-        </Button>
-
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground shrink-0">
