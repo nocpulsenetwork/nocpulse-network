@@ -1249,63 +1249,6 @@ export default function OnuDetail() {
                 </div>
               </div>
             </div>
-            <div className="bg-muted/30 border border-border/50 rounded-lg p-4">
-              <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">
-                Network Quality Analytics
-              </p>
-
-              <div className="space-y-2 mt-2 text-[11px]">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">
-                    Jitter
-                  </span>
-
-                  <span className="text-[10px] font-medium text-cyan-300">
-                    1.8 ms
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">
-                    DNS Response
-                  </span>
-
-                  <span className="text-[10px] font-medium text-green-400">
-                    12 ms
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">
-                    Packet Retry
-                  </span>
-
-                  <span className="text-[10px] font-medium text-amber-300">
-                    0.3%
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">
-                    Fiber CRC Errors
-                  </span>
-
-                  <span className="text-[10px] font-medium text-red-400">
-                    0
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground">
-                    Session Quality
-                  </span>
-
-                  <span className="px-2 py-1 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 text-[10px]">
-                    Excellent
-                  </span>
-                </div>
-              </div>
-            </div>
 
             {/* Current Reading */}
             <div
@@ -1323,8 +1266,6 @@ export default function OnuDetail() {
                 className={`text-3xl font-bold tracking-tight font-mono break-all ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}
               >
                 {onu.signalLevel} dBm
-                
-                
               </p>
               <p className="text-[11px] text-muted-foreground mt-1">
                 Live RX power reading
