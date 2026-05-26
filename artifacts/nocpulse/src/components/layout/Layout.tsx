@@ -51,7 +51,7 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen w-full bg-background">
+      <div className="flex min-h-screen w-full bg-background overflow-x-hidden">
         <Sidebar 
           className="hidden sm:flex fixed top-0 left-0 bottom-0 z-40 transition-all duration-300 ease-in-out" 
           collapsed={collapsed} 
@@ -66,14 +66,14 @@ export function Layout({ children }: LayoutProps) {
         </Sheet>
 
         <div 
-          className={`flex flex-1 flex-col w-full min-h-screen transition-all duration-300 ease-in-out ${
+          className={`flex flex-1 flex-col min-w-0 min-h-screen overflow-x-hidden transition-all duration-300 ease-in-out ${
             collapsed ? 'sm:ml-16' : 'sm:ml-64'
           }`}
         >
-          <div className="sticky top-0 z-30 flex-none h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col justify-center">
+          <div className="sticky top-0 z-30 flex-none h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col justify-center overflow-hidden">
              <Navbar onMenuClick={() => setMobileMenuOpen(true)} title={getTitle()} />
           </div>
-          <main id="nocpulse-main" className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8 w-full max-w-full">
+          <main id="nocpulse-main" className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-8 w-full max-w-full">
             <div className="mx-auto w-full max-w-7xl">
               {children}
             </div>

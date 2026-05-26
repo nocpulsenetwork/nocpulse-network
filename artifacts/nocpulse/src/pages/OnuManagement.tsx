@@ -541,7 +541,7 @@ export default function OnuManagement() {
                   return (
                     <TableRow
                       key={onu.id}
-                      className="border-b border-border/30 cursor-pointer select-none group transition-all duration-100 hover:bg-primary/[0.07] dark:hover:bg-primary/[0.09] border-l-2 border-l-transparent hover:border-l-primary/50"
+                      className="border-b border-border/30 cursor-pointer select-none group transition-all duration-100 hover:bg-muted/50 dark:hover:bg-muted/40 border-l-2 border-l-transparent hover:border-l-primary/60"
                       onClick={(e) => {
                         if (!(e.target as HTMLElement).closest(".action-col")) {
                           setLocation(`/onus/${onu.id}`);
@@ -566,10 +566,10 @@ export default function OnuManagement() {
 
                       {/* Customer */}
                       <TableCell className="px-4 py-3.5 max-w-[120px]">
-                        <div className="text-sm font-medium truncate" title={onu.description}>
+                        <div className="text-sm font-normal truncate" title={onu.description}>
                           {onu.description}
                         </div>
-                        <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        <div className="text-[11px] text-muted-foreground/70 truncate mt-0.5">
                           {onu.customerName}
                         </div>
                       </TableCell>
@@ -646,7 +646,7 @@ export default function OnuManagement() {
                           <DropdownMenuTrigger asChild>
                             <Button
                               variant="outline"
-                              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground border-border/50 hover:border-border bg-transparent hover:bg-muted/60 transition-colors data-[state=open]:bg-muted/60 data-[state=open]:border-border"
+                              className="h-8 w-8 p-0 text-foreground/50 hover:text-foreground border-border/60 hover:border-border bg-transparent hover:bg-muted/60 transition-colors data-[state=open]:bg-muted/60 data-[state=open]:border-border"
                             >
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
