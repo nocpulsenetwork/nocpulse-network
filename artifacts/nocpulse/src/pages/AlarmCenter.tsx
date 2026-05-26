@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { alarms, Alarm, NOC_STAFF, NocStaff } from '@/data/mockData';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -139,6 +140,12 @@ function AlarmCard({
   onAcknowledge?: (id: string, staffId: string) => void;
   onView?: () => void;
 }) {
+  const [, navigate] = useLocation();
+  const deviceHref = alarm.deviceId.startsWith('onu-')
+    ? `/onus/${alarm.deviceId}`
+    : alarm.deviceId.startsWith('olt-')
+    ? `/olts/${alarm.deviceId}`
+    : null;
   const [expanded, setExpanded] = useState(false);
 
   const handleToggle = () => {
@@ -183,7 +190,16 @@ function AlarmCard({
             <SevIcon className={`h-4 w-4 shrink-0 mt-0.5 ${sty.iconColor}`} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-sm">{alarm.deviceName}</span>
+                {deviceHref ? (
+                  <button
+                    onClick={() => navigate(deviceHref)}
+                    className="font-semibold text-sm hover:text-primary hover:underline underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    {alarm.deviceName}
+                  </button>
+                ) : (
+                  <span className="font-semibold text-sm">{alarm.deviceName}</span>
+                )}
                 <SeverityBadge severity={alarm.severity} />
                 <VerifStatusBadge status={alarm.verificationStatus} secondsLeft={secondsLeft} />
                 {alarm.reopenCount > 0 && (

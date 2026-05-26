@@ -25,6 +25,12 @@ export function Layout({ children }: LayoutProps) {
 
   const toggleCollapse = () => setCollapsed((prev) => !prev);
 
+  // Scroll main content to top on every route change
+  useEffect(() => {
+    const main = document.getElementById('nocpulse-main');
+    if (main) main.scrollTop = 0;
+  }, [location]);
+
   const getTitle = () => {
     if (location === '/') return 'Dashboard';
     if (location.match(/^\/olts\/[^/]+$/)) return 'OLT Details';
@@ -67,7 +73,7 @@ export function Layout({ children }: LayoutProps) {
           <div className="sticky top-0 z-30 flex-none h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col justify-center">
              <Navbar onMenuClick={() => setMobileMenuOpen(true)} title={getTitle()} />
           </div>
-          <main className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8 w-full max-w-full">
+          <main id="nocpulse-main" className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8 w-full max-w-full">
             <div className="mx-auto w-full max-w-7xl">
               {children}
             </div>
