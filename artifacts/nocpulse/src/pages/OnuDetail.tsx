@@ -130,6 +130,24 @@ export default function OnuDetail() {
   const powerImproved = powerDelta !== null && powerDelta > 0;
   const powerWorsened = powerDelta !== null && powerDelta < 0;
 
+  const lossRate = !isUp ? null : onu.signalLevel > -25 ? 0.04 : onu.signalLevel > -28 ? 2.8 : 8.2;
+
+  const disconnectDuration =
+    onu.lastLogoutTime !== "N/A"
+      ? `${3 + (seed % 5)}m ${String((seed % 55) + 5).padStart(2, "0")}s`
+      : null;
+  const disconnectResolved = onu.status !== "Offline";
+  const disconnectNote =
+    onu.lastLogoutReason === "Power Loss"
+      ? "Customer premises power loss. Verify UPS and mains supply."
+      : onu.lastLogoutReason === "Signal Lost"
+        ? "Fiber path interruption. Inspect splice joints and connectors."
+        : onu.lastLogoutReason === "Admin Reboot"
+          ? "Scheduled reboot by NOC staff. Normal operation resumed."
+          : disconnectResolved
+            ? "Signal recovered after reconnect. No action required."
+            : "ONU offline. Investigate fiber path and customer premises.";
+
   const filledBars =
     onu.signalLevel > -20 ? 5
       : onu.signalLevel > -25 ? 4
@@ -584,47 +602,162 @@ export default function OnuDetail() {
         </Card>
       </div>
 
-      {/* ── Activity Timeline ── */}
-      <Card>
-        <CardHeader className="pb-2 pt-4 px-4">
-          <div className="flex items-center justify-between">
+      {/* ── Activity Timeline + Last Disconnect Details ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Activity Timeline — spans 2 cols */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm flex items-center gap-2">
               <Bell className="h-4 w-4 text-muted-foreground" /> Activity Timeline
             </CardTitle>
-            {onu.lastLogoutTime !== "N/A" && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="font-medium text-red-400">Last Disconnect:</span>
-                <span className="font-mono">{onu.lastLogoutTime}</span>
-                {onu.lastLogoutReason !== "N/A" && (
-                  <Badge variant="outline" className="text-[10px] bg-red-500/10 text-red-400 border-red-500/20">
-                    {onu.lastLogoutReason}
-                  </Badge>
-                )}
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="space-y-0">
+              {timelineEvents.map((entry, idx) => {
+                const Icon = entry.Icon;
+                return (
+                  <div key={idx} className="flex items-start gap-3">
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${entry.color}`}>
+                        <Icon className="h-3.5 w-3.5" />
+                      </div>
+                      {idx < timelineEvents.length - 1 && (
+                        <div className="w-px h-5 bg-border/50 my-0.5" />
+                      )}
+                    </div>
+                    <div className="pb-3 flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-medium">{entry.label}</span>
+                        <span className="text-[10px] text-muted-foreground shrink-0">{entry.time}</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{entry.detail}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Last Disconnect Details */}
+        <Card className={`border-l-4 ${disconnectResolved ? "border-l-green-500" : "border-l-red-500"}`}>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <WifiOff className="h-4 w-4 text-muted-foreground" /> Last Disconnect
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {onu.lastLogoutTime !== "N/A" ? (
+              <div className="space-y-3">
+                {/* Status badge */}
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${disconnectResolved ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20" : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${disconnectResolved ? "bg-green-500" : "bg-red-500"}`} />
+                  {disconnectResolved ? "Resolved" : "Active Fault"}
+                </div>
+
+                {/* Key fields */}
+                <div className="space-y-2 text-xs">
+                  {([
+                    { label: "Date / Time", value: onu.lastLogoutTime, mono: true },
+                    { label: "Duration", value: disconnectDuration ?? "—", mono: true },
+                    { label: "Reason", value: onu.lastLogoutReason !== "N/A" ? onu.lastLogoutReason : "Unknown" },
+                    { label: "Before RX", value: onu.lastOfflineRxPower !== null ? `${onu.lastOfflineRxPower} dBm` : "—", mono: true },
+                    { label: "Current RX", value: `${onu.signalLevel} dBm`, mono: true },
+                    { label: "Power Delta", value: powerDelta !== null ? `${powerImproved ? "+" : ""}${powerDelta} dBm` : "—", mono: true },
+                  ] as { label: string; value: string; mono?: boolean }[]).map(({ label, value, mono }) => (
+                    <div key={label} className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground shrink-0">{label}</span>
+                      <span className={`font-medium text-right ${mono ? "font-mono" : ""} ${label === "Power Delta" ? (powerImproved ? "text-green-500" : powerWorsened ? "text-red-400" : "text-muted-foreground") : ""}`}>
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Note */}
+                <div className={`rounded-lg border p-2.5 text-[11px] leading-relaxed ${disconnectResolved ? "bg-green-500/5 border-green-500/15 text-green-700 dark:text-green-300" : "bg-amber-500/5 border-amber-500/15 text-amber-700 dark:text-amber-300"}`}>
+                  {disconnectNote}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-28 gap-2">
+                <CheckCircle2 className="h-8 w-8 text-green-500 opacity-50" />
+                <span className="text-xs text-muted-foreground text-center">No disconnects recorded</span>
+                <span className="text-[10px] text-muted-foreground/60">ONU has been online without interruption</span>
               </div>
             )}
-          </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Network Quality Overview ── */}
+      <Card>
+        <CardHeader className="pb-2 pt-4 px-4">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-primary" /> Network Quality Overview
+          </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <div className="space-y-0">
-            {timelineEvents.map((entry, idx) => {
-              const Icon = entry.Icon;
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {([
+              {
+                label: "Ping Latency",
+                value: pingMs !== null ? `${pingMs} ms` : "—",
+                sub: pingMs === null ? "Offline" : pingMs < 10 ? "Excellent" : pingMs < 20 ? "Acceptable" : "High",
+                status: pingMs === null ? "neutral" : pingMs < 10 ? "good" : pingMs < 20 ? "warn" : "bad",
+                Icon: Timer,
+              },
+              {
+                label: "Packet Loss",
+                value: lossRate !== null ? `${lossRate}%` : "—",
+                sub: lossRate === null ? "Offline" : lossRate < 1 ? "Negligible" : lossRate < 5 ? "Moderate" : "High",
+                status: lossRate === null ? "neutral" : lossRate < 1 ? "good" : lossRate < 5 ? "warn" : "bad",
+                Icon: TrendingDown,
+              },
+              {
+                label: "Router Overload",
+                value: onu.signalStability === "Unstable" ? "Possible" : "None",
+                sub: onu.signalStability === "Unstable" ? "Check CPU" : "Normal",
+                status: onu.signalStability === "Unstable" ? "warn" : "good",
+                Icon: Activity,
+              },
+              {
+                label: "Fiber Attenuation",
+                value: isPoorSignal ? "High" : isWarningSignal ? "Moderate" : "Normal",
+                sub: isPoorSignal ? "Inspect fiber" : isWarningSignal ? "Monitor" : "Within range",
+                status: isPoorSignal ? "bad" : isWarningSignal ? "warn" : "good",
+                Icon: Signal,
+              },
+              {
+                label: "Signal Quality",
+                value: filledBars >= 4 ? "Excellent" : filledBars === 3 ? "Good" : filledBars === 2 ? "Fair" : "Poor",
+                sub: `${onu.signalLevel} dBm`,
+                status: filledBars >= 4 ? "good" : filledBars === 3 ? "warn" : "bad",
+                Icon: Radio,
+              },
+              {
+                label: "Stability",
+                value: onu.signalStability,
+                sub: stabilityConfig.desc,
+                status: onu.signalStability === "Stable" ? "good" : onu.signalStability === "Offline" || onu.signalStability === "High Loss" ? "bad" : "warn",
+                Icon: Gauge,
+              },
+            ] as { label: string; value: string; sub: string; status: "good" | "warn" | "bad" | "neutral"; Icon: React.ElementType }[]).map(({ label, value, sub, status, Icon }) => {
+              const cls = {
+                good: { dot: "bg-green-500", val: "text-green-600 dark:text-green-400", bg: "bg-green-500/10 dark:bg-green-500/10", border: "border-green-500/25" },
+                warn: { dot: "bg-amber-500", val: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10 dark:bg-amber-500/10", border: "border-amber-500/25" },
+                bad:  { dot: "bg-red-500",   val: "text-red-600 dark:text-red-400",     bg: "bg-red-500/10 dark:bg-red-500/10",     border: "border-red-500/25"   },
+                neutral: { dot: "bg-slate-400", val: "text-muted-foreground", bg: "bg-muted/30", border: "border-border/40" },
+              }[status];
               return (
-                <div key={idx} className="flex items-start gap-3">
-                  <div className="flex flex-col items-center shrink-0">
-                    <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${entry.color}`}>
-                      <Icon className="h-3.5 w-3.5" />
-                    </div>
-                    {idx < timelineEvents.length - 1 && (
-                      <div className="w-px h-5 bg-border/50 my-0.5" />
-                    )}
+                <div key={label} className={`rounded-xl border p-3 ${cls.bg} ${cls.border}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <Icon className={`h-3.5 w-3.5 ${cls.val}`} />
+                    <span className={`h-2 w-2 rounded-full ${cls.dot}`} />
                   </div>
-                  <div className="pb-3 flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium">{entry.label}</span>
-                      <span className="text-[10px] text-muted-foreground shrink-0">{entry.time}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{entry.detail}</p>
-                  </div>
+                  <div className={`text-sm font-bold leading-tight ${cls.val}`}>{value}</div>
+                  <div className="text-[10px] font-medium text-foreground/70 mt-0.5">{label}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">{sub}</div>
                 </div>
               );
             })}

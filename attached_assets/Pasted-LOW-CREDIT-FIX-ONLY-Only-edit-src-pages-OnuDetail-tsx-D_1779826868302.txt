@@ -1,0 +1,81 @@
+LOW-CREDIT FIX ONLY.
+
+Only edit:
+src/pages/OnuDetail.tsx
+
+Do not edit Dashboard, OLT pages, ONU List, routes, backend, package.json, or mock data files.
+Do not rebuild the full page.
+Only fix missing sections and polish current layout.
+
+From the current ONU Details page, add/fix these:
+
+1. Add missing “Last Disconnect Details” box at the bottom/right area.
+It must show:
+- Last disconnect time/date
+- Duration
+- Reason
+- Status badge
+- Before disconnect RX power
+- Current RX power
+- Power delta
+- Suggested action / note
+
+Example:
+Reason: Fiber Power Loss
+Duration: 3m 24s
+Status: Resolved
+Before RX: -27 dBm
+Current RX: -18.5 dBm
+Delta: +8.5 dB
+Note: Signal recovered after reconnect
+
+2. Add “Network Quality Overview” card.
+It must include compact color-visible items:
+- Ping report
+- Packet loss
+- Router overload
+- Fiber attenuation
+- Signal quality
+- Stability
+
+Use clear colors for both dark and light mode:
+- green = good/excellent
+- amber/yellow = warning
+- red = bad/problem
+- cyan/blue = informational
+
+3. Keep Activity Timeline large.
+Do not shrink Activity Timeline.
+
+4. Keep Realtime Internet Usage graph.
+Do not add another chart.
+
+5. Remove Quick Actions if present.
+Quick Actions should not be visible on ONU Details page.
+
+6. Keep page compact.
+No huge empty space.
+No extra long sections.
+No duplicate PPPoE/MAC/IP sections.
+
+7. Layout order should be:
+Top header
+RX/TX/Distance/Uptime/Temperature cards
+Device Information + PPPoE/Network + Traffic Usage
+Realtime Internet Usage chart
+Current Optical Reading + Last Offline Snapshot
+Activity Timeline + Last Disconnect Details
+Network Quality Overview near bottom
+
+8. Make colors easy to notice in both day and night mode.
+Use subtle backgrounds and visible text, not too pale.
+
+9. Keep CPU low:
+- no heavy animations
+- no 1-second refresh
+- no multiple charts
+- no big blur/glow
+- use static/mock data only
+
+10. Fix all TypeScript/JSX errors.
+App must run without red overlay.
