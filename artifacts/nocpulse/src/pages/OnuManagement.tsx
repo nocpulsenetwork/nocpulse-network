@@ -470,37 +470,37 @@ export default function OnuManagement() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-b border-border/60">
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2">
                   ONU / PON
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-4 py-3">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3 py-2">
                   Customer
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3 hidden md:table-cell">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 hidden md:table-cell">
                   OLT / Port
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3 hidden lg:table-cell">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 hidden lg:table-cell">
                   MAC Addresses
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2">
                   <span className="text-cyan-400">RX</span>
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2">
                   <span className="text-violet-400">TX</span>
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3 text-right hidden lg:table-cell">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 text-right hidden lg:table-cell">
                   <span className="text-orange-400">Dist</span>
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3 hidden md:table-cell">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 hidden md:table-cell">
                   Uptime
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-4 py-3 hidden md:table-cell">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 hidden md:table-cell">
                   Stability
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-4 py-3">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3 py-2">
                   Status
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 w-10 px-3 py-3" />
+                <TableHead className="sticky top-0 bg-card z-10 w-10 px-2 py-2" />
               </TableRow>
             </TableHeader>
 
@@ -549,99 +549,99 @@ export default function OnuManagement() {
                       }}
                     >
                       {/* ONU / PON */}
-                      <TableCell className="px-4 py-3.5">
-                        <div className="font-mono font-bold text-sm tracking-tight">{onu.onuNo}</div>
-                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
-                          <span className="text-[9px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20 rounded px-1.5 py-0.5">
+                      <TableCell className="px-3 py-2">
+                        <div className="font-mono font-semibold text-xs tracking-tight">{onu.onuNo}</div>
+                        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                          <span className="text-[9px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20 rounded px-1 py-px">
                             VLAN {onu.vlanId}
                           </span>
-                          <span className="text-[9px] text-muted-foreground bg-muted/50 border border-border/40 rounded px-1.5 py-0.5">
+                          <span className="text-[9px] text-muted-foreground bg-muted/50 border border-border/40 rounded px-1 py-px">
                             PON-{ponNum}
                           </span>
-                          <span className={`text-[9px] font-semibold border rounded px-1.5 py-0.5 ${getOnuTypeBadgeClass(onu.onuType)}`}>
+                          <span className={`text-[9px] font-semibold border rounded px-1 py-px ${getOnuTypeBadgeClass(onu.onuType)}`}>
                             {onu.onuType}
                           </span>
                         </div>
                       </TableCell>
 
                       {/* Customer */}
-                      <TableCell className="px-4 py-3.5 max-w-[120px]">
-                        <div className="text-sm font-normal truncate" title={onu.description}>
+                      <TableCell className="px-3 py-2 max-w-[120px]">
+                        <div className="text-xs font-normal truncate" title={onu.description}>
                           {onu.description}
                         </div>
-                        <div className="text-[11px] text-muted-foreground/70 truncate mt-0.5">
+                        <div className="text-[10px] text-muted-foreground/70 truncate mt-px">
                           {onu.customerName}
                         </div>
                       </TableCell>
 
                       {/* OLT / Port */}
-                      <TableCell className="px-4 py-3.5 whitespace-nowrap hidden md:table-cell">
-                        <div className="text-sm font-medium text-primary">{parentOlt?.name ?? onu.oltId}</div>
-                        <div className="text-[10px] font-mono text-muted-foreground mt-0.5">{onu.oltPort}</div>
+                      <TableCell className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
+                        <div className="text-xs font-medium text-primary">{parentOlt?.name ?? onu.oltId}</div>
+                        <div className="text-[10px] font-mono text-muted-foreground mt-px">{onu.oltPort}</div>
                       </TableCell>
 
                       {/* MAC Addresses */}
-                      <TableCell className="px-4 py-3.5 whitespace-nowrap hidden lg:table-cell">
+                      <TableCell className="px-3 py-2 whitespace-nowrap hidden lg:table-cell">
                         <div className="text-[10px] font-mono text-muted-foreground">{onu.macAddress}</div>
-                        <div className="text-[10px] font-mono text-muted-foreground/50 mt-0.5">{onu.clientMac}</div>
+                        <div className="text-[10px] font-mono text-muted-foreground/50 mt-px">{onu.clientMac}</div>
                       </TableCell>
 
                       {/* RX Power */}
-                      <TableCell className="px-4 py-3.5 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold font-mono border ${rxStyle.text} ${rxStyle.bg} ${rxStyle.border}`}>
+                      <TableCell className="px-3 py-2 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-1.5 py-px rounded text-[11px] font-bold font-mono border ${rxStyle.text} ${rxStyle.bg} ${rxStyle.border}`}>
                           {onu.signalLevel} dBm
                         </span>
                         {delta !== null ? (
-                          <div className={`flex items-center gap-0.5 mt-1 text-[10px] font-medium ${improved ? "text-green-400" : worsened ? "text-red-400" : "text-muted-foreground"}`}>
+                          <div className={`flex items-center gap-0.5 mt-0.5 text-[10px] font-medium ${improved ? "text-green-400" : worsened ? "text-red-400" : "text-muted-foreground"}`}>
                             {improved ? <TrendingUp className="h-2.5 w-2.5" /> : worsened ? <TrendingDown className="h-2.5 w-2.5" /> : <Minus className="h-2.5 w-2.5" />}
                             {improved ? "+" : ""}{delta}
                           </div>
                         ) : (
-                          <div className="text-[9px] text-muted-foreground/40 mt-1">no snap</div>
+                          <div className="text-[9px] text-muted-foreground/40 mt-0.5">no snap</div>
                         )}
                       </TableCell>
 
                       {/* TX Power */}
-                      <TableCell className="px-4 py-3.5 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold font-mono border ${txStyle.text} ${txStyle.bg} ${txStyle.border}`}>
+                      <TableCell className="px-3 py-2 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-1.5 py-px rounded text-[11px] font-bold font-mono border ${txStyle.text} ${txStyle.bg} ${txStyle.border}`}>
                           {onu.txPower} dBm
                         </span>
                       </TableCell>
 
                       {/* Distance */}
-                      <TableCell className="px-4 py-3.5 text-right whitespace-nowrap hidden lg:table-cell">
-                        <span className="text-xs font-semibold font-mono text-cyan-300">{onu.distance}</span>
+                      <TableCell className="px-3 py-2 text-right whitespace-nowrap hidden lg:table-cell">
+                        <span className="text-[11px] font-semibold font-mono text-cyan-300">{onu.distance}</span>
                       </TableCell>
 
                       {/* Uptime / Reason */}
-                      <TableCell className="px-4 py-3.5 whitespace-nowrap hidden md:table-cell">
-                        <div className={`text-xs font-medium ${onu.status === "Online" ? "text-green-400" : onu.status === "Offline" ? "text-red-400" : onu.status === "Degraded" ? "text-amber-400" : "text-muted-foreground"}`}>
+                      <TableCell className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
+                        <div className={`text-[11px] font-medium ${onu.status === "Online" ? "text-green-400" : onu.status === "Offline" ? "text-red-400" : onu.status === "Degraded" ? "text-amber-400" : "text-muted-foreground"}`}>
                           {onu.onlineDuration === "N/A" ? "—" : onu.onlineDuration}
                         </div>
                         {onu.lastLogoutReason !== "N/A" && (
-                          <Badge variant="outline" className={`text-[9px] mt-1.5 font-semibold ${getReasonBadgeColor(onu.lastLogoutReason)}`}>
+                          <Badge variant="outline" className={`text-[9px] mt-1 font-semibold ${getReasonBadgeColor(onu.lastLogoutReason)}`}>
                             {onu.lastLogoutReason}
                           </Badge>
                         )}
                       </TableCell>
 
                       {/* Stability */}
-                      <TableCell className="px-4 py-3.5 whitespace-nowrap hidden md:table-cell">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${getStabilityStyle(stability)}`}>
+                      <TableCell className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
+                        <span className={`inline-flex items-center px-1.5 py-px rounded text-[9px] font-semibold border ${getStabilityStyle(stability)}`}>
                           {stability}
                         </span>
                       </TableCell>
 
                       {/* Status */}
-                      <TableCell className="px-4 py-3.5">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${statusCfg.bg} ${statusCfg.border}`}>
+                      <TableCell className="px-3 py-2">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${statusCfg.bg} ${statusCfg.border}`}>
                           <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${statusCfg.dot}`} />
                           <span className={statusCfg.text}>{onu.status}</span>
                         </span>
                       </TableCell>
 
                       {/* Actions */}
-                      <TableCell className="action-col px-3 py-3.5" onClick={(e) => e.stopPropagation()}>
+                      <TableCell className="action-col px-2 py-2" onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button

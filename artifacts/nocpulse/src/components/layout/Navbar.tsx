@@ -106,27 +106,27 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
     }
   };
 
+  const scrollToTop = () => {
+    const m = document.getElementById('nocpulse-main');
+    if (m) m.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <header className="flex h-14 items-center gap-4 px-4 sm:px-6 w-full">
+    <header className="flex h-14 items-center gap-3 px-4 sm:px-6 w-full overflow-hidden">
       <Button size="icon" variant="ghost" className="sm:hidden -ml-2 shrink-0" onClick={onMenuClick}>
         <Menu className="h-5 w-5" />
         <span className="sr-only">Toggle Menu</span>
       </Button>
-      
-      <div className="flex items-center gap-2 mr-auto min-w-0">
-        <h1
-          className="text-base font-semibold truncate cursor-pointer select-none hover:text-primary transition-colors"
-          title="Scroll to top"
-          onClick={() => {
-            const m = document.getElementById('nocpulse-main');
-            if (m) m.scrollTo({ top: 0, behavior: 'smooth' });
-          }}
-        >
-          {title}
-        </h1>
-      </div>
 
-      <div className="flex w-full items-center gap-2 md:gap-4 justify-end shrink-0">
+      <h1
+        className="flex-1 min-w-0 text-sm font-semibold truncate cursor-pointer select-none hover:text-primary transition-colors"
+        title="Scroll to top"
+        onClick={scrollToTop}
+      >
+        {title}
+      </h1>
+
+      <div className="flex items-center gap-2 md:gap-3 shrink-0">
         
         <div className="hidden sm:flex text-xs font-mono text-muted-foreground items-center shrink-0">
           {time.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })} &middot; {time.toLocaleTimeString()}
