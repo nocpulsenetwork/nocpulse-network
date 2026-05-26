@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
-  Stethoscope, Signal, Wifi, WifiOff, PackageX, AlertTriangle,
+  Stethoscope, Signal, WifiOff, PackageX, AlertTriangle,
   CheckCircle2, XCircle, AlertCircle, Lightbulb, RefreshCw,
   ChevronDown, ChevronUp, Router, Thermometer, Activity,
-  ArrowRight, Clock, Zap, Info, RotateCcw, Cable, GitBranch, Layers,
+  ArrowRight, Clock, Zap, RotateCcw, Cable, GitBranch, Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 

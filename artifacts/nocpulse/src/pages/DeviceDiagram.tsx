@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { olts, onus } from '@/data/mockData';
-import { Server, Cpu, Wifi, WifiOff, GitBranch, Circle, ZoomIn, ZoomOut, Maximize2, Map } from 'lucide-react';
+import { Server, Cpu, Wifi, GitBranch, Circle, ZoomIn, ZoomOut, Maximize2, Map } from 'lucide-react';
 import { Link } from 'wouter';
 
 function onuCountForOlt(oltId: string) {

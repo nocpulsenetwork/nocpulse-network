@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Circle, Square, Triangle, Layers, GitBranch, Zap, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Square, Triangle, Layers, GitBranch, Zap, ChevronDown } from 'lucide-react';
 
 const FIBER_COLORS = [
   { color: 'bg-blue-500',               svgFill: '#3b82f6', name: 'Blue',   core: 1 },

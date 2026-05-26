@@ -1,8 +1,7 @@
-import React from 'react';
 import { MetricCard } from '@/components/MetricCard';
 import { AlarmRow } from '@/components/AlarmRow';
 import { alarms, olts, onus, metrics } from '@/data/mockData';
-import { Server, Router, Wifi, WifiOff, AlertTriangle, Cpu, ServerCrash, Activity } from 'lucide-react';
+import { Server, Router, Wifi, WifiOff, AlertTriangle, Cpu, ServerCrash } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Link } from 'wouter';

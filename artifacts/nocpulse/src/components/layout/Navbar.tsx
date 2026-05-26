@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { alarms, onus, olts } from '@/data/mockData';
 import { useRole, ROLE_LABELS } from '@/contexts/RoleContext';
 
@@ -73,7 +72,7 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
       .filter(o =>
         o.name.toLowerCase().includes(q) ||
         o.ip.toLowerCase().includes(q) ||
-        ((o as Record<string, unknown>).location as string | undefined ?? '').toLowerCase().includes(q)
+        (o.location ?? '').toLowerCase().includes(q)
       )
       .slice(0, 2)
       .map(o => ({

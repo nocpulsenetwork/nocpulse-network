@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import {
-  Users, Shield, ShieldCheck, ShieldAlert, Crown, Eye, EyeOff,
+  Users, Shield, ShieldCheck, ShieldAlert, Crown,
   Plus, MoreHorizontal, Lock, Unlock, Check, X, UserCog,
-  Mail, Clock, Activity
+  Mail, Clock, Activity,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type Role = 'Super Admin' | 'Admin' | 'Staff';

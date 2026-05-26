@@ -1,9 +1,8 @@
 import { useState, useMemo, Fragment } from 'react';
 import {
-  ClipboardList, Search, Filter, Download, RefreshCw,
+  Search, Filter, Download, RefreshCw,
   LogIn, Server, Cpu, Bell, Settings, User, ChevronDown,
-  CheckCircle2, AlertTriangle, XCircle, RotateCcw, Eye,
-  Power, Wifi, WifiOff, Shield, Edit3
+  Power, Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 

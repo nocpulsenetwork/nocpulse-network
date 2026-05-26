@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import {
-  BellRing, Send, Wifi, WifiOff, AlertTriangle, XCircle,
+  BellRing, Send, AlertTriangle, XCircle,
   CheckCircle2, Activity, Server, Cpu, PackageX, Lock,
-  Eye, EyeOff, RefreshCw, ToggleLeft, ToggleRight, Info,
-  Clock, Zap, MessageSquare
+  Eye, EyeOff, RefreshCw, Info,
+  Clock, Zap, MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
