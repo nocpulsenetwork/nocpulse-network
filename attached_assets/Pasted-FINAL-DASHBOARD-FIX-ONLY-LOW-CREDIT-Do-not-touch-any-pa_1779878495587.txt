@@ -1,0 +1,62 @@
+FINAL DASHBOARD FIX ONLY. LOW CREDIT. Do not touch any page except src/pages/Dashboard.tsx.
+
+Current dashboard is close but not correct. Fix only these issues:
+
+1. KPI top cards:
+- All top KPI cards must be same width and same height.
+- Layout order must be:
+Total OLTs, Total ONUs, Total Clients, Active Alarms, Offline OLTs, Offline ONUs, Uptime.
+- Active Alarms must stay before Offline OLTs and before Uptime.
+- Make cards compact and professional.
+- No oversized card.
+
+2. Network Map:
+- Replace current table/list style Network Map with visual map-style card like my reference screenshot.
+- It should look like a dark network topology map:
+  OLT/ONU nodes connected with lines.
+  Green = online/OLT
+  Blue = ONU
+  Red = offline
+  Yellow = warning
+  Center label: Dhaka
+  Legend on right side.
+- This is UI/mock only, no real map API, no new dependency.
+- Must be lightweight SVG/div CSS only.
+
+3. Fiber Overview:
+- Make it donut-style summary like screenshot.
+- Show Total Fiber 186 Cores center.
+- Legend: Active, In Use, Spare, Faulty.
+- Use green/blue/yellow/red colors.
+
+4. Device Health:
+- Make donut-style health card like screenshot.
+- Center: 92% Healthy.
+- Legend: Healthy Devices, Warning Devices, Offline Devices, Total Devices.
+- Use clear colors.
+
+5. ONU Status:
+- Make donut-style card like screenshot.
+- Center: 248 Total ONU.
+- Show Online 231 and Offline 17.
+
+6. Top Clients:
+- Make compact list with colored progress bars like screenshot.
+- No huge height.
+
+7. Dashboard style:
+- Must work in dark and light mode.
+- Theme toggle must NOT be on dashboard. Theme only from Settings.
+- No horizontal overflow.
+- Keep sticky header behavior.
+- Keep search/user panel unchanged.
+- No backend call.
+- No new dependency.
+- No heavy animation.
+- Fix TypeScript errors.
+
+Important:
+Do not redesign other pages.
+Do not touch ONU Details, ONU Management, OLT pages, Alarm, Settings, routes, package.json, backend, mock data.
+Only Dashboard.tsx.
+App must run without red overlay.

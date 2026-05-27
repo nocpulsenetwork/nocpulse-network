@@ -1,0 +1,213 @@
+FINAL DASHBOARD + SEARCH FIX ONLY. LOW CREDIT MODE.
+Do NOT touch any page except:
+src/pages/Dashboard.tsx
+and header/global search component only if required.
+
+Everything else is already stable.
+Do NOT edit:
+ONU Details,
+ONU Management,
+OLT pages,
+Alarm,
+Settings,
+routes,
+backend,
+package.json,
+theme system,
+sidebar behavior,
+mock data structure.
+
+GOAL:
+Make dashboard match my provided premium NOC screenshot style as closely as possible while keeping CPU low and app stable.
+
+IMPORTANT:
+- No heavy animations
+- No new dependencies
+- No backend/API calls
+- Use existing mock/static data only
+- Keep mobile + desktop responsive
+- No horizontal overflow
+- No red overlay
+- TypeScript errors = 0
+- Theme toggle must NOT appear on dashboard
+- Theme control stays ONLY inside Settings
+
+========================================
+1. KPI TOP CARDS
+========================================
+
+All KPI cards must:
+- be SAME width
+- SAME height
+- aligned perfectly
+- compact professional spacing
+
+Correct order:
+1. Total OLTs
+2. Total ONUs
+3. Total Clients
+4. Offline OLTs
+5. Offline ONUs
+6. Active Alarms
+7. Uptime
+
+Design:
+- compact premium cards
+- subtle border
+- soft glow
+- professional ISP/NOC style
+- green/red/yellow/cyan accent colors
+- readable in both dark and light mode
+
+========================================
+2. NETWORK MAP
+========================================
+
+Current Network Map is wrong.
+
+Replace current table/list layout with VISUAL topology map like my screenshot.
+
+Requirements:
+- dark premium network topology style
+- connected nodes with glowing lines
+- center text: Dhaka
+- nodes:
+  Green = OLT/online
+  Blue = ONU
+  Red = offline
+  Yellow = warning
+- legend on right side
+- zoom buttons on bottom-right
+- background map feel like screenshot
+- use ONLY lightweight SVG/div CSS
+- no external map API
+- no dependency
+
+Must visually resemble provided screenshot.
+
+========================================
+3. FIBER OVERVIEW
+========================================
+
+Create donut-style card like screenshot.
+
+Center:
+Total Fiber
+186
+Cores
+
+Legend:
+- Active
+- In Use
+- Spare
+- Faulty
+
+Colors:
+green / blue / yellow / red
+
+Compact professional layout.
+
+========================================
+4. DEVICE HEALTH
+========================================
+
+Create donut-style health card like screenshot.
+
+Center:
+92%
+Healthy
+
+Legend:
+- Healthy Devices
+- Warning Devices
+- Offline Devices
+- Total Devices
+
+Professional dark/light compatible colors.
+
+========================================
+5. ONU STATUS
+========================================
+
+Create donut-style ONU status card like screenshot.
+
+Center:
+248
+Total ONU
+
+Legend:
+- Online 231
+- Offline 17
+
+Use green/red colors.
+
+========================================
+6. TOP CLIENTS
+========================================
+
+Compact premium list with colored bandwidth bars like screenshot.
+
+Do NOT make oversized card.
+
+========================================
+7. DASHBOARD STYLE
+========================================
+
+Dashboard must:
+- feel premium
+- compact
+- professional ISP/NOC look
+- dark mode beautiful
+- light mode readable
+- no giant spacing
+- no long unnecessary sections
+- no ugly tables
+- no broken alignment
+
+Keep:
+- sticky header
+- search/user panel
+- existing navigation
+
+========================================
+8. HEADER GLOBAL SEARCH FIX
+========================================
+
+Header search currently does not work properly.
+
+Fix search behavior:
+
+- typing in search box should show live dropdown suggestions
+- search must find:
+  ONU name
+  OLT name
+  IP
+  MAC
+  VLAN
+  Serial Number
+  Client name
+
+- clicking a result navigates directly to related page/item
+
+Use existing mock/static data only.
+
+Dropdown requirements:
+- premium style
+- dark/light mode compatible
+- hover effect
+- keyboard focus support
+- lightweight filtering
+- no typing lag
+- low CPU usage
+
+========================================
+FINAL RULES
+========================================
+
+- ONLY dashboard + header search related fixes
+- DO NOT redesign other pages
+- DO NOT touch backend
+- DO NOT add packages
+- Keep MVP stable
+- App must run without errors
+- Final output should closely match provided screenshots

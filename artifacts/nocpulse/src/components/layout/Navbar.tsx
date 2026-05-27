@@ -27,26 +27,35 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [selectedIdx, setSelectedIdx] = useState(-1);
   const searchRef = useRef<HTMLDivElement>(null);
+  const inputRef  = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
+  /* Close on outside click */
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setSearchOpen(false);
+        setSelectedIdx(-1);
       }
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  /* Reset selection when results change */
+  useEffect(() => { setSelectedIdx(-1); }, [searchQuery]);
+
+  /* ── Search results ──────────────────────────────────────────────── */
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (q.length < 2) return [];
+
     const onuResults = onus
       .filter(o =>
         o.onuNo.toLowerCase().includes(q) ||
@@ -55,54 +64,87 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
         o.macAddress.toLowerCase().includes(q) ||
         o.clientMac.toLowerCase().includes(q) ||
         o.ponPort.toLowerCase().includes(q) ||
-        o.oltPort.toLowerCase().includes(q)
+        o.oltPort.toLowerCase().includes(q) ||
+        String(o.vlanId).includes(q)
       )
-      .slice(0, 4)
+      .slice(0, 5)
       .map(o => ({
         id: o.id,
-        label: o.description || o.customerName,
-        sub: `ONU · ${o.onuNo} · ${o.status}`,
+        label: o.customerName || o.description,
+        sub: `ONU · ${o.onuNo} · VLAN ${o.vlanId} · ${o.status}`,
         href: `/onus/${o.id}`,
         status: o.status,
         kind: 'ONU' as const,
       }));
+
     const oltResults = olts
       .filter(o =>
         o.name.toLowerCase().includes(q) ||
         o.ip.toLowerCase().includes(q) ||
-        (o.location ?? '').toLowerCase().includes(q)
+        (o.location ?? '').toLowerCase().includes(q) ||
+        (o.brand ?? '').toLowerCase().includes(q)
       )
-      .slice(0, 2)
+      .slice(0, 3)
       .map(o => ({
         id: o.id,
         label: o.name,
-        sub: `OLT · ${o.ip} · ${o.status}`,
+        sub: `OLT · ${o.ip} · ${o.location} · ${o.status}`,
         href: `/olts/${o.id}`,
         status: o.status,
         kind: 'OLT' as const,
       }));
-    return [...onuResults, ...oltResults].slice(0, 6);
+
+    return [...onuResults, ...oltResults].slice(0, 7);
   }, [searchQuery]);
 
-  const unacknowledgedAlarms = alarms.filter(a => !a.acknowledged);
-  const activeAlarmsCount = unacknowledgedAlarms.length;
-  const topAlarms = unacknowledgedAlarms.slice(0, 3);
-
-  const getSeverityColor = (severity: string) => {
-    switch(severity) {
-      case 'Critical': return 'border-l-red-500 bg-red-500/10 text-red-500';
-      case 'Major': return 'border-l-amber-500 bg-amber-500/10 text-amber-500';
-      case 'Minor': return 'border-l-blue-500 bg-blue-500/10 text-blue-500';
-      default: return 'border-l-slate-500 bg-slate-500/10 text-slate-500';
+  /* ── Keyboard navigation ─────────────────────────────────────────── */
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!searchOpen || searchResults.length === 0) {
+      if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); setSelectedIdx(-1); }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIdx(i => Math.min(i + 1, searchResults.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIdx(i => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      const target = selectedIdx >= 0 ? searchResults[selectedIdx] : searchResults[0];
+      if (target) { navigate(target.href); setSearchOpen(false); setSearchQuery(''); setSelectedIdx(-1); }
+    } else if (e.key === 'Escape') {
+      setSearchOpen(false); setSearchQuery(''); setSelectedIdx(-1);
     }
   };
 
+  const commitResult = (href: string) => {
+    navigate(href);
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSelectedIdx(-1);
+    inputRef.current?.blur();
+  };
+
+  /* ── Alarm data ──────────────────────────────────────────────────── */
+  const unacknowledgedAlarms = alarms.filter(a => !a.acknowledged);
+  const activeAlarmsCount    = unacknowledgedAlarms.length;
+  const topAlarms            = unacknowledgedAlarms.slice(0, 3);
+
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'Critical': return 'border-l-red-500 bg-red-500/10 text-red-500';
+      case 'Major':    return 'border-l-amber-500 bg-amber-500/10 text-amber-500';
+      case 'Minor':    return 'border-l-blue-500 bg-blue-500/10 text-blue-500';
+      default:         return 'border-l-slate-500 bg-slate-500/10 text-slate-500';
+    }
+  };
   const getSeverityBorder = (severity: string) => {
-    switch(severity) {
+    switch (severity) {
       case 'Critical': return 'border-l-4 border-l-red-500';
-      case 'Major': return 'border-l-4 border-l-amber-500';
-      case 'Minor': return 'border-l-4 border-l-blue-500';
-      default: return 'border-l-4 border-l-slate-500';
+      case 'Major':    return 'border-l-4 border-l-amber-500';
+      case 'Minor':    return 'border-l-4 border-l-blue-500';
+      default:         return 'border-l-4 border-l-slate-500';
     }
   };
 
@@ -110,6 +152,8 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
     const m = document.getElementById('nocpulse-main');
     if (m) m.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const showDropdown = searchOpen && searchQuery.trim().length >= 2;
 
   return (
     <header className="flex h-14 items-center gap-3 px-4 sm:px-6 w-full overflow-hidden">
@@ -127,7 +171,7 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
       </h1>
 
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
-        
+
         <div className="hidden sm:flex text-xs font-mono text-muted-foreground items-center shrink-0">
           {time.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })} &middot; {time.toLocaleTimeString()}
         </div>
@@ -146,45 +190,45 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
           )}
         </div>
 
+        {/* ── Search ──────────────────────────────────────────────────── */}
         <div ref={searchRef} className="hidden sm:block relative shrink-0 ml-auto">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
+              ref={inputRef}
               type="search"
-              placeholder="Search devices, IPs…"
+              placeholder="Search devices, IPs, VLAN…"
               value={searchQuery}
               onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
               onFocus={() => setSearchOpen(true)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' && searchResults.length > 0) {
-                  navigate(searchResults[0].href);
-                  setSearchOpen(false);
-                  setSearchQuery('');
-                } else if (e.key === 'Escape') {
-                  setSearchOpen(false);
-                  setSearchQuery('');
-                }
-              }}
-              className="w-52 lg:w-72 bg-card pl-9 border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
+              onKeyDown={handleKeyDown}
+              className="w-56 lg:w-72 bg-card pl-9 border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
+              autoComplete="off"
             />
           </div>
-          {searchOpen && searchResults.length > 0 && (
-            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-lg shadow-xl overflow-hidden">
-              <div className="px-3 py-1.5 border-b border-border/50">
+
+          {/* Results dropdown */}
+          {showDropdown && searchResults.length > 0 && (
+            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-xl shadow-xl overflow-hidden">
+              <div className="px-3 py-1.5 border-b border-border/50 flex items-center justify-between">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
                   {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
                 </span>
+                <span className="text-[9px] text-muted-foreground/50">↑↓ navigate · Enter select</span>
               </div>
-              {searchResults.map(r => (
+              {searchResults.map((r, i) => (
                 <button
                   key={r.id}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-muted/60 transition-colors text-left group"
-                  onClick={() => { navigate(r.href); setSearchOpen(false); setSearchQuery(''); }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left group ${
+                    i === selectedIdx ? 'bg-muted/70' : 'hover:bg-muted/50'
+                  }`}
+                  onMouseEnter={() => setSelectedIdx(i)}
+                  onClick={() => commitResult(r.href)}
                 >
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
                     r.kind === 'OLT'
-                      ? 'bg-violet-500/15 text-violet-400 border border-violet-500/20'
-                      : 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/20'
+                      ? 'bg-violet-500/15 text-violet-400 border-violet-500/20'
+                      : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
                   }`}>
                     {r.kind}
                   </span>
@@ -192,27 +236,35 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
                     <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{r.label}</p>
                     <p className="text-[10px] text-muted-foreground truncate">{r.sub}</p>
                   </div>
-                  <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${
-                    r.status === 'Online' ? 'bg-green-400' :
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${
+                    r.status === 'Online' ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' :
                     r.status === 'Degraded' ? 'bg-amber-400' : 'bg-red-400'
                   }`} />
                 </button>
               ))}
+              <div className="px-3 py-1.5 border-t border-border/50 bg-muted/20">
+                <p className="text-[9px] text-muted-foreground/60">Searching ONU name · OLT · IP · MAC · VLAN · customer name</p>
+              </div>
             </div>
           )}
-          {searchOpen && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
-            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-lg shadow-xl overflow-hidden">
+
+          {/* No results */}
+          {showDropdown && searchResults.length === 0 && (
+            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-xl shadow-xl overflow-hidden">
               <div className="px-3 py-1.5 border-b border-border/50">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">No results</span>
               </div>
               <div className="px-3 py-3 text-center">
-                <p className="text-xs text-muted-foreground">No devices match <span className="font-medium text-foreground">"{searchQuery}"</span></p>
-                <p className="text-[10px] text-muted-foreground/60 mt-0.5">Try an IP, MAC, ONU ID, or customer name</p>
+                <p className="text-xs text-muted-foreground">
+                  No devices match <span className="font-medium text-foreground">"{searchQuery}"</span>
+                </p>
+                <p className="text-[10px] text-muted-foreground/60 mt-0.5">Try an IP, MAC, VLAN, ONU ID, or customer name</p>
               </div>
             </div>
           )}
         </div>
-        
+
+        {/* ── Bell / Notifications ──────────────────────────────────── */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground shrink-0">
@@ -257,6 +309,7 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
 
         <div className="hidden sm:block w-px h-6 bg-border mx-1 shrink-0" />
 
+        {/* ── User avatar / profile ─────────────────────────────────── */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center cursor-pointer transition-all hover:ring-2 hover:ring-primary/30 outline-none shrink-0`}>
