@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
-import { olts, onus, OltDevice } from "@/data/mockData";
+import { type OltDevice } from "@/data/mockData";
+import { useApiData } from "@/contexts/ApiDataContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -177,6 +178,7 @@ function OltActions({
 }
 
 export default function OltManagement() {
+  const { olts, onus } = useApiData();
   const [, navigate] = useLocation();
   const searchParams = new URLSearchParams(window.location.search);
   const initialStatus = searchParams.get("status");
@@ -213,7 +215,7 @@ export default function OltManagement() {
       else stats[o.oltId].offline++;
     });
     return stats;
-  }, []);
+  }, [onus]);
 
   const filteredOlts = useMemo(() => {
     return olts.filter((olt) => {
@@ -230,7 +232,7 @@ export default function OltManagement() {
 
       return matchesSearch && matchesStatus && matchesBrand && matchesType;
     });
-  }, [searchTerm, statusFilter, brandFilter, typeFilter]);
+  }, [olts, searchTerm, statusFilter, brandFilter, typeFilter]);
 
   return (
     <div className="space-y-6">

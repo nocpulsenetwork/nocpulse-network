@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { RoleProvider } from "@/contexts/RoleContext";
+import { ApiDataProvider } from "@/contexts/ApiDataContext";
 import { useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
@@ -92,12 +93,14 @@ function App() {
     <ThemeProvider defaultTheme="dark" storageKey="nocpulse-theme">
       <RoleProvider>
         <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-              <Router />
-            </WouterRouter>
-            <Toaster />
-          </TooltipProvider>
+          <ApiDataProvider>
+            <TooltipProvider>
+              <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                <Router />
+              </WouterRouter>
+              <Toaster />
+            </TooltipProvider>
+          </ApiDataProvider>
         </QueryClientProvider>
       </RoleProvider>
     </ThemeProvider>

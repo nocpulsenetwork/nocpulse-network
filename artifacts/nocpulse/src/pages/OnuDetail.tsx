@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useParams, useLocation, Link } from "wouter";
-import { onus, olts } from "@/data/mockData";
+import { useApiData } from "@/contexts/ApiDataContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -79,6 +79,7 @@ function generateChartData(seed: number, dlBase: number, ulBase: number) {
 }
 
 export default function OnuDetail() {
+  const { onus, olts } = useApiData();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [modal, setModal] = useState<"reboot" | "disable" | "enable" | null>(null);

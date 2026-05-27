@@ -1,5 +1,5 @@
 import { useRoute, useLocation, Link } from 'wouter';
-import { olts, onus, alarms } from '@/data/mockData';
+import { useApiData } from '@/contexts/ApiDataContext';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
@@ -62,6 +62,7 @@ function UplinkBadge({ status }: { status: 'Active' | 'Standby' | 'Down' }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function OltDetail() {
+  const { olts, onus, alarms } = useApiData();
   const [, params]   = useRoute('/olts/:id');
   const [, navigate] = useLocation();
   const olt = olts.find(o => o.id === params?.id);

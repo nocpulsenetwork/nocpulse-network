@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
-import { alarms, Alarm, NOC_STAFF, NocStaff } from '@/data/mockData';
+import { type Alarm, NOC_STAFF, type NocStaff } from '@/data/mockData';
+import { useApiData } from '@/contexts/ApiDataContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -415,9 +416,10 @@ function EmptyState({ icon: Icon, message }: { icon: React.ElementType; message:
 }
 
 export default function AlarmCenter() {
+  const { alarms: apiAlarms } = useApiData();
   const [tick, setTick] = useState(0);
   const [enriched, setEnriched] = useState<EnrichedAlarm[]>(() =>
-    alarms.map(a => ({
+    apiAlarms.map(a => ({
       ...a,
       verificationStatus: (a.acknowledged ? 'Resolved' : 'Active') as VerificationStatus,
       resolvedBy: a.acknowledged ? NOC_STAFF[0] : undefined,
@@ -426,6 +428,16 @@ export default function AlarmCenter() {
       history: buildInitialHistory(a),
     }))
   );
+  useEffect(() => {
+    setEnriched(apiAlarms.map(a => ({
+      ...a,
+      verificationStatus: (a.acknowledged ? 'Resolved' : 'Active') as VerificationStatus,
+      resolvedBy: a.acknowledged ? NOC_STAFF[0] : undefined,
+      resolvedAt: a.acknowledged ? Date.now() - 3600000 : undefined,
+      reopenCount: 0,
+      history: buildInitialHistory(a),
+    })));
+  }, [apiAlarms]);
 
   useEffect(() => {
     const timer = setInterval(() => {

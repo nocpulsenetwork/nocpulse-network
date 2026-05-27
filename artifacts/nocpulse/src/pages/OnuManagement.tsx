@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { onus, olts, type SignalStability } from "@/data/mockData";
+import { type SignalStability } from "@/data/mockData";
+import { useApiData } from "@/contexts/ApiDataContext";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -124,6 +125,7 @@ type ConfirmAction = { type: "reboot" | "disable" | "enable"; onuId: string } | 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OnuManagement() {
+  const { onus, olts } = useApiData();
   const [, setLocation] = useLocation();
 
   const searchParams = new URLSearchParams(window.location.search);
@@ -159,7 +161,7 @@ export default function OnuManagement() {
     const m: Record<string, string> = {};
     olts.forEach((o) => { m[o.id] = o.name.toLowerCase(); });
     return m;
-  }, []);
+  }, [olts]);
 
   const filteredOnus = useMemo(() => {
     return onus.filter((onu) => {

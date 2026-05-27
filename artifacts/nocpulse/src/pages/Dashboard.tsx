@@ -1,4 +1,5 @@
-import { alarms, olts, onus, metrics } from '@/data/mockData';
+import { useApiData } from '@/contexts/ApiDataContext';
+import { type OltDevice } from '@/data/mockData';
 import { MetricCard } from '@/components/MetricCard';
 import {
   Server, Cpu, AlertTriangle, Shield, Users, RefreshCw,
@@ -94,7 +95,7 @@ function LegendDot({ color, glow, label }: { color: string; glow?: boolean; labe
    • Per-status glow filters: green / amber / red / blue
    • "Dhaka Core" centre label
 ══════════════════════════════════════════════════════════════════════ */
-function NetworkTopology() {
+function NetworkTopology({ olts }: { olts: OltDevice[] }) {
   return (
     <div
       className="relative w-full overflow-hidden rounded-b-xl"
@@ -410,6 +411,7 @@ function DonutCard({ title, desc, data, centerVal, centerSub, total }: DonutCard
    DASHBOARD PAGE
 ══════════════════════════════════════════════════════════════════════ */
 export default function Dashboard() {
+  const { olts, onus, alarms, metrics } = useApiData();
   const {
     totalOlts, totalOnus, onlineOnus, offlineOnus,
     offlineOlts, activeAlarms, criticalAlarms, networkUptime,
@@ -502,7 +504,7 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <NetworkTopology />
+          <NetworkTopology olts={olts} />
         </Card>
 
         {/* Fiber Overview + Device Health — stacked in right column */}
