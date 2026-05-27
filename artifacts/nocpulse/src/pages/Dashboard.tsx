@@ -72,75 +72,119 @@ const TT = {
 };
 
 /* ══════════════════════════════════════════════════════════════════════
-   SVG Network Topology  ─  premium NOC map style
+   Legend dot helper
+══════════════════════════════════════════════════════════════════════ */
+function LegendDot({ color, glow, label }: { color: string; glow?: boolean; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-[9px] font-semibold text-slate-400">
+      <span
+        className="h-2.5 w-2.5 rounded-full shrink-0"
+        style={{ background: color, boxShadow: glow ? `0 0 7px 1px ${color}` : 'none' }}
+      />
+      {label}
+    </span>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SVG Network Topology  ─  premium ISP/NOC map
+   • Always dark background (NOC standard — readable in both themes)
+   • Radial-gradient filled nodes with specular highlights
+   • Per-status glow filters: green / amber / red / blue
+   • "Dhaka Core" centre label
 ══════════════════════════════════════════════════════════════════════ */
 function NetworkTopology() {
   return (
-    <div className="relative w-full overflow-hidden rounded-b-xl" style={{ height: 320 }}>
-
-      {/* ── Dark-mode premium background gradient ── */}
+    <div
+      className="relative w-full overflow-hidden rounded-b-xl"
+      style={{
+        height: 340,
+        /* fixed NOC dark background — identical in light & dark themes */
+        background: 'linear-gradient(160deg, #07111f 0%, #0b1a2e 45%, #091522 70%, #080e1c 100%)',
+      }}
+    >
+      {/* Central blue radial atmosphere */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: [
-            'radial-gradient(ellipse 55% 55% at 50% 52%, rgba(59,130,246,0.09) 0%, transparent 68%)',
-            'radial-gradient(ellipse 80% 50% at 50% 50%, rgba(15,23,42,0.0) 0%, transparent 100%)',
-          ].join(','),
+          background:
+            'radial-gradient(ellipse 46% 54% at 50% 52%, rgba(59,130,246,0.14) 0%, rgba(59,130,246,0.04) 48%, transparent 72%)',
         }}
       />
 
-      {/* ── Dot-grid overlay ── */}
+      {/* Subtle dot-grid background texture */}
       <svg
         className="absolute inset-0 w-full h-full pointer-events-none"
-        style={{ opacity: 0.08 }}
+        style={{ opacity: 0.14 }}
         aria-hidden="true"
       >
         <defs>
-          <pattern id="topo-dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="0.9" fill="currentColor" className="text-foreground" />
+          <pattern id="nm-dots" x="0" y="0" width="26" height="26" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.85" fill="#94a3b8" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#topo-dots)" />
+        <rect width="100%" height="100%" fill="url(#nm-dots)" />
       </svg>
 
-      {/* ── Main topology SVG ── */}
+      {/* ── Main topology SVG ─────────────────────────────────────────── */}
       <svg
-        viewBox="0 0 580 320"
+        viewBox="0 0 580 340"
         className="relative w-full h-full"
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-          {/* Glow filters */}
-          <filter id="gf-green" x="-60%" y="-60%" width="220%" height="220%">
+          {/* ── Glow filters (cheap: single blur + merge) ── */}
+          <filter id="nm-fg" x="-90%" y="-90%" width="280%" height="280%">
+            <feGaussianBlur stdDeviation="5.5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="nm-fa" x="-90%" y="-90%" width="280%" height="280%">
+            <feGaussianBlur stdDeviation="5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="nm-fr" x="-90%" y="-90%" width="280%" height="280%">
             <feGaussianBlur stdDeviation="4" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="gf-amber" x="-60%" y="-60%" width="220%" height="220%">
-            <feGaussianBlur stdDeviation="3.5" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="gf-red" x="-60%" y="-60%" width="220%" height="220%">
+          <filter id="nm-fb" x="-90%" y="-90%" width="280%" height="280%">
             <feGaussianBlur stdDeviation="3" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="gf-core" x="-80%" y="-80%" width="260%" height="260%">
-            <feGaussianBlur stdDeviation="7" result="b" />
+          <filter id="nm-fc" x="-110%" y="-110%" width="320%" height="320%">
+            <feGaussianBlur stdDeviation="11" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          {/* Gradient for connection lines */}
-          <linearGradient id="lg-green" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stopColor="#22c55e" stopOpacity="0.15" />
-            <stop offset="50%"  stopColor="#22c55e" stopOpacity="0.5"  />
-            <stop offset="100%" stopColor="#22c55e" stopOpacity="0.15" />
-          </linearGradient>
+
+          {/* ── Radial gradients for node fills ── */}
+          <radialGradient id="nm-rg-core" cx="38%" cy="32%" r="68%">
+            <stop offset="0%"   stopColor="#bfdbfe" />
+            <stop offset="55%"  stopColor="#3b82f6" />
+            <stop offset="100%" stopColor="#1e3a8a" />
+          </radialGradient>
+          <radialGradient id="nm-rg-green" cx="38%" cy="32%" r="68%">
+            <stop offset="0%"   stopColor="#bbf7d0" />
+            <stop offset="55%"  stopColor="#22c55e" />
+            <stop offset="100%" stopColor="#14532d" />
+          </radialGradient>
+          <radialGradient id="nm-rg-amber" cx="38%" cy="32%" r="68%">
+            <stop offset="0%"   stopColor="#fef08a" />
+            <stop offset="55%"  stopColor="#f59e0b" />
+            <stop offset="100%" stopColor="#78350f" />
+          </radialGradient>
+          <radialGradient id="nm-rg-red" cx="38%" cy="32%" r="68%">
+            <stop offset="0%"   stopColor="#fecaca" />
+            <stop offset="55%"  stopColor="#ef4444" />
+            <stop offset="100%" stopColor="#7f1d1d" />
+          </radialGradient>
         </defs>
 
-        {/* ── Core concentric rings (visual depth) ── */}
-        <circle cx={CORE.x} cy={CORE.y} r={52} fill="none" stroke="rgba(59,130,246,0.06)" strokeWidth={1} />
-        <circle cx={CORE.x} cy={CORE.y} r={85} fill="none" stroke="rgba(59,130,246,0.04)" strokeWidth={1} strokeDasharray="6 6" />
-        <circle cx={CORE.x} cy={CORE.y} r={130} fill="none" stroke="rgba(59,130,246,0.03)" strokeWidth={0.8} strokeDasharray="4 8" />
+        {/* ── Concentric range rings around core ── */}
+        <circle cx={CORE.x} cy={CORE.y} r={52}  fill="none" stroke="rgba(59,130,246,0.1)"  strokeWidth={0.9} />
+        <circle cx={CORE.x} cy={CORE.y} r={92}  fill="none" stroke="rgba(59,130,246,0.065)" strokeWidth={0.75} strokeDasharray="5 8" />
+        <circle cx={CORE.x} cy={CORE.y} r={140} fill="none" stroke="rgba(59,130,246,0.04)"  strokeWidth={0.6} strokeDasharray="3 10" />
+        <circle cx={CORE.x} cy={CORE.y} r={195} fill="none" stroke="rgba(59,130,246,0.025)" strokeWidth={0.5} strokeDasharray="2 12" />
 
-        {/* ── Connection lines: Core → each OLT ── */}
+        {/* ── Connection lines: Core → OLT ── */}
         {olts.map(olt => {
           const pos = OLT_POS[olt.id];
           if (!pos) return null;
@@ -149,13 +193,14 @@ function NetworkTopology() {
           const color    = online ? '#22c55e' : degraded ? '#f59e0b' : '#ef4444';
           return (
             <line
-              key={`ln-${olt.id}`}
+              key={`nm-ln-${olt.id}`}
               x1={CORE.x} y1={CORE.y}
               x2={pos.x}  y2={pos.y}
               stroke={color}
-              strokeWidth={online ? 1.6 : degraded ? 1.2 : 0.7}
-              strokeOpacity={online ? 0.45 : degraded ? 0.35 : 0.18}
-              strokeDasharray={olt.status === 'Offline' ? '5 6' : undefined}
+              strokeWidth={online ? 1.8 : degraded ? 1.4 : 0.8}
+              strokeOpacity={online ? 0.52 : degraded ? 0.40 : 0.18}
+              strokeDasharray={olt.status === 'Offline' ? '6 6' : undefined}
+              strokeLinecap="round"
             />
           );
         })}
@@ -168,14 +213,16 @@ function NetworkTopology() {
             if (!pos) return [];
             const count = Math.min(5, Math.max(2, Math.round(olt.activeOnus / 100)));
             return ONU_OFF.slice(0, count).map(([dx, dy], j) => (
-              <g key={`onu-${olt.id}-${j}`}>
-                {/* thin connector */}
+              <g key={`nm-onu-${olt.id}-${j}`} filter="url(#nm-fb)">
                 <line
                   x1={pos.x} y1={pos.y}
                   x2={pos.x + dx} y2={pos.y + dy}
-                  stroke="#3b82f6" strokeWidth="0.6" strokeOpacity="0.25"
+                  stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.28"
                 />
-                <circle cx={pos.x + dx} cy={pos.y + dy} r={3.5} fill="#3b82f6" fillOpacity={0.7} />
+                {/* ONU dot: glow halo + filled circle */}
+                <circle cx={pos.x + dx} cy={pos.y + dy} r={6}   fill="#3b82f6" fillOpacity={0.12} />
+                <circle cx={pos.x + dx} cy={pos.y + dy} r={4}   fill="#3b82f6" fillOpacity={0.85} />
+                <circle cx={pos.x + dx - 1} cy={pos.y + dy - 1} r={1.2} fill="rgba(255,255,255,0.35)" />
               </g>
             ));
           })}
@@ -187,25 +234,33 @@ function NetworkTopology() {
           const online   = olt.status === 'Online';
           const degraded = olt.status === 'Degraded';
           const color    = online ? '#22c55e' : degraded ? '#f59e0b' : '#ef4444';
-          const gf       = online ? 'gf-green' : degraded ? 'gf-amber' : 'gf-red';
+          const filt     = online ? 'nm-fg' : degraded ? 'nm-fa' : 'nm-fr';
+          const grad     = online ? 'url(#nm-rg-green)' : degraded ? 'url(#nm-rg-amber)' : 'url(#nm-rg-red)';
+          const txtFill  = online ? '#86efac' : degraded ? '#fde68a' : '#fca5a5';
           const label    = olt.name.replace('OLT-', '');
-          const txtFill  = online ? '#86efac' : degraded ? '#fcd34d' : '#fca5a5';
           const above    = pos.y < CORE.y;
           return (
-            <g key={`olt-${olt.id}`} filter={`url(#${gf})`}>
-              {/* outer glow ring */}
-              <circle cx={pos.x} cy={pos.y} r={14} fill={color} fillOpacity={0.1} />
-              {/* inner filled node */}
-              <circle cx={pos.x} cy={pos.y} r={9}  fill={color} fillOpacity={0.25} />
-              <circle cx={pos.x} cy={pos.y} r={6}  fill={color} fillOpacity={0.9} />
+            <g key={`nm-olt-${olt.id}`}>
+              {/* Halo rings */}
+              <circle cx={pos.x} cy={pos.y} r={20} fill={color} fillOpacity={0.05} />
+              <circle cx={pos.x} cy={pos.y} r={13} fill={color} fillOpacity={0.11} />
+              {/* Glowing filled node */}
+              <g filter={`url(#${filt})`}>
+                <circle cx={pos.x} cy={pos.y} r={9}  fill={grad} />
+                <circle cx={pos.x} cy={pos.y} r={9}  fill="none" stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
+              </g>
+              {/* Specular highlight */}
+              <circle cx={pos.x - 2.8} cy={pos.y - 3} r={2.5} fill="rgba(255,255,255,0.22)" />
+              {/* Label */}
               <text
                 x={pos.x}
-                y={pos.y + (above ? -18 : 22)}
+                y={pos.y + (above ? -22 : 26)}
                 textAnchor="middle"
                 fill={txtFill}
-                fontSize="8"
+                fontSize="8.5"
                 fontWeight="600"
-                style={{ pointerEvents: 'none', fontFamily: 'monospace' }}
+                letterSpacing="0.4"
+                style={{ pointerEvents: 'none', fontFamily: 'ui-monospace, monospace' }}
               >
                 {label}
               </text>
@@ -213,77 +268,80 @@ function NetworkTopology() {
           );
         })}
 
-        {/* ── Cluster location labels ── */}
+        {/* ── Cluster region labels ── */}
         {CLUSTER_LABELS.map(cl => (
           <text
             key={cl.label}
             x={cl.x}
             y={cl.y}
             textAnchor="middle"
-            fill="rgba(148,163,184,0.5)"
+            fill="rgba(148,163,184,0.38)"
             fontSize="7"
             fontWeight="500"
-            letterSpacing="0.04em"
-            style={{ pointerEvents: 'none', textTransform: 'uppercase' }}
+            letterSpacing="1.2"
+            style={{ pointerEvents: 'none' }}
           >
             {cl.label.toUpperCase()}
           </text>
         ))}
 
-        {/* ── Core node ── */}
-        <g filter="url(#gf-core)">
-          <circle cx={CORE.x} cy={CORE.y} r={32} fill="rgba(59,130,246,0.1)" />
-          <circle cx={CORE.x} cy={CORE.y} r={20} fill="rgba(59,130,246,0.22)" />
-          <circle cx={CORE.x} cy={CORE.y} r={12} fill="#3b82f6" fillOpacity={0.9} />
+        {/* ── Core node — rendered last (on top of all lines/ONUs) ── */}
+        <g filter="url(#nm-fc)">
+          <circle cx={CORE.x} cy={CORE.y} r={44} fill="rgba(59,130,246,0.08)" />
+          <circle cx={CORE.x} cy={CORE.y} r={30} fill="rgba(59,130,246,0.18)" />
+          <circle cx={CORE.x} cy={CORE.y} r={18} fill="url(#nm-rg-core)" />
+          <circle cx={CORE.x} cy={CORE.y} r={18} fill="none" stroke="rgba(147,197,253,0.55)" strokeWidth="1.3" />
         </g>
-        {/* "Dhaka" label inside core */}
+        {/* Specular highlight on core */}
+        <circle cx={CORE.x - 5} cy={CORE.y - 6} r={5.5} fill="rgba(255,255,255,0.2)" />
+        {/* "Dhaka Core" text */}
         <text
           x={CORE.x}
           y={CORE.y + 1}
           textAnchor="middle"
           dominantBaseline="middle"
           fill="#ffffff"
-          fontSize="9"
-          fontWeight="700"
+          fontSize="8.5"
+          fontWeight="800"
           letterSpacing="0.5"
           style={{ pointerEvents: 'none' }}
         >
-          Dhaka
+          Dhaka Core
         </text>
-        {/* subtitle below core */}
+        {/* "Network Core" subtitle below node */}
         <text
           x={CORE.x}
-          y={CORE.y + 42}
+          y={CORE.y + 50}
           textAnchor="middle"
-          fill="rgba(147,197,253,0.7)"
-          fontSize="8"
+          fill="rgba(147,197,253,0.55)"
+          fontSize="7.5"
           fontWeight="500"
+          letterSpacing="0.8"
           style={{ pointerEvents: 'none' }}
         >
-          Network Core
+          NETWORK CORE
         </text>
       </svg>
 
       {/* ── Legend ── */}
-      <div className="absolute bottom-3 left-3 flex items-center gap-3 bg-card/85 backdrop-blur-sm rounded-lg border border-border/40 px-3 py-1.5">
-        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />OLT Online
-        </span>
-        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />ONU
-        </span>
-        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Warning
-        </span>
-        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-full bg-red-500" />Offline
-        </span>
+      <div className="absolute bottom-3 left-3 flex items-center gap-3 rounded-lg border border-white/10 bg-black/45 backdrop-blur-md px-3 py-1.5">
+        <LegendDot color="#22c55e" glow  label="OLT Online" />
+        <LegendDot color="#3b82f6"       label="ONU" />
+        <LegendDot color="#f59e0b"       label="Warning" />
+        <LegendDot color="#ef4444"       label="Offline" />
       </div>
 
-      {/* ── Zoom buttons ── */}
+      {/* ── Zoom controls ── */}
       <div className="absolute bottom-3 right-3 flex flex-col gap-1">
-        <button className="h-7 w-7 rounded-lg border border-border/60 bg-card/85 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 flex items-center justify-center text-base font-bold transition-colors" aria-label="Zoom in">+</button>
-        <button className="h-7 w-7 rounded-lg border border-border/60 bg-card/85 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 flex items-center justify-center text-base font-bold transition-colors" aria-label="Zoom out">−</button>
+        {(['Zoom in', '+'] as const).map((_, i) => (
+          <button
+            key={i}
+            aria-label={i === 0 ? 'Zoom in' : 'Zoom out'}
+            className="h-8 w-8 rounded-lg border border-white/10 bg-black/45 backdrop-blur-md text-slate-300 hover:text-white hover:bg-white/12 flex items-center justify-center text-base font-bold transition-all"
+          >
+            {i === 0 ? '+' : '−'}
+          </button>
+        ))}
       </div>
     </div>
   );
