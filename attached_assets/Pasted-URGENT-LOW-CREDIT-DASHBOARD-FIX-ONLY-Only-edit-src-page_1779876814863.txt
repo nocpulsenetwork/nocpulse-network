@@ -1,0 +1,75 @@
+URGENT LOW-CREDIT DASHBOARD FIX ONLY.
+
+Only edit:
+src/pages/Dashboard.tsx
+
+Do NOT edit any other page/file.
+Do NOT change ONU Details, ONU Management, OLT pages, Alarm, Settings, routes, backend, package.json, theme system, search, sidebar.
+
+Goal:
+Make Dashboard match my provided reference screenshot style as close as possible.
+Current dashboard is NOT correct. Replace the current dashboard layout with the screenshot-style dashboard.
+
+Important:
+- Keep CPU low.
+- No heavy animations.
+- No new dependencies.
+- No backend calls.
+- Use existing mock/static data.
+- Day/Night toggle must NOT appear on Dashboard. Theme only controlled from Settings.
+- Must work in both dark and light mode.
+- No horizontal overflow.
+- No TypeScript errors.
+
+Dashboard must look like reference:
+1. Top header area:
+- Dashboard title
+- subtitle: Real-time network monitoring and management
+- right filters: All Sites, Last 5 Minutes, Refresh button
+
+2. KPI cards row must include:
+- Total OLT
+- Total ONU
+- Total Clients
+- Total Alarms
+- Offline OLT
+- Offline ONU
+- Uptime
+
+Add Offline OLT and Offline ONU as professional compact cards.
+Use red/amber accent, but not ugly.
+They must fit nicely with other KPI cards.
+
+3. Main layout must include:
+- Large Network Map card on left
+- Fiber Overview card
+- Device Health card
+- Recent Alarms card on right
+- Top OLT by Bandwidth card
+- System Information card
+
+4. Bottom layout:
+- Bandwidth Usage card
+- ONU Status card
+- Top Clients card
+
+5. Design style:
+- Same dark premium NOC style as screenshot
+- Compact cards
+- rounded corners
+- subtle borders
+- clear colored icons
+- good spacing
+- professional ISP dashboard look
+- also readable in light mode
+
+6. Do NOT make dashboard like current OLT grid/list.
+Do NOT show many small OLT cards.
+Do NOT make the page too long.
+Do NOT add unnecessary sections.
+
+Final:
+Dashboard should look like the screenshot dashboard, not like current page.
+Only Dashboard changed.
+App must run without red overlay.
+TypeScript errors must be 0.
