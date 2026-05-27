@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import {
   Search,
   Bell,
@@ -252,6 +253,8 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
             <Input
               ref={inputRef}
+              id="global-search"
+              name="global-search"
               type="text"
               placeholder="Search devices, IPs, VLAN..."
               value={searchQuery}
@@ -273,10 +276,10 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
             )}
           </div>
 
-          {/* ── Dropdown (fixed, position computed from input rect) ──── */}
-          {showDropdown && (
+          {/* ── Dropdown — rendered into document.body via portal ─────── */}
+          {showDropdown && createPortal(
             <div
-              className="fixed z-[9999] bg-popover border border-border/80 rounded-xl shadow-2xl overflow-hidden"
+              className="fixed z-[99999] bg-popover border border-border/80 rounded-xl shadow-2xl overflow-hidden"
               style={{
                 top: dropPos.top,
                 right: dropPos.right,
@@ -357,7 +360,7 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
                 </div>
               )}
             </div>
-          )}
+          , document.body)}
         </div>
 
         {/* ── Bell / Notifications ────────────────────────────────────── */}
