@@ -3,6 +3,7 @@ import { MetricCard } from '@/components/MetricCard';
 import {
   Server, Cpu, AlertTriangle, Shield, Users, RefreshCw,
   MapPin, ChevronDown, Clock, WifiOff, ServerCrash, Signal,
+  AlertCircle, Info as InfoIcon, ChevronRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -59,10 +60,10 @@ const CLUSTER_LABELS = [
 
 /* ── Alarm severity map ──────────────────────────────────────────────── */
 const SEV = {
-  Critical: { dot: 'bg-red-500',   border: 'border-l-red-500',   badge: 'bg-red-500/10 text-red-400 border-red-500/20',   pulse: true  },
-  Major:    { dot: 'bg-amber-500', border: 'border-l-amber-500', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20', pulse: false },
-  Minor:    { dot: 'bg-blue-500',  border: 'border-l-blue-500',  badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20',  pulse: false },
-  Info:     { dot: 'bg-slate-400', border: 'border-l-slate-400', badge: 'bg-slate-500/10 text-slate-400 border-slate-500/20', pulse: false },
+  Critical: { dot: 'bg-red-500',   border: 'border-l-red-500',   badge: 'bg-red-500/10 text-red-400 border-red-500/30',     iconBg: 'bg-red-500/10',   iconColor: 'text-red-500',   pulse: true  },
+  Major:    { dot: 'bg-amber-500', border: 'border-l-amber-500', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', iconBg: 'bg-amber-500/10', iconColor: 'text-amber-500', pulse: false },
+  Minor:    { dot: 'bg-blue-500',  border: 'border-l-blue-500',  badge: 'bg-blue-500/10 text-blue-400 border-blue-500/30',   iconBg: 'bg-blue-500/10',  iconColor: 'text-blue-500',  pulse: false },
+  Info:     { dot: 'bg-slate-400', border: 'border-l-slate-400', badge: 'bg-slate-500/10 text-slate-400 border-slate-500/30', iconBg: 'bg-slate-500/10', iconColor: 'text-slate-400', pulse: false },
 } as const;
 
 const TT = {
@@ -690,14 +691,14 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* 6 ── Recent Alarms — full-width, bottom of dashboard ───────────── */}
-      <Card className="border-border/60 shadow-sm">
-        <CardHeader className="pb-3 border-b border-border/50 py-3">
+      {/* 6 ── Recent Alarms — full-width, premium clickable rows ─────────── */}
+      <Card className="border-border/60 shadow-sm overflow-hidden">
+        <CardHeader className="py-3 border-b border-border/50 bg-muted/10">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-sm font-semibold">Recent Alarms</CardTitle>
               <CardDescription className="text-xs">
-                {activeAlarms} unacknowledged · latest first · click any row to open device
+                {activeAlarms} unacknowledged · latest first · click any row to view device
               </CardDescription>
             </div>
             <Link href="/alarms" className="text-[11px] font-medium text-primary hover:underline shrink-0">
@@ -707,50 +708,81 @@ export default function Dashboard() {
         </CardHeader>
         <CardContent className="p-0">
           {/* Column headers */}
-          <div className="hidden sm:grid sm:grid-cols-[20px_1fr_auto_auto] gap-x-4 px-5 py-2 border-b border-border/30 bg-muted/20">
+          <div className="hidden sm:grid sm:grid-cols-[36px_1fr_52px_104px_120px] gap-x-3 px-5 py-2 border-b border-border/30 bg-muted/10">
             <span />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Device / Description</span>
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 text-right w-24">Severity</span>
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 text-right w-28">Time</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50">Device / Description</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50 text-center">Type</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50 text-center">Severity</span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/50 text-right">Time</span>
           </div>
-          {recentAlarms.map(alarm => {
-            const sev  = SEV[alarm.severity];
-            const href = alarm.deviceId.startsWith('olt-')
-              ? `/olts/${alarm.deviceId}`
-              : alarm.deviceId.startsWith('onu-')
-              ? `/onus/${alarm.deviceId}`
-              : '/alarms';
-            return (
-              <Link key={alarm.id} href={href} className="block">
-                <div
-                  className={[
-                    'grid grid-cols-[20px_1fr] sm:grid-cols-[20px_1fr_auto_auto] gap-x-4 items-center',
-                    'px-5 py-3.5 border-b border-border/40 border-l-2',
-                    sev.border,
-                    'hover:bg-muted/30 transition-colors cursor-pointer last:border-b-0',
-                    alarm.acknowledged ? 'opacity-55' : '',
-                  ].join(' ')}
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${sev.dot} ${!alarm.acknowledged && sev.pulse ? 'animate-pulse' : ''}`} />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-semibold leading-none">{alarm.deviceName}</span>
-                      {alarm.acknowledged && (
-                        <span className="text-[10px] text-muted-foreground/55 italic">acknowledged</span>
-                      )}
+          <div className="divide-y divide-border/30">
+            {recentAlarms.map(alarm => {
+              const sev    = SEV[alarm.severity];
+              const isOlt  = alarm.deviceId.startsWith('olt-');
+              const isOnu  = alarm.deviceId.startsWith('onu-');
+              const href   = isOlt ? `/olts/${alarm.deviceId}` : isOnu ? `/onus/${alarm.deviceId}` : '/alarms';
+              const SevIcon =
+                alarm.severity === 'Critical' || alarm.severity === 'Major' ? AlertTriangle :
+                alarm.severity === 'Minor' ? AlertCircle : InfoIcon;
+              const deviceType   = isOlt ? 'OLT' : isOnu ? 'ONU' : 'SYS';
+              const deviceTypeCls = isOlt
+                ? 'bg-violet-500/10 text-violet-400 border-violet-500/25'
+                : isOnu
+                ? 'bg-cyan-500/10 text-cyan-400 border-cyan-500/25'
+                : 'bg-slate-500/10 text-slate-400 border-slate-500/25';
+              return (
+                <Link key={alarm.id} href={href} className="group block">
+                  <div className={[
+                    'grid grid-cols-[36px_1fr] sm:grid-cols-[36px_1fr_52px_104px_120px] gap-x-3 items-center',
+                    'px-5 py-3.5 border-l-[3px]', sev.border,
+                    'hover:bg-muted/40 active:bg-muted/60',
+                    'transition-all duration-150 cursor-pointer',
+                    alarm.acknowledged ? 'opacity-60' : '',
+                  ].join(' ')}>
+
+                    {/* Severity icon in tinted square */}
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-lg shrink-0 ${sev.iconBg}`}>
+                      <SevIcon className={`h-4 w-4 ${sev.iconColor} ${!alarm.acknowledged && alarm.severity === 'Critical' ? 'animate-pulse' : ''}`} />
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{alarm.description}</p>
+
+                    {/* Device name + description */}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[13px] font-semibold text-foreground leading-none">{alarm.deviceName}</span>
+                        {alarm.acknowledged && (
+                          <span className="text-[10px] text-muted-foreground/50 italic">acknowledged</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-1">{alarm.description}</p>
+                    </div>
+
+                    {/* Device type badge */}
+                    <div className="hidden sm:flex justify-center">
+                      <span className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[9px] font-bold border tracking-wide w-10 ${deviceTypeCls}`}>
+                        {deviceType}
+                      </span>
+                    </div>
+
+                    {/* Severity badge */}
+                    <div className="hidden sm:flex justify-center">
+                      <span className={`inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-bold border w-20 ${sev.badge}`}>
+                        {alarm.severity}
+                      </span>
+                    </div>
+
+                    {/* Time + hover chevron */}
+                    <div className="hidden sm:flex items-center justify-end gap-1 w-full">
+                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                        {formatDistanceToNow(new Date(alarm.timestamp), { addSuffix: true })}
+                      </span>
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/25 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    </div>
+
                   </div>
-                  <span className={`hidden sm:inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-bold border w-24 ${sev.badge}`}>
-                    {alarm.severity}
-                  </span>
-                  <span className="hidden sm:block text-[11px] text-muted-foreground text-right w-28 whitespace-nowrap">
-                    {formatDistanceToNow(new Date(alarm.timestamp), { addSuffix: true })}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
+                </Link>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
     </div>
