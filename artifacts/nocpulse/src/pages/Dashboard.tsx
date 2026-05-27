@@ -462,13 +462,10 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground mt-0.5">Real-time network monitoring and management</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 bg-card text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
-            <MapPin className="h-3 w-3 shrink-0" /> All Sites <ChevronDown className="h-3 w-3 shrink-0" />
-          </button>
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border/60 bg-card text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors">
-            <Clock className="h-3 w-3 shrink-0" /> Last 5 Minutes <ChevronDown className="h-3 w-3 shrink-0" />
-          </button>
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors">
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
+          >
             <RefreshCw className="h-3 w-3 shrink-0" /> Refresh
           </button>
         </div>
