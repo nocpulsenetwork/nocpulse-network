@@ -54,7 +54,7 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
   /* ── Search results ──────────────────────────────────────────────── */
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (q.length < 2) return [];
+    if (q.length < 1) return [];
 
     const onuResults = onus
       .filter(o =>

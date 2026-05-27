@@ -2,8 +2,7 @@ import { alarms, olts, onus, metrics } from '@/data/mockData';
 import { MetricCard } from '@/components/MetricCard';
 import {
   Server, Cpu, AlertTriangle, Shield, Users, RefreshCw,
-  MapPin, ChevronDown, Clock, WifiOff, ServerCrash,
-  Activity, CheckCircle2, XCircle, Signal,
+  MapPin, ChevronDown, Clock, WifiOff, ServerCrash, Signal,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
@@ -13,7 +12,7 @@ import {
 import { Link } from 'wouter';
 import { formatDistanceToNow } from 'date-fns';
 
-/* ── Static data ─────────────────────────────────────────────────────── */
+/* ── Static mock data ────────────────────────────────────────────────── */
 const BW_DATA = [
   { t: '00:00', dl: 18, ul: 6 }, { t: '02:00', dl: 14, ul: 4 },
   { t: '04:00', dl: 11, ul: 3 }, { t: '06:00', dl: 15, ul: 5 },
@@ -23,35 +22,44 @@ const BW_DATA = [
   { t: '20:00', dl: 44, ul: 17 }, { t: '22:00', dl: 30, ul: 11 },
 ];
 const FIBER_DATA = [
-  { name: 'Active',  value: 124, color: '#22c55e' },
-  { name: 'In Use',  value: 38,  color: '#3b82f6' },
-  { name: 'Spare',   value: 18,  color: '#f59e0b' },
-  { name: 'Faulty',  value: 6,   color: '#ef4444' },
+  { name: 'Active', value: 124, color: '#22c55e' },
+  { name: 'In Use', value: 38,  color: '#3b82f6' },
+  { name: 'Spare',  value: 18,  color: '#f59e0b' },
+  { name: 'Faulty', value: 6,   color: '#ef4444' },
 ];
 const FIBER_TOTAL = 186;
 
-/* ── SVG topology positions (viewBox 560×296) ───────────────────────── */
+/* ── SVG topology — node positions in 580 × 320 viewBox ─────────────── */
 const OLT_POS: Record<string, { x: number; y: number }> = {
-  'olt-01': { x: 398, y: 62 },  // Data Center Alpha
-  'olt-06': { x: 432, y: 82 },  // Data Center Alpha
-  'olt-02': { x: 248, y: 40 },  // North Hub
-  'olt-09': { x: 296, y: 50 },  // North Hub
-  'olt-03': { x: 248, y: 252 }, // South Node
-  'olt-10': { x: 296, y: 260 }, // South Node
-  'olt-04': { x: 456, y: 132 }, // East Hub
-  'olt-11': { x: 464, y: 162 }, // East Hub
-  'olt-05': { x: 368, y: 90 },  // West Node (East-01)
-  'olt-07': { x: 108, y: 68 },  // Metro Exchange
-  'olt-08': { x: 120, y: 228 }, // Suburban Hub 1
+  'olt-01': { x: 430, y: 62 },   // Data Center Alpha
+  'olt-06': { x: 465, y: 86 },   // Data Center Alpha
+  'olt-02': { x: 250, y: 42 },   // North Hub
+  'olt-09': { x: 302, y: 52 },   // North Hub
+  'olt-03': { x: 250, y: 278 },  // South Node
+  'olt-10': { x: 304, y: 288 },  // South Node
+  'olt-04': { x: 494, y: 138 },  // East Hub
+  'olt-11': { x: 502, y: 172 },  // East Hub
+  'olt-05': { x: 374, y: 92 },   // West Node (East-01)
+  'olt-07': { x: 102, y: 68 },   // Metro Exchange
+  'olt-08': { x: 112, y: 248 },  // Suburban Hub 1
 };
-const CORE = { x: 280, y: 148 };
-const ONU_OFF = [
-  [22, -18], [32, 2], [18, 22], [-22, 20], [-28, 2],
-] as const;
+const CORE = { x: 290, y: 165 };
+/* ONU satellite dot offsets around each OLT */
+const ONU_OFF = [[24, -20], [35, 2], [22, 24], [-24, 22], [-30, 2]] as const;
+
+/* Cluster label positions (separate from OLT nodes) */
+const CLUSTER_LABELS = [
+  { label: 'Data Center α', x: 448, y: 44 },
+  { label: 'North Hub',     x: 276, y: 26 },
+  { label: 'South Node',    x: 276, y: 308 },
+  { label: 'East Hub',      x: 498, y: 118 },
+  { label: 'Metro Exch.',   x: 102, y: 50 },
+  { label: 'Sub Hub 1',     x: 112, y: 232 },
+];
 
 /* ── Alarm severity map ──────────────────────────────────────────────── */
 const SEV = {
-  Critical: { dot: 'bg-red-500',   border: 'border-l-red-500',   badge: 'bg-red-500/10 text-red-400 border-red-500/20',   pulse: true },
+  Critical: { dot: 'bg-red-500',   border: 'border-l-red-500',   badge: 'bg-red-500/10 text-red-400 border-red-500/20',   pulse: true  },
   Major:    { dot: 'bg-amber-500', border: 'border-l-amber-500', badge: 'bg-amber-500/10 text-amber-400 border-amber-500/20', pulse: false },
   Minor:    { dot: 'bg-blue-500',  border: 'border-l-blue-500',  badge: 'bg-blue-500/10 text-blue-400 border-blue-500/20',  pulse: false },
   Info:     { dot: 'bg-slate-400', border: 'border-l-slate-400', badge: 'bg-slate-500/10 text-slate-400 border-slate-500/20', pulse: false },
@@ -63,151 +71,252 @@ const TT = {
   labelStyle:   { color: 'hsl(var(--muted-foreground))', fontSize: '10px' },
 };
 
-/* ── SVG Network Topology ────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════
+   SVG Network Topology  ─  premium NOC map style
+══════════════════════════════════════════════════════════════════════ */
 function NetworkTopology() {
   return (
-    <div className="relative w-full overflow-hidden rounded-b-xl" style={{ height: 296 }}>
-      {/* bg radial glow */}
-      <div className="absolute inset-0 pointer-events-none" style={{
-        background: 'radial-gradient(ellipse 60% 60% at 50% 50%, rgba(59,130,246,0.07) 0%, transparent 70%)',
-      }} />
-      {/* dot grid */}
-      <svg className="absolute inset-0 w-full h-full opacity-[0.15] pointer-events-none" aria-hidden="true">
+    <div className="relative w-full overflow-hidden rounded-b-xl" style={{ height: 320 }}>
+
+      {/* ── Dark-mode premium background gradient ── */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: [
+            'radial-gradient(ellipse 55% 55% at 50% 52%, rgba(59,130,246,0.09) 0%, transparent 68%)',
+            'radial-gradient(ellipse 80% 50% at 50% 50%, rgba(15,23,42,0.0) 0%, transparent 100%)',
+          ].join(','),
+        }}
+      />
+
+      {/* ── Dot-grid overlay ── */}
+      <svg
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ opacity: 0.08 }}
+        aria-hidden="true"
+      >
         <defs>
-          <pattern id="dots" x="0" y="0" width="22" height="22" patternUnits="userSpaceOnUse">
-            <circle cx="1" cy="1" r="0.7" fill="currentColor" className="text-foreground" />
+          <pattern id="topo-dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="currentColor" className="text-foreground" />
           </pattern>
         </defs>
-        <rect width="100%" height="100%" fill="url(#dots)" />
+        <rect width="100%" height="100%" fill="url(#topo-dots)" />
       </svg>
 
-      {/* main SVG topology */}
-      <svg viewBox="0 0 560 296" className="relative w-full h-full" preserveAspectRatio="xMidYMid meet">
+      {/* ── Main topology SVG ── */}
+      <svg
+        viewBox="0 0 580 320"
+        className="relative w-full h-full"
+        preserveAspectRatio="xMidYMid meet"
+      >
         <defs>
-          <filter id="fg">
+          {/* Glow filters */}
+          <filter id="gf-green" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="4" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="gf-amber" x="-60%" y="-60%" width="220%" height="220%">
             <feGaussianBlur stdDeviation="3.5" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="fr">
-            <feGaussianBlur stdDeviation="2.5" result="b" />
+          <filter id="gf-red" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="3" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="fa">
-            <feGaussianBlur stdDeviation="2.5" result="b" />
+          <filter id="gf-core" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="7" result="b" />
             <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="fc">
-            <feGaussianBlur stdDeviation="5" result="b" />
-            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
+          {/* Gradient for connection lines */}
+          <linearGradient id="lg-green" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%"   stopColor="#22c55e" stopOpacity="0.15" />
+            <stop offset="50%"  stopColor="#22c55e" stopOpacity="0.5"  />
+            <stop offset="100%" stopColor="#22c55e" stopOpacity="0.15" />
+          </linearGradient>
         </defs>
 
-        {/* connection lines: core → each OLT */}
+        {/* ── Core concentric rings (visual depth) ── */}
+        <circle cx={CORE.x} cy={CORE.y} r={52} fill="none" stroke="rgba(59,130,246,0.06)" strokeWidth={1} />
+        <circle cx={CORE.x} cy={CORE.y} r={85} fill="none" stroke="rgba(59,130,246,0.04)" strokeWidth={1} strokeDasharray="6 6" />
+        <circle cx={CORE.x} cy={CORE.y} r={130} fill="none" stroke="rgba(59,130,246,0.03)" strokeWidth={0.8} strokeDasharray="4 8" />
+
+        {/* ── Connection lines: Core → each OLT ── */}
         {olts.map(olt => {
           const pos = OLT_POS[olt.id];
           if (!pos) return null;
-          const stroke = olt.status === 'Online' ? '#22c55e' : olt.status === 'Degraded' ? '#f59e0b' : '#ef4444';
-          const opacity = olt.status === 'Offline' ? 0.18 : 0.35;
+          const online   = olt.status === 'Online';
+          const degraded = olt.status === 'Degraded';
+          const color    = online ? '#22c55e' : degraded ? '#f59e0b' : '#ef4444';
           return (
             <line
               key={`ln-${olt.id}`}
-              x1={CORE.x} y1={CORE.y} x2={pos.x} y2={pos.y}
-              stroke={stroke}
-              strokeWidth={olt.status === 'Offline' ? 0.6 : 1.2}
-              strokeOpacity={opacity}
-              strokeDasharray={olt.status === 'Offline' ? '4 5' : undefined}
+              x1={CORE.x} y1={CORE.y}
+              x2={pos.x}  y2={pos.y}
+              stroke={color}
+              strokeWidth={online ? 1.6 : degraded ? 1.2 : 0.7}
+              strokeOpacity={online ? 0.45 : degraded ? 0.35 : 0.18}
+              strokeDasharray={olt.status === 'Offline' ? '5 6' : undefined}
             />
           );
         })}
 
-        {/* ONU dots around each online OLT */}
-        {olts.filter(o => o.status !== 'Offline').flatMap(olt => {
-          const pos = OLT_POS[olt.id];
-          if (!pos) return [];
-          const count = Math.min(5, Math.max(2, Math.round(olt.activeOnus / 110)));
-          return ONU_OFF.slice(0, count).map(([dx, dy], j) => (
-            <circle key={`onu-${olt.id}-${j}`} cx={pos.x + dx} cy={pos.y + dy} r={2.8} fill="#3b82f6" fillOpacity={0.65} />
-          ));
-        })}
+        {/* ── ONU satellite dots ── */}
+        {olts
+          .filter(o => o.status !== 'Offline')
+          .flatMap(olt => {
+            const pos = OLT_POS[olt.id];
+            if (!pos) return [];
+            const count = Math.min(5, Math.max(2, Math.round(olt.activeOnus / 100)));
+            return ONU_OFF.slice(0, count).map(([dx, dy], j) => (
+              <g key={`onu-${olt.id}-${j}`}>
+                {/* thin connector */}
+                <line
+                  x1={pos.x} y1={pos.y}
+                  x2={pos.x + dx} y2={pos.y + dy}
+                  stroke="#3b82f6" strokeWidth="0.6" strokeOpacity="0.25"
+                />
+                <circle cx={pos.x + dx} cy={pos.y + dy} r={3.5} fill="#3b82f6" fillOpacity={0.7} />
+              </g>
+            ));
+          })}
 
-        {/* OLT nodes */}
+        {/* ── OLT nodes ── */}
         {olts.map(olt => {
           const pos = OLT_POS[olt.id];
           if (!pos) return null;
-          const color  = olt.status === 'Online' ? '#22c55e' : olt.status === 'Degraded' ? '#f59e0b' : '#ef4444';
-          const filter = olt.status === 'Online' ? 'fg' : olt.status === 'Degraded' ? 'fa' : 'fr';
-          const label  = olt.name.replace('OLT-', '');
-          const txtFill = olt.status === 'Online' ? '#86efac' : olt.status === 'Degraded' ? '#fcd34d' : '#fca5a5';
-          const above  = pos.y < CORE.y;
+          const online   = olt.status === 'Online';
+          const degraded = olt.status === 'Degraded';
+          const color    = online ? '#22c55e' : degraded ? '#f59e0b' : '#ef4444';
+          const gf       = online ? 'gf-green' : degraded ? 'gf-amber' : 'gf-red';
+          const label    = olt.name.replace('OLT-', '');
+          const txtFill  = online ? '#86efac' : degraded ? '#fcd34d' : '#fca5a5';
+          const above    = pos.y < CORE.y;
           return (
-            <g key={`olt-${olt.id}`} filter={`url(#${filter})`}>
-              <circle cx={pos.x} cy={pos.y} r={8}  fill={color} fillOpacity={0.18} />
-              <circle cx={pos.x} cy={pos.y} r={5}  fill={color} fillOpacity={0.9} />
-              <text x={pos.x} y={pos.y + (above ? -13 : 18)} textAnchor="middle" fill={txtFill} fontSize="7.5" fontWeight="500" style={{ pointerEvents: 'none' }}>
+            <g key={`olt-${olt.id}`} filter={`url(#${gf})`}>
+              {/* outer glow ring */}
+              <circle cx={pos.x} cy={pos.y} r={14} fill={color} fillOpacity={0.1} />
+              {/* inner filled node */}
+              <circle cx={pos.x} cy={pos.y} r={9}  fill={color} fillOpacity={0.25} />
+              <circle cx={pos.x} cy={pos.y} r={6}  fill={color} fillOpacity={0.9} />
+              <text
+                x={pos.x}
+                y={pos.y + (above ? -18 : 22)}
+                textAnchor="middle"
+                fill={txtFill}
+                fontSize="8"
+                fontWeight="600"
+                style={{ pointerEvents: 'none', fontFamily: 'monospace' }}
+              >
                 {label}
               </text>
             </g>
           );
         })}
 
-        {/* Core node */}
-        <g filter="url(#fc)">
-          <circle cx={CORE.x} cy={CORE.y} r={22} fill="rgba(59,130,246,0.12)" />
-          <circle cx={CORE.x} cy={CORE.y} r={14} fill="rgba(59,130,246,0.25)" />
-          <circle cx={CORE.x} cy={CORE.y} r={8}  fill="#3b82f6" fillOpacity={0.9} />
+        {/* ── Cluster location labels ── */}
+        {CLUSTER_LABELS.map(cl => (
+          <text
+            key={cl.label}
+            x={cl.x}
+            y={cl.y}
+            textAnchor="middle"
+            fill="rgba(148,163,184,0.5)"
+            fontSize="7"
+            fontWeight="500"
+            letterSpacing="0.04em"
+            style={{ pointerEvents: 'none', textTransform: 'uppercase' }}
+          >
+            {cl.label.toUpperCase()}
+          </text>
+        ))}
+
+        {/* ── Core node ── */}
+        <g filter="url(#gf-core)">
+          <circle cx={CORE.x} cy={CORE.y} r={32} fill="rgba(59,130,246,0.1)" />
+          <circle cx={CORE.x} cy={CORE.y} r={20} fill="rgba(59,130,246,0.22)" />
+          <circle cx={CORE.x} cy={CORE.y} r={12} fill="#3b82f6" fillOpacity={0.9} />
         </g>
-        <text x={CORE.x} y={CORE.y + 30} textAnchor="middle" fill="#93c5fd" fontSize="9.5" fontWeight="600" style={{ pointerEvents: 'none' }}>
+        {/* "Dhaka" label inside core */}
+        <text
+          x={CORE.x}
+          y={CORE.y + 1}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          fill="#ffffff"
+          fontSize="9"
+          fontWeight="700"
+          letterSpacing="0.5"
+          style={{ pointerEvents: 'none' }}
+        >
+          Dhaka
+        </text>
+        {/* subtitle below core */}
+        <text
+          x={CORE.x}
+          y={CORE.y + 42}
+          textAnchor="middle"
+          fill="rgba(147,197,253,0.7)"
+          fontSize="8"
+          fontWeight="500"
+          style={{ pointerEvents: 'none' }}
+        >
           Network Core
         </text>
       </svg>
 
-      {/* Legend */}
-      <div className="absolute bottom-2.5 left-3 flex items-center gap-3 bg-card/80 backdrop-blur-sm rounded border border-border/40 px-2.5 py-1.5 text-[9px] font-semibold text-muted-foreground">
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_5px_#22c55e]" />OLT Online</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-blue-500" />ONU</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" />Warning</span>
-        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-500" />Offline</span>
+      {/* ── Legend ── */}
+      <div className="absolute bottom-3 left-3 flex items-center gap-3 bg-card/85 backdrop-blur-sm rounded-lg border border-border/40 px-3 py-1.5">
+        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
+          <span className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_6px_#22c55e]" />OLT Online
+        </span>
+        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
+          <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />ONU
+        </span>
+        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Warning
+        </span>
+        <span className="flex items-center gap-1.5 text-[9px] font-semibold text-muted-foreground">
+          <span className="h-2.5 w-2.5 rounded-full bg-red-500" />Offline
+        </span>
       </div>
 
-      {/* Zoom buttons */}
-      <div className="absolute bottom-2.5 right-3 flex flex-col gap-1">
-        <button className="h-6 w-6 rounded border border-border/60 bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 flex items-center justify-center text-sm font-bold transition-colors" aria-label="Zoom in">+</button>
-        <button className="h-6 w-6 rounded border border-border/60 bg-card/80 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 flex items-center justify-center text-sm font-bold transition-colors" aria-label="Zoom out">−</button>
+      {/* ── Zoom buttons ── */}
+      <div className="absolute bottom-3 right-3 flex flex-col gap-1">
+        <button className="h-7 w-7 rounded-lg border border-border/60 bg-card/85 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 flex items-center justify-center text-base font-bold transition-colors" aria-label="Zoom in">+</button>
+        <button className="h-7 w-7 rounded-lg border border-border/60 bg-card/85 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted/60 flex items-center justify-center text-base font-bold transition-colors" aria-label="Zoom out">−</button>
       </div>
     </div>
   );
 }
 
-/* ── Donut card helper ───────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════════════
+   Reusable Donut Card
+══════════════════════════════════════════════════════════════════════ */
 interface DonutSegment { name: string; value: number; color: string }
 interface DonutCardProps {
-  title: string;
-  desc: string;
-  data: DonutSegment[];
-  centerVal: string;
-  centerSub: string;
-  total: number;
+  title: string; desc: string;
+  data: DonutSegment[]; centerVal: string; centerSub: string; total: number;
 }
 function DonutCard({ title, desc, data, centerVal, centerSub, total }: DonutCardProps) {
   return (
     <Card className="border-border/60 shadow-sm flex flex-col h-full">
-      <CardHeader className="pb-2 border-b border-border/50 shrink-0 py-3 px-4">
+      <CardHeader className="pb-2 border-b border-border/50 py-3 px-4 shrink-0">
         <CardTitle className="text-sm font-semibold">{title}</CardTitle>
         <CardDescription className="text-xs">{desc}</CardDescription>
       </CardHeader>
-      <CardContent className="p-4 flex-1 flex flex-col justify-between">
+      <CardContent className="p-4 flex-1 flex flex-col justify-center">
         <div className="flex items-center gap-3">
-          <div className="relative shrink-0" style={{ width: 90, height: 90 }}>
+          <div className="relative shrink-0" style={{ width: 88, height: 88 }}>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={data} cx="50%" cy="50%" innerRadius={28} outerRadius={43} dataKey="value" strokeWidth={0}>
+                <Pie data={data} cx="50%" cy="50%" innerRadius={27} outerRadius={42} dataKey="value" strokeWidth={0}>
                   {data.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
               <span className="text-sm font-bold leading-none">{centerVal}</span>
-              <span className="text-[9px] text-muted-foreground text-center leading-tight mt-0.5">{centerSub}</span>
+              <span className="text-[9px] text-muted-foreground text-center leading-tight mt-0.5 whitespace-pre-line">{centerSub}</span>
             </div>
           </div>
           <div className="flex-1 space-y-1.5 min-w-0">
@@ -220,7 +329,7 @@ function DonutCard({ title, desc, data, centerVal, centerSub, total }: DonutCard
                       <span className="h-2 w-2 rounded-full shrink-0" style={{ background: d.color }} />
                       <span className="text-[10px] text-muted-foreground truncate">{d.name}</span>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1 shrink-0 ml-1">
                       <span className="text-[10px] font-bold font-mono">{d.value}</span>
                       <span className="text-[9px] text-muted-foreground/60 w-7 text-right">{pct}%</span>
                     </div>
@@ -238,9 +347,9 @@ function DonutCard({ title, desc, data, centerVal, centerSub, total }: DonutCard
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
+/* ══════════════════════════════════════════════════════════════════════
    DASHBOARD PAGE
-═══════════════════════════════════════════════════════════════════════ */
+══════════════════════════════════════════════════════════════════════ */
 export default function Dashboard() {
   const {
     totalOlts, totalOnus, onlineOnus, offlineOnus,
@@ -252,45 +361,42 @@ export default function Dashboard() {
   const degradedOnus = onus.filter(o => o.status === 'Degraded').length;
   const majorAlarms  = alarms.filter(a => !a.acknowledged && a.severity === 'Major').length;
 
-  /* Device Health from real OLT data */
-  const healthyOlts  = olts.filter(o => o.status === 'Online' && o.cpu < 80 && o.memory < 80).length;
-  const warningOlts  = olts.filter(o => o.status === 'Degraded' || (o.status === 'Online' && (o.cpu >= 80 || o.memory >= 80))).length;
-  const healthPct    = Math.round((healthyOlts / totalOlts) * 100);
-  const deviceData   = [
+  const healthyOlts = olts.filter(o => o.status === 'Online' && o.cpu < 80 && o.memory < 80).length;
+  const warningOlts = olts.filter(o => o.status === 'Degraded' || (o.status === 'Online' && (o.cpu >= 80 || o.memory >= 80))).length;
+  const healthPct   = Math.round((healthyOlts / totalOlts) * 100);
+
+  const deviceData = [
     { name: 'Healthy Devices', value: healthyOlts, color: '#22c55e' },
     { name: 'Warning Devices', value: warningOlts,  color: '#f59e0b' },
     { name: 'Offline Devices', value: offlineOlts,  color: '#ef4444' },
   ];
-
-  /* ONU status donut */
   const onuData = [
     { name: 'Online',   value: onlineOnus,  color: '#22c55e' },
     { name: 'Degraded', value: degradedOnus, color: '#f59e0b' },
     { name: 'Offline',  value: offlineOnus,  color: '#ef4444' },
   ];
 
-  /* Recent alarms */
+  /* Sort alarms newest first, show all unacknowledged + some acknowledged */
   const recentAlarms = [...alarms]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 8);
+    .slice(0, 10);
 
-  /* Top OLT bar */
   const oltBar = [...olts]
     .filter(o => o.activeOnus > 0)
     .sort((a, b) => b.activeOnus - a.activeOnus)
     .slice(0, 6)
     .map(o => ({ name: o.name.replace('OLT-', ''), onus: o.activeOnus }));
 
-  /* Top clients */
   const topClients = [...onus]
     .filter(o => o.status === 'Online')
     .sort((a, b) => b.signalLevel - a.signalLevel)
     .slice(0, 7);
 
+  /* ── Render ───────────────────────────────────────────────────────── */
   return (
     <div className="space-y-4 pb-6">
 
-      {/* ── 1. Header ──────────────────────────────────────────────────── */}
+      {/* 1 ── Page header ──────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
@@ -309,21 +415,20 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── 2. KPI Cards ─────────────────────────────────────────────────
-           Order: Total OLTs · Total ONUs · Total Clients ·
-                  Offline OLTs · Offline ONUs · Active Alarms · Uptime
-      ─────────────────────────────────────────────────────────────────── */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7">
-        <MetricCard title="Total OLTs"    value={totalOlts}    icon={Server}        accentColor="cyan"  description={`${onlineOlts} online · ${degradedOlts} degraded`} href="/olts" />
-        <MetricCard title="Total ONUs"    value={totalOnus}    icon={Cpu}           accentColor="cyan"  description={`${onlineOnus} active connections`}               href="/onus" />
-        <MetricCard title="Total Clients" value={totalOnus}    icon={Users}         accentColor="cyan"  description="Subscriber premises"                              href="/onus" />
-        <MetricCard title="Offline OLTs"  value={offlineOlts}  icon={ServerCrash}   accentColor={offlineOlts  > 0 ? 'red' : 'green'} alert={offlineOlts  > 0} description={offlineOlts  > 0 ? 'Require immediate action' : 'All OLTs online'}  href="/olts" />
-        <MetricCard title="Offline ONUs"  value={offlineOnus}  icon={WifiOff}       accentColor={offlineOnus  > 0 ? 'red' : 'green'} alert={offlineOnus  > 0} description={offlineOnus  > 0 ? 'Disconnected premises'   : 'All ONUs online'}   href="/onus" />
+      {/* 2 ── KPI cards — all equal height via h-full grid ────────────── */}
+      {/* Order: Total OLTs · Total ONUs · Total Clients ·
+                 Offline OLTs · Offline ONUs · Active Alarms · Uptime     */}
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 items-stretch">
+        <MetricCard title="Total OLTs"    value={totalOlts}    icon={Server}        accentColor="cyan"  description={`${onlineOlts} online · ${degradedOlts} degraded`}   href="/olts"   />
+        <MetricCard title="Total ONUs"    value={totalOnus}    icon={Cpu}           accentColor="cyan"  description={`${onlineOnus} active connections`}                   href="/onus"   />
+        <MetricCard title="Total Clients" value={totalOnus}    icon={Users}         accentColor="cyan"  description="Subscriber premises"                                  href="/onus"   />
+        <MetricCard title="Offline OLTs"  value={offlineOlts}  icon={ServerCrash}   accentColor={offlineOlts  > 0 ? 'red' : 'green'} alert={offlineOlts  > 0} description={offlineOlts  > 0 ? 'Require immediate action' : 'All OLTs online'}  href="/olts"   />
+        <MetricCard title="Offline ONUs"  value={offlineOnus}  icon={WifiOff}       accentColor={offlineOnus  > 0 ? 'red' : 'green'} alert={offlineOnus  > 0} description={offlineOnus  > 0 ? 'Disconnected premises'   : 'All ONUs online'}   href="/onus"   />
         <MetricCard title="Active Alarms" value={activeAlarms} icon={AlertTriangle} accentColor={criticalAlarms > 0 ? 'red' : 'amber'} alert={activeAlarms > 0} pulse={criticalAlarms > 0} description={`${criticalAlarms} critical · ${majorAlarms} major`} href="/alarms" />
         <MetricCard title="Uptime"        value={`${networkUptime}%`} icon={Shield} accentColor="green" description="Network SLA target" />
       </div>
 
-      {/* ── 3. Network Map + right column (Fiber + Device Health) ─────── */}
+      {/* 3 ── Network Map + Fiber Overview + Device Health ─────────────── */}
       <div className="grid gap-4 grid-cols-1 xl:grid-cols-12">
 
         {/* Network Map — SVG topology */}
@@ -332,23 +437,23 @@ export default function Dashboard() {
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <CardTitle className="text-sm font-semibold">Network Map</CardTitle>
-                <CardDescription className="text-xs mt-0.5">{olts.length} OLT nodes · live topology</CardDescription>
+                <CardDescription className="text-xs">{olts.length} OLT nodes · live topology view</CardDescription>
               </div>
-              <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-                <span className="px-2 py-0.5 rounded border border-green-500/30 bg-green-500/10 text-green-400 text-[10px]">{onlineOlts} Online</span>
-                <span className="px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[10px]">{degradedOlts} Warning</span>
-                <span className="px-2 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-400 text-[10px]">{offlineOlts} Offline</span>
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="px-2 py-0.5 rounded border border-green-500/30 bg-green-500/10 text-green-400 text-[10px] font-semibold">{onlineOlts} Online</span>
+                <span className="px-2 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-400 text-[10px] font-semibold">{degradedOlts} Warning</span>
+                <span className="px-2 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-400 text-[10px] font-semibold">{offlineOlts} Offline</span>
               </div>
             </div>
           </CardHeader>
           <NetworkTopology />
         </Card>
 
-        {/* Right stacked column */}
+        {/* Fiber Overview + Device Health — stacked in right column */}
         <div className="xl:col-span-5 flex flex-col gap-4">
           <DonutCard
             title="Fiber Overview"
-            desc="Total fiber core usage"
+            desc="Total fiber core usage — 186 cores"
             data={FIBER_DATA}
             centerVal={String(FIBER_TOTAL)}
             centerSub={'Total Fiber\nCores'}
@@ -365,37 +470,39 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── 4. Recent Alarms · Top OLT · System Info ─────────────────── */}
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
+      {/* 4 ── Recent Alarms (wide) + Top OLT + System Info ─────────────── */}
+      {/*      Recent Alarms gets xl:col-span-6 = half the page width      */}
+      <div className="grid gap-4 grid-cols-1 xl:grid-cols-12">
 
-        {/* Recent Alarms */}
-        <Card className="border-border/60 shadow-sm flex flex-col">
-          <CardHeader className="pb-3 border-b border-border/50 shrink-0 py-3">
+        {/* Recent Alarms — wide card, no internal scroll cap */}
+        <Card className="xl:col-span-6 border-border/60 shadow-sm flex flex-col">
+          <CardHeader className="pb-3 border-b border-border/50 py-3 shrink-0">
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-sm font-semibold">Recent Alarms</CardTitle>
-                <CardDescription className="text-xs">{activeAlarms} unacknowledged</CardDescription>
+                <CardDescription className="text-xs">{activeAlarms} unacknowledged · latest first</CardDescription>
               </div>
-              <Link href="/alarms" className="text-[11px] font-medium text-primary hover:underline">View all →</Link>
+              <Link href="/alarms" className="text-[11px] font-medium text-primary hover:underline shrink-0">View all →</Link>
             </div>
           </CardHeader>
-          <CardContent className="p-0 flex-1 overflow-y-auto max-h-[280px]">
+          <CardContent className="p-0">
             {recentAlarms.map(alarm => {
               const sev = SEV[alarm.severity];
               return (
                 <div
                   key={alarm.id}
-                  className={`flex items-start gap-3 px-3 py-2 border-b border-border/40 border-l-2 ${sev.border} hover:bg-muted/30 transition-colors last:border-b-0 ${alarm.acknowledged ? 'opacity-50' : ''}`}
+                  className={`flex items-start gap-3 px-4 py-3 border-b border-border/40 border-l-2 ${sev.border} hover:bg-muted/30 transition-colors last:border-b-0 ${alarm.acknowledged ? 'opacity-50' : ''}`}
                 >
-                  <span className={`mt-1.5 h-1.5 w-1.5 rounded-full shrink-0 ${sev.dot} ${!alarm.acknowledged && sev.pulse ? 'animate-pulse' : ''}`} />
+                  <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${sev.dot} ${!alarm.acknowledged && sev.pulse ? 'animate-pulse' : ''}`} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-[11px] font-semibold truncate">{alarm.deviceName}</span>
-                      <span className={`inline-flex px-1 py-0.5 rounded text-[9px] font-bold border shrink-0 ${sev.badge}`}>{alarm.severity}</span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-semibold">{alarm.deviceName}</span>
+                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border ${sev.badge}`}>{alarm.severity}</span>
+                      {alarm.acknowledged && <span className="text-[9px] text-muted-foreground/60 italic">acknowledged</span>}
                     </div>
-                    <p className="text-[10px] text-muted-foreground truncate mt-0.5">{alarm.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{alarm.description}</p>
                   </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5">
+                  <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5 whitespace-nowrap">
                     {formatDistanceToNow(new Date(alarm.timestamp), { addSuffix: true })}
                   </span>
                 </div>
@@ -404,67 +511,71 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Top OLT by Bandwidth */}
-        <Card className="border-border/60 shadow-sm flex flex-col">
-          <CardHeader className="pb-2 border-b border-border/50 shrink-0 py-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-sm font-semibold">Top OLT by Bandwidth</CardTitle>
-                <CardDescription className="text-xs">Active subscribers per node</CardDescription>
-              </div>
-              <Link href="/olts" className="text-[11px] font-medium text-primary hover:underline">All →</Link>
-            </div>
-          </CardHeader>
-          <CardContent className="flex-1 pt-3 pr-2 pb-2" style={{ minHeight: 200 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={oltBar} layout="vertical" margin={{ top: 0, right: 8, left: -12, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.4} />
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
-                <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} width={62} />
-                <Tooltip {...TT} />
-                <Bar dataKey="onus" name="Active ONUs" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} maxBarSize={14} fillOpacity={0.85} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+        {/* Right sub-column: Top OLT + System Info stacked */}
+        <div className="xl:col-span-6 grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 content-start">
 
-        {/* System Information */}
-        <Card className="border-border/60 shadow-sm">
-          <CardHeader className="pb-3 border-b border-border/50 py-3">
-            <CardTitle className="text-sm font-semibold">System Information</CardTitle>
-            <CardDescription className="text-xs">Platform operational status</CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 space-y-2.5">
-            {[
-              { label: 'Platform',        value: 'NOCpulse v1.0',                color: '' },
-              { label: 'Network SLA',     value: `${networkUptime}%`,            color: 'text-green-400' },
-              { label: 'OLT Online',      value: `${onlineOlts} / ${totalOlts}`, color: onlineOlts === totalOlts ? 'text-green-400' : 'text-amber-400' },
-              { label: 'OLT Degraded',    value: String(degradedOlts),           color: degradedOlts > 0 ? 'text-amber-400' : 'text-green-400' },
-              { label: 'OLT Offline',     value: String(offlineOlts),            color: offlineOlts  > 0 ? 'text-red-400'   : 'text-green-400' },
-              { label: 'ONU Online',      value: `${onlineOnus} / ${totalOnus}`, color: offlineOnus  === 0 ? 'text-green-400' : 'text-amber-400' },
-              { label: 'Active Alarms',   value: String(activeAlarms),           color: activeAlarms === 0 ? 'text-green-400' : criticalAlarms > 0 ? 'text-red-400' : 'text-amber-400' },
-              { label: 'Total Bandwidth', value: metrics.bandwidthUsage,         color: '' },
-              { label: 'Last Sync',       value: 'Just now',                     color: 'text-green-400' },
-            ].map(item => (
-              <div key={item.label} className="flex items-center justify-between gap-2">
-                <span className="text-[11px] text-muted-foreground">{item.label}</span>
-                <span className={`text-[11px] font-semibold font-mono shrink-0 ${item.color}`}>{item.value}</span>
+          {/* Top OLT by Bandwidth */}
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader className="pb-2 border-b border-border/50 py-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-sm font-semibold">Top OLT by Bandwidth</CardTitle>
+                  <CardDescription className="text-xs">Active subscribers per OLT node</CardDescription>
+                </div>
+                <Link href="/olts" className="text-[11px] font-medium text-primary hover:underline">All →</Link>
               </div>
-            ))}
-            <div className="pt-2 border-t border-border/50">
-              <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                <span>OLT Health Score</span>
-                <span className="font-mono font-bold text-green-400">{healthPct}%</span>
+            </CardHeader>
+            <CardContent className="h-[170px] pt-3 pr-2 pb-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={oltBar} layout="vertical" margin={{ top: 0, right: 8, left: -12, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.4} />
+                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} width={65} />
+                  <Tooltip {...TT} />
+                  <Bar dataKey="onus" name="Active ONUs" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} maxBarSize={14} fillOpacity={0.85} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* System Information */}
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader className="pb-3 border-b border-border/50 py-3">
+              <CardTitle className="text-sm font-semibold">System Information</CardTitle>
+              <CardDescription className="text-xs">Platform operational status</CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-2">
+              {[
+                { label: 'Platform',        value: 'NOCpulse v1.0',                color: '' },
+                { label: 'Network SLA',     value: `${networkUptime}%`,            color: 'text-green-400' },
+                { label: 'OLT Online',      value: `${onlineOlts} / ${totalOlts}`, color: onlineOlts === totalOlts ? 'text-green-400' : 'text-amber-400' },
+                { label: 'OLT Degraded',    value: String(degradedOlts),           color: degradedOlts > 0 ? 'text-amber-400' : 'text-green-400' },
+                { label: 'OLT Offline',     value: String(offlineOlts),            color: offlineOlts  > 0 ? 'text-red-400'   : 'text-green-400' },
+                { label: 'ONU Online',      value: `${onlineOnus} / ${totalOnus}`, color: offlineOnus  === 0 ? 'text-green-400' : 'text-amber-400' },
+                { label: 'Active Alarms',   value: String(activeAlarms),           color: activeAlarms === 0 ? 'text-green-400' : criticalAlarms > 0 ? 'text-red-400' : 'text-amber-400' },
+                { label: 'Total Bandwidth', value: metrics.bandwidthUsage,         color: '' },
+                { label: 'Last Sync',       value: 'Just now',                     color: 'text-green-400' },
+              ].map(item => (
+                <div key={item.label} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-muted-foreground">{item.label}</span>
+                  <span className={`text-[11px] font-semibold font-mono shrink-0 ${item.color}`}>{item.value}</span>
+                </div>
+              ))}
+              <div className="pt-1.5 border-t border-border/50">
+                <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                  <span>OLT Health Score</span>
+                  <span className="font-mono font-bold text-green-400">{healthPct}%</span>
+                </div>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-green-600 to-green-400" style={{ width: `${healthPct}%` }} />
+                </div>
               </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-green-600 to-green-400" style={{ width: `${healthPct}%` }} />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {/* ── 5. Bottom: Bandwidth · ONU Status · Top Clients ─────────── */}
+      {/* 5 ── Bottom row: Bandwidth · ONU Status · Top Clients ──────────── */}
       <div className="grid gap-4 grid-cols-1 lg:grid-cols-3">
 
         {/* Bandwidth Usage */}
@@ -505,7 +616,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* ONU Status */}
+        {/* ONU Status donut */}
         <DonutCard
           title="ONU Status"
           desc="Live subscriber connection states"
@@ -529,14 +640,14 @@ export default function Dashboard() {
           <CardContent className="p-0">
             <div className="divide-y divide-border/40">
               {topClients.map((o, idx) => {
-                const good   = o.signalLevel > -22;
-                const warn   = !good && o.signalLevel > -25;
-                const sigC   = good ? 'text-green-400' : warn ? 'text-cyan-400' : 'text-amber-400';
-                const barC   = good ? 'bg-green-500'  : warn ? 'bg-cyan-500'  : 'bg-amber-500';
-                const barW   = Math.max(15, Math.min(100, ((o.signalLevel + 40) / 25) * 100));
+                const good  = o.signalLevel > -22;
+                const warn  = !good && o.signalLevel > -25;
+                const sigC  = good ? 'text-green-400' : warn ? 'text-cyan-400' : 'text-amber-400';
+                const barC  = good ? 'bg-green-500'  : warn ? 'bg-cyan-500'  : 'bg-amber-500';
+                const barW  = Math.max(15, Math.min(100, ((o.signalLevel + 40) / 25) * 100));
                 return (
                   <Link key={o.id} href={`/onus/${o.id}`}>
-                    <div className="px-3 py-2 flex items-center gap-2.5 hover:bg-muted/20 transition-colors cursor-pointer">
+                    <div className="px-3 py-2.5 flex items-center gap-2.5 hover:bg-muted/20 transition-colors cursor-pointer">
                       <span className="text-[10px] font-bold text-muted-foreground/40 w-4 shrink-0">#{idx + 1}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-[11px] font-semibold truncate leading-none">{o.customerName}</p>

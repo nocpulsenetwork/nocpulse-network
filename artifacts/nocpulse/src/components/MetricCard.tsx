@@ -43,34 +43,35 @@ const colorMap = {
   },
 };
 
-export function MetricCard({ 
-  title, 
-  value, 
-  icon: Icon, 
-  accentColor, 
-  description, 
-  pulse, 
+export function MetricCard({
+  title,
+  value,
+  icon: Icon,
+  accentColor,
+  description,
+  pulse,
   alert,
-  href
+  href,
 }: MetricCardProps) {
   const styles = colorMap[accentColor] || colorMap.cyan;
 
+  /* Card content — fixed minimum height so all 7 KPI cards stay equal */
   const cardContent = (
-    <Card className={`overflow-hidden transition-all border-l-4 ${styles.border} ${alert ? styles.alertClasses : ''} ${href ? 'cursor-pointer hover:brightness-110 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] duration-200' : ''}`}>
-      <CardContent className="p-3 sm:p-4 md:p-5">
-        <div className="flex items-center justify-between space-y-0 pb-1.5 sm:pb-2">
+    <Card className={`h-full overflow-hidden transition-all border-l-4 ${styles.border} ${alert ? styles.alertClasses : ''} ${href ? 'cursor-pointer hover:brightness-110 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] duration-200' : ''}`}>
+      <CardContent className="p-3 sm:p-4 flex flex-col justify-between h-full">
+        {/* Top row: title + icon */}
+        <div className="flex items-start justify-between gap-2">
           <p className="text-xs sm:text-sm font-medium text-muted-foreground tracking-tight leading-tight">{title}</p>
           <div className={`p-1.5 sm:p-2 rounded-lg shrink-0 ${styles.bg} ${styles.text} ${pulse ? 'animate-pulse' : ''}`}>
             <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
         </div>
-        <div className="flex flex-col mt-1 sm:mt-2">
+        {/* Bottom: value + description */}
+        <div className="flex flex-col mt-2">
           <div className="text-2xl sm:text-3xl font-bold tracking-tight">{value}</div>
-          {description && (
-            <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 sm:mt-1.5 flex items-center leading-tight">
-              {description}
-            </p>
-          )}
+          <p className="text-[10px] sm:text-xs text-muted-foreground mt-1 leading-tight min-h-[2.5em]">
+            {description ?? '\u00a0'}
+          </p>
         </div>
       </CardContent>
     </Card>
@@ -78,7 +79,7 @@ export function MetricCard({
 
   if (href) {
     return (
-      <Link href={href}>
+      <Link href={href} className="block h-full">
         {cardContent}
       </Link>
     );
