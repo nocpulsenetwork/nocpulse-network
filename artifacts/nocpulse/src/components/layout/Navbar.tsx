@@ -1,8 +1,21 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Bell, Menu, User, Settings as SettingsIcon, Crown, LogOut, ShieldCheck, Shield } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Link, useLocation } from 'wouter';
+import { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
+import {
+  Search,
+  Bell,
+  Menu,
+  User,
+  Settings as SettingsIcon,
+  Crown,
+  LogOut,
+  ShieldCheck,
+  Shield,
+  Server,
+  Wifi,
+  X,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Link, useLocation } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,154 +23,192 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { alarms, onus, olts } from '@/data/mockData';
-import { useRole, ROLE_LABELS } from '@/contexts/RoleContext';
+} from "@/components/ui/dropdown-menu";
+import { alarms, onus, olts } from "@/data/mockData";
+import { useRole, ROLE_LABELS } from "@/contexts/RoleContext";
 
 interface NavbarProps {
   onMenuClick?: () => void;
   title?: string;
 }
 
-export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
+export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
   const { role, user } = useRole();
   const roleStyle = ROLE_LABELS[role];
-  const RoleIcon = role === 'super_admin' ? Crown : role === 'admin' ? ShieldCheck : Shield;
+  const RoleIcon =
+    role === "super_admin" ? Crown : role === "admin" ? ShieldCheck : Shield;
+
   const [time, setTime] = useState(new Date());
   const [, navigate] = useLocation();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchOpen, setSearchOpen] = useState(false);
+
+  /* ── Search state ─────────────────────────────────────────────────── */
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
   const [selectedIdx, setSelectedIdx] = useState(-1);
-  const searchRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLInputElement>(null);
+
+  /* Refs for positioning */
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  /* Dropdown pixel coords (fixed position, computed from input rect) */
+  const [dropPos, setDropPos] = useState({ top: 58, right: 16, width: 360 });
+
+  /* Recompute position whenever dropdown opens or window resizes */
+  const updateDropPos = () => {
+    if (!containerRef.current) return;
+    const r = containerRef.current.getBoundingClientRect();
+    setDropPos({
+      top: r.bottom + 6,
+      right: window.innerWidth - r.right,
+      width: Math.max(r.width, 340),
+    });
+  };
+
+  useLayoutEffect(() => {
+    if (isOpen) updateDropPos();
+  }, [isOpen]);
 
   useEffect(() => {
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    if (!isOpen) return;
+    window.addEventListener("resize", updateDropPos);
+    return () => window.removeEventListener("resize", updateDropPos);
+  }, [isOpen]);
 
   /* Close on outside click */
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setSearchOpen(false);
+    const handleClick = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
         setSelectedIdx(-1);
       }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  /* Reset selection when results change */
-  useEffect(() => { setSelectedIdx(-1); }, [searchQuery]);
+  /* Reset keyboard selection when query changes */
+  useEffect(() => {
+    setSelectedIdx(-1);
+  }, [searchQuery]);
 
-  /* ── Search results ──────────────────────────────────────────────── */
+  /* Clock */
+  useEffect(() => {
+    const t = setInterval(() => setTime(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  /* ── Search results ────────────────────────────────────────────────── */
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (q.length < 1) return [];
+    if (!q) return [];
 
     const onuResults = onus
-      .filter(o =>
-        o.onuNo.toLowerCase().includes(q) ||
-        (o.description ?? '').toLowerCase().includes(q) ||
-        o.customerName.toLowerCase().includes(q) ||
-        o.macAddress.toLowerCase().includes(q) ||
-        o.clientMac.toLowerCase().includes(q) ||
-        o.ponPort.toLowerCase().includes(q) ||
-        o.oltPort.toLowerCase().includes(q) ||
-        String(o.vlanId).includes(q)
+      .filter((o) =>
+        [o.onuNo, o.description, o.customerName, o.macAddress,
+         o.clientMac, o.ponPort, o.oltPort, o.status, o.onuType,
+         String(o.vlanId)]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(q),
       )
       .slice(0, 5)
-      .map(o => ({
+      .map((o) => ({
         id: o.id,
-        label: o.customerName || o.description,
-        sub: `ONU · ${o.onuNo} · VLAN ${o.vlanId} · ${o.status}`,
+        label: o.customerName || o.description || o.onuNo,
+        sub: `${o.onuNo} · VLAN ${o.vlanId} · ${o.status}`,
         href: `/onus/${o.id}`,
         status: o.status,
-        kind: 'ONU' as const,
+        kind: "ONU" as const,
       }));
 
     const oltResults = olts
-      .filter(o =>
-        o.name.toLowerCase().includes(q) ||
-        o.ip.toLowerCase().includes(q) ||
-        (o.location ?? '').toLowerCase().includes(q) ||
-        (o.brand ?? '').toLowerCase().includes(q)
+      .filter(
+        (o) =>
+          o.name.toLowerCase().includes(q) ||
+          o.ip.toLowerCase().includes(q) ||
+          (o.location ?? "").toLowerCase().includes(q) ||
+          (o.brand ?? "").toLowerCase().includes(q),
       )
       .slice(0, 3)
-      .map(o => ({
+      .map((o) => ({
         id: o.id,
         label: o.name,
-        sub: `OLT · ${o.ip} · ${o.location} · ${o.status}`,
+        sub: `${o.ip} · ${o.location} · ${o.status}`,
         href: `/olts/${o.id}`,
         status: o.status,
-        kind: 'OLT' as const,
+        kind: "OLT" as const,
       }));
 
     return [...onuResults, ...oltResults].slice(0, 7);
   }, [searchQuery]);
 
-  /* ── Keyboard navigation ─────────────────────────────────────────── */
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!searchOpen || searchResults.length === 0) {
-      if (e.key === 'Escape') { setSearchOpen(false); setSearchQuery(''); setSelectedIdx(-1); }
-      return;
-    }
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSelectedIdx(i => Math.min(i + 1, searchResults.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSelectedIdx(i => Math.max(i - 1, -1));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      const target = selectedIdx >= 0 ? searchResults[selectedIdx] : searchResults[0];
-      if (target) { navigate(target.href); setSearchOpen(false); setSearchQuery(''); setSelectedIdx(-1); }
-    } else if (e.key === 'Escape') {
-      setSearchOpen(false); setSearchQuery(''); setSelectedIdx(-1);
-    }
-  };
+  const showDropdown = isOpen && searchQuery.trim().length >= 1;
 
+  /* ── Keyboard navigation ───────────────────────────────────────────── */
   const commitResult = (href: string) => {
     navigate(href);
-    setSearchOpen(false);
-    setSearchQuery('');
+    setIsOpen(false);
+    setSearchQuery("");
     setSelectedIdx(-1);
     inputRef.current?.blur();
   };
 
-  /* ── Alarm data ──────────────────────────────────────────────────── */
-  const unacknowledgedAlarms = alarms.filter(a => !a.acknowledged);
-  const activeAlarmsCount    = unacknowledgedAlarms.length;
-  const topAlarms            = unacknowledgedAlarms.slice(0, 3);
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      setIsOpen(false);
+      setSearchQuery("");
+      setSelectedIdx(-1);
+      return;
+    }
+    if (!showDropdown) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSelectedIdx((i) => Math.min(i + 1, searchResults.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSelectedIdx((i) => Math.max(i - 1, -1));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const target = selectedIdx >= 0 ? searchResults[selectedIdx] : searchResults[0];
+      if (target) commitResult(target.href);
+    }
+  };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'Critical': return 'border-l-red-500 bg-red-500/10 text-red-500';
-      case 'Major':    return 'border-l-amber-500 bg-amber-500/10 text-amber-500';
-      case 'Minor':    return 'border-l-blue-500 bg-blue-500/10 text-blue-500';
-      default:         return 'border-l-slate-500 bg-slate-500/10 text-slate-500';
-    }
-  };
-  const getSeverityBorder = (severity: string) => {
-    switch (severity) {
-      case 'Critical': return 'border-l-4 border-l-red-500';
-      case 'Major':    return 'border-l-4 border-l-amber-500';
-      case 'Minor':    return 'border-l-4 border-l-blue-500';
-      default:         return 'border-l-4 border-l-slate-500';
-    }
-  };
+  /* ── Alarm helpers ─────────────────────────────────────────────────── */
+  const unacknowledgedAlarms = alarms.filter((a) => !a.acknowledged);
+  const activeAlarmsCount = unacknowledgedAlarms.length;
+  const topAlarms = unacknowledgedAlarms.slice(0, 3);
+
+  const getSeverityColor = (s: string) =>
+    s === "Critical" ? "border-l-red-500 bg-red-500/10 text-red-500"
+    : s === "Major"   ? "border-l-amber-500 bg-amber-500/10 text-amber-500"
+    : s === "Minor"   ? "border-l-blue-500 bg-blue-500/10 text-blue-500"
+    :                   "border-l-slate-500 bg-slate-500/10 text-slate-500";
+
+  const getSeverityBorder = (s: string) =>
+    s === "Critical" ? "border-l-4 border-l-red-500"
+    : s === "Major"  ? "border-l-4 border-l-amber-500"
+    : s === "Minor"  ? "border-l-4 border-l-blue-500"
+    :                  "border-l-4 border-l-slate-500";
 
   const scrollToTop = () => {
-    const m = document.getElementById('nocpulse-main');
-    if (m) m.scrollTo({ top: 0, behavior: 'smooth' });
+    document.getElementById("nocpulse-main")?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const showDropdown = searchOpen && searchQuery.trim().length >= 1;
+  /* Status dot colour for result rows */
+  const statusDot = (status: string) =>
+    status === "Online" ? "bg-green-500" :
+    status === "Offline" ? "bg-red-500" : "bg-amber-500";
 
   return (
-    <header className="flex h-14 items-center gap-3 px-4 sm:px-6 w-full overflow-hidden">
-      <Button size="icon" variant="ghost" className="sm:hidden -ml-2 shrink-0" onClick={onMenuClick}>
+    <header className="flex h-14 items-center gap-3 px-4 sm:px-6 w-full overflow-visible">
+      <Button
+        size="icon"
+        variant="ghost"
+        className="sm:hidden -ml-2 shrink-0"
+        onClick={onMenuClick}
+      >
         <Menu className="h-5 w-5" />
         <span className="sr-only">Toggle Menu</span>
       </Button>
@@ -171,11 +222,14 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
       </h1>
 
       <div className="flex items-center gap-2 md:gap-3 shrink-0">
-
+        {/* Clock */}
         <div className="hidden sm:flex text-xs font-mono text-muted-foreground items-center shrink-0">
-          {time.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })} &middot; {time.toLocaleTimeString()}
+          {time.toLocaleDateString(undefined, { weekday: "short", day: "2-digit", month: "short" })}
+          {" · "}
+          {time.toLocaleTimeString()}
         </div>
 
+        {/* Active incidents pill */}
         <div className="hidden lg:flex items-center shrink-0">
           {activeAlarmsCount > 0 ? (
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20">
@@ -190,88 +244,134 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
           )}
         </div>
 
-        {/* ── Search ──────────────────────────────────────────────────── */}
-        <div ref={searchRef} className="hidden sm:block relative shrink-0 ml-auto">
+        {/* ── Global search ──────────────────────────────────────────── */}
+        <div ref={containerRef} className="relative shrink-0">
+
+          {/* Input */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none z-10" />
             <Input
               ref={inputRef}
-              type="search"
-              placeholder="Search devices, IPs, VLAN…"
+              type="text"
+              placeholder="Search devices, IPs, VLAN..."
               value={searchQuery}
-              onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
-              onFocus={() => setSearchOpen(true)}
+              onChange={(e) => { setSearchQuery(e.target.value); setIsOpen(true); }}
+              onFocus={() => setIsOpen(true)}
               onKeyDown={handleKeyDown}
-              className="w-56 lg:w-72 bg-card text-foreground placeholder:text-muted-foreground pl-9 border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
               autoComplete="off"
+              spellCheck={false}
+              className="w-56 lg:w-72 pl-9 pr-8 bg-card text-foreground placeholder:text-muted-foreground border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
             />
+            {searchQuery && (
+              <button
+                onMouseDown={(e) => { e.preventDefault(); setSearchQuery(""); setIsOpen(false); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
-          {/* Results dropdown */}
-          {showDropdown && searchResults.length > 0 && (
-            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-xl shadow-xl overflow-hidden">
-              <div className="px-3 py-1.5 border-b border-border/50 flex items-center justify-between">
+          {/* ── Dropdown (fixed, position computed from input rect) ──── */}
+          {showDropdown && (
+            <div
+              className="fixed z-[9999] bg-popover border border-border/80 rounded-xl shadow-2xl overflow-hidden"
+              style={{
+                top: dropPos.top,
+                right: dropPos.right,
+                width: dropPos.width,
+                maxHeight: 380,
+                overflowY: "auto",
+              }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/50 bg-muted/30 sticky top-0">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                  {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
+                  {searchResults.length > 0
+                    ? `${searchResults.length} result${searchResults.length !== 1 ? "s" : ""}`
+                    : "No results"}
                 </span>
-                <span className="text-[9px] text-muted-foreground/50">↑↓ navigate · Enter select</span>
+                <span className="text-[10px] text-muted-foreground hidden sm:block">
+                  ↑↓ navigate · Enter to open · Esc to close
+                </span>
               </div>
-              {searchResults.map((r, i) => (
-                <button
-                  key={r.id}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors text-left group ${
-                    i === selectedIdx ? 'bg-muted/70' : 'hover:bg-muted/50'
-                  }`}
-                  onMouseEnter={() => setSelectedIdx(i)}
-                  onClick={() => commitResult(r.href)}
-                >
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${
-                    r.kind === 'OLT'
-                      ? 'bg-violet-500/15 text-violet-400 border-violet-500/20'
-                      : 'bg-cyan-500/15 text-cyan-400 border-cyan-500/20'
-                  }`}>
-                    {r.kind}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">{r.label}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{r.sub}</p>
-                  </div>
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${
-                    r.status === 'Online' ? 'bg-green-400 shadow-[0_0_4px_#4ade80]' :
-                    r.status === 'Degraded' ? 'bg-amber-400' : 'bg-red-400'
-                  }`} />
-                </button>
-              ))}
-              <div className="px-3 py-1.5 border-t border-border/50 bg-muted/20">
-                <p className="text-[9px] text-muted-foreground/60">Searching ONU name · OLT · IP · MAC · VLAN · customer name</p>
-              </div>
-            </div>
-          )}
 
-          {/* No results */}
-          {showDropdown && searchResults.length === 0 && (
-            <div className="absolute top-full mt-1.5 left-0 right-0 z-50 bg-popover border border-border/70 rounded-xl shadow-xl overflow-hidden">
-              <div className="px-3 py-1.5 border-b border-border/50">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">No results</span>
-              </div>
-              <div className="px-3 py-3 text-center">
-                <p className="text-xs text-muted-foreground">
-                  No devices match <span className="font-medium text-foreground">"{searchQuery}"</span>
-                </p>
-                <p className="text-[10px] text-muted-foreground/60 mt-0.5">Try an IP, MAC, VLAN, ONU ID, or customer name</p>
-              </div>
+              {/* Results */}
+              {searchResults.length > 0 ? (
+                <div>
+                  {searchResults.map((r, i) => {
+                    const isSelected = i === selectedIdx;
+                    const Icon = r.kind === "OLT" ? Server : Wifi;
+                    const kindCls = r.kind === "OLT"
+                      ? "bg-violet-500/15 text-violet-400 border-violet-500/40"
+                      : "bg-cyan-500/15 text-cyan-400 border-cyan-500/40";
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); commitResult(r.href); }}
+                        onMouseEnter={() => setSelectedIdx(i)}
+                        className={[
+                          "w-full flex items-center gap-3 px-4 py-3 text-left border-l-[3px] transition-colors",
+                          isSelected
+                            ? "bg-primary/10 border-l-primary"
+                            : "border-l-transparent hover:bg-muted/60 hover:border-l-border",
+                        ].join(" ")}
+                      >
+                        {/* Icon */}
+                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${r.kind === "OLT" ? "bg-violet-500/10" : "bg-cyan-500/10"}`}>
+                          <Icon className={`h-4 w-4 ${r.kind === "OLT" ? "text-violet-400" : "text-cyan-400"}`} />
+                        </div>
+
+                        {/* Label + sub */}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-foreground truncate leading-none">
+                            {r.label}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                            {r.sub}
+                          </p>
+                        </div>
+
+                        {/* Kind badge + status dot */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`inline-flex px-1.5 py-0.5 rounded border text-[9px] font-bold tracking-wide ${kindCls}`}>
+                            {r.kind}
+                          </span>
+                          <span className={`h-2 w-2 rounded-full ${statusDot(r.status)}`} title={r.status} />
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="px-4 py-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No results for{" "}
+                    <span className="font-semibold text-foreground">"{searchQuery}"</span>
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/60 mt-1">
+                    Try an OLT name, IP address, ONU number, or VLAN
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* ── Bell / Notifications ──────────────────────────────────── */}
+        {/* ── Bell / Notifications ────────────────────────────────────── */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative text-muted-foreground hover:text-foreground shrink-0"
+            >
               <Bell className="h-5 w-5" />
               {activeAlarmsCount > 0 && (
                 <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-destructive text-[9px] font-bold text-white flex items-center justify-center shadow-[0_0_0_2px_hsl(var(--background))]">
-                  {activeAlarmsCount > 99 ? '99+' : activeAlarmsCount}
+                  {activeAlarmsCount > 99 ? "99+" : activeAlarmsCount}
                 </span>
               )}
             </Button>
@@ -282,7 +382,10 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
             <div className="flex flex-col max-h-[300px] overflow-y-auto">
               {topAlarms.length > 0 ? (
                 topAlarms.map((alarm) => (
-                  <div key={alarm.id} className={`flex flex-col p-3 border-b border-border/50 hover:bg-muted/50 cursor-pointer ${getSeverityBorder(alarm.severity)}`}>
+                  <div
+                    key={alarm.id}
+                    className={`flex flex-col p-3 border-b border-border/50 hover:bg-muted/50 cursor-pointer ${getSeverityBorder(alarm.severity)}`}
+                  >
                     <div className="flex items-center justify-between mb-1">
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${getSeverityColor(alarm.severity)}`}>
                         {alarm.severity}
@@ -290,16 +393,23 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
                       <span className="text-[10px] text-muted-foreground">2h ago</span>
                     </div>
                     <span className="font-medium text-sm">{alarm.deviceName}</span>
-                    <span className="text-xs text-muted-foreground truncate" title={alarm.description}>{alarm.description}</span>
+                    <span className="text-xs text-muted-foreground truncate" title={alarm.description}>
+                      {alarm.description}
+                    </span>
                   </div>
                 ))
               ) : (
-                <div className="p-4 text-center text-sm text-muted-foreground">No new notifications</div>
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  No new notifications
+                </div>
               )}
             </div>
             {activeAlarmsCount > 0 && (
               <div className="p-2 border-t border-border/50">
-                <Link href="/alarms" className="block text-center text-xs font-medium text-primary hover:underline py-1">
+                <Link
+                  href="/alarms"
+                  className="block text-center text-xs font-medium text-primary hover:underline py-1"
+                >
                   View all {activeAlarmsCount} alarms &rarr;
                 </Link>
               </div>
@@ -307,12 +417,14 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <div className="hidden sm:block w-px h-6 bg-border mx-1 shrink-0" />
+        <div className="block w-px h-6 bg-border mx-1 shrink-0" />
 
-        {/* ── User avatar / profile ─────────────────────────────────── */}
+        {/* ── User avatar / profile ──────────────────────────────────── */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center cursor-pointer transition-all hover:ring-2 hover:ring-primary/30 outline-none shrink-0`}>
+            <button
+              className={`h-8 w-8 rounded-full ${roleStyle.bg} border ${roleStyle.border} flex items-center justify-center cursor-pointer transition-all hover:ring-2 hover:ring-primary/30 outline-none shrink-0`}
+            >
               <span className={`text-xs font-bold ${roleStyle.color}`}>{user.initials}</span>
             </button>
           </DropdownMenuTrigger>
