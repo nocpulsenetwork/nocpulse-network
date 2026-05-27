@@ -1,0 +1,80 @@
+FINAL LOW-CREDIT FIX ONLY.
+
+Only fix these two issues:
+1. Header global search
+2. Dashboard Recent Alarms position + click navigation
+
+Do NOT redesign dashboard.
+Do NOT touch Network Map.
+Do NOT touch KPI cards.
+Do NOT touch ONU Details, ONU Management, OLT pages, Settings, backend, routes, package.json.
+
+====================================
+1. HEADER SEARCH FINAL FIX
+====================================
+
+Header search must work properly.
+
+Requirements:
+- When typing, typed text must be visible.
+- Show dropdown suggestions immediately while typing.
+- Search existing mock/static data only.
+- Search must match:
+  ONU name
+  ONU number
+  OLT name
+  IP address
+  MAC address
+  VLAN
+  Serial number
+  Client/customer name
+
+Dropdown:
+- readable in dark and light mode
+- visible background
+- clear text
+- hover effect
+- no transparent/hidden text
+- show “No results found” if no match
+
+Click behavior:
+- ONU result opens ONU Details page.
+- OLT result opens OLT Details page.
+- Client/IP/MAC/Serial/VLAN result opens related ONU Details page.
+
+Keep it lightweight.
+No backend calls.
+No new dependency.
+
+====================================
+2. RECENT ALARMS FINAL POSITION
+====================================
+
+Move Recent Alarms card to the very bottom of Dashboard.
+
+Requirements:
+- Recent Alarms must be full-width bottom section.
+- It should be the last visible dashboard section.
+- It must not be squeezed into right sidebar.
+- Make alarm rows readable and professional.
+- Keep “View all”.
+- Reduce tiny internal scroll if possible.
+
+Click behavior:
+- If alarm is related to ONU, clicking alarm row opens that ONU Details page.
+- If alarm is related to OLT, clicking alarm row opens that OLT Details page.
+- Add cursor pointer and hover background.
+
+Use existing mock/static alarm data.
+No backend.
+
+====================================
+FINAL RULES
+====================================
+
+- Do not change other dashboard sections.
+- Do not redesign anything else.
+- Do not add new packages.
+- Keep CPU low.
+- Fix TypeScript/JSX errors.
+- App must run without red overlay.
