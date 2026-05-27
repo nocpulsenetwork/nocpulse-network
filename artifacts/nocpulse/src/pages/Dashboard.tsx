@@ -528,109 +528,67 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* 4 ── Recent Alarms (wide) + Top OLT + System Info ─────────────── */}
-      {/*      Recent Alarms gets xl:col-span-6 = half the page width      */}
-      <div className="grid gap-4 grid-cols-1 xl:grid-cols-12">
+      {/* 4 ── Top OLT by Bandwidth + System Info ───────────────────────── */}
+      <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
 
-        {/* Recent Alarms — wide card, no internal scroll cap */}
-        <Card className="xl:col-span-6 border-border/60 shadow-sm flex flex-col">
-          <CardHeader className="pb-3 border-b border-border/50 py-3 shrink-0">
+        {/* Top OLT by Bandwidth */}
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-2 border-b border-border/50 py-3">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-sm font-semibold">Recent Alarms</CardTitle>
-                <CardDescription className="text-xs">{activeAlarms} unacknowledged · latest first</CardDescription>
+                <CardTitle className="text-sm font-semibold">Top OLT by Bandwidth</CardTitle>
+                <CardDescription className="text-xs">Active subscribers per OLT node</CardDescription>
               </div>
-              <Link href="/alarms" className="text-[11px] font-medium text-primary hover:underline shrink-0">View all →</Link>
+              <Link href="/olts" className="text-[11px] font-medium text-primary hover:underline">All →</Link>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            {recentAlarms.map(alarm => {
-              const sev = SEV[alarm.severity];
-              return (
-                <div
-                  key={alarm.id}
-                  className={`flex items-start gap-3 px-4 py-3 border-b border-border/40 border-l-2 ${sev.border} hover:bg-muted/30 transition-colors last:border-b-0 ${alarm.acknowledged ? 'opacity-50' : ''}`}
-                >
-                  <span className={`mt-1.5 h-2 w-2 rounded-full shrink-0 ${sev.dot} ${!alarm.acknowledged && sev.pulse ? 'animate-pulse' : ''}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-semibold">{alarm.deviceName}</span>
-                      <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold border ${sev.badge}`}>{alarm.severity}</span>
-                      {alarm.acknowledged && <span className="text-[9px] text-muted-foreground/60 italic">acknowledged</span>}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{alarm.description}</p>
-                  </div>
-                  <span className="text-[10px] text-muted-foreground shrink-0 pt-0.5 whitespace-nowrap">
-                    {formatDistanceToNow(new Date(alarm.timestamp), { addSuffix: true })}
-                  </span>
-                </div>
-              );
-            })}
+          <CardContent className="h-[190px] pt-3 pr-2 pb-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={oltBar} layout="vertical" margin={{ top: 0, right: 8, left: -12, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.4} />
+                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
+                <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} width={65} />
+                <Tooltip {...TT} />
+                <Bar dataKey="onus" name="Active ONUs" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} maxBarSize={14} fillOpacity={0.85} />
+              </BarChart>
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Right sub-column: Top OLT + System Info stacked */}
-        <div className="xl:col-span-6 grid gap-4 grid-cols-1 lg:grid-cols-2 xl:grid-cols-1 content-start">
-
-          {/* Top OLT by Bandwidth */}
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="pb-2 border-b border-border/50 py-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-sm font-semibold">Top OLT by Bandwidth</CardTitle>
-                  <CardDescription className="text-xs">Active subscribers per OLT node</CardDescription>
-                </div>
-                <Link href="/olts" className="text-[11px] font-medium text-primary hover:underline">All →</Link>
+        {/* System Information */}
+        <Card className="border-border/60 shadow-sm">
+          <CardHeader className="pb-3 border-b border-border/50 py-3">
+            <CardTitle className="text-sm font-semibold">System Information</CardTitle>
+            <CardDescription className="text-xs">Platform operational status</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 space-y-2">
+            {[
+              { label: 'Platform',        value: 'NOCpulse v1.0',                color: '' },
+              { label: 'Network SLA',     value: `${networkUptime}%`,            color: 'text-green-400' },
+              { label: 'OLT Online',      value: `${onlineOlts} / ${totalOlts}`, color: onlineOlts === totalOlts ? 'text-green-400' : 'text-amber-400' },
+              { label: 'OLT Degraded',    value: String(degradedOlts),           color: degradedOlts > 0 ? 'text-amber-400' : 'text-green-400' },
+              { label: 'OLT Offline',     value: String(offlineOlts),            color: offlineOlts  > 0 ? 'text-red-400'   : 'text-green-400' },
+              { label: 'ONU Online',      value: `${onlineOnus} / ${totalOnus}`, color: offlineOnus  === 0 ? 'text-green-400' : 'text-amber-400' },
+              { label: 'Active Alarms',   value: String(activeAlarms),           color: activeAlarms === 0 ? 'text-green-400' : criticalAlarms > 0 ? 'text-red-400' : 'text-amber-400' },
+              { label: 'Total Bandwidth', value: metrics.bandwidthUsage,         color: '' },
+              { label: 'Last Sync',       value: 'Just now',                     color: 'text-green-400' },
+            ].map(item => (
+              <div key={item.label} className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-muted-foreground">{item.label}</span>
+                <span className={`text-[11px] font-semibold font-mono shrink-0 ${item.color}`}>{item.value}</span>
               </div>
-            </CardHeader>
-            <CardContent className="h-[170px] pt-3 pr-2 pb-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={oltBar} layout="vertical" margin={{ top: 0, right: 8, left: -12, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(var(--border))" opacity={0.4} />
-                  <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} />
-                  <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} width={65} />
-                  <Tooltip {...TT} />
-                  <Bar dataKey="onus" name="Active ONUs" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} maxBarSize={14} fillOpacity={0.85} />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-
-          {/* System Information */}
-          <Card className="border-border/60 shadow-sm">
-            <CardHeader className="pb-3 border-b border-border/50 py-3">
-              <CardTitle className="text-sm font-semibold">System Information</CardTitle>
-              <CardDescription className="text-xs">Platform operational status</CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 space-y-2">
-              {[
-                { label: 'Platform',        value: 'NOCpulse v1.0',                color: '' },
-                { label: 'Network SLA',     value: `${networkUptime}%`,            color: 'text-green-400' },
-                { label: 'OLT Online',      value: `${onlineOlts} / ${totalOlts}`, color: onlineOlts === totalOlts ? 'text-green-400' : 'text-amber-400' },
-                { label: 'OLT Degraded',    value: String(degradedOlts),           color: degradedOlts > 0 ? 'text-amber-400' : 'text-green-400' },
-                { label: 'OLT Offline',     value: String(offlineOlts),            color: offlineOlts  > 0 ? 'text-red-400'   : 'text-green-400' },
-                { label: 'ONU Online',      value: `${onlineOnus} / ${totalOnus}`, color: offlineOnus  === 0 ? 'text-green-400' : 'text-amber-400' },
-                { label: 'Active Alarms',   value: String(activeAlarms),           color: activeAlarms === 0 ? 'text-green-400' : criticalAlarms > 0 ? 'text-red-400' : 'text-amber-400' },
-                { label: 'Total Bandwidth', value: metrics.bandwidthUsage,         color: '' },
-                { label: 'Last Sync',       value: 'Just now',                     color: 'text-green-400' },
-              ].map(item => (
-                <div key={item.label} className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-muted-foreground">{item.label}</span>
-                  <span className={`text-[11px] font-semibold font-mono shrink-0 ${item.color}`}>{item.value}</span>
-                </div>
-              ))}
-              <div className="pt-1.5 border-t border-border/50">
-                <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
-                  <span>OLT Health Score</span>
-                  <span className="font-mono font-bold text-green-400">{healthPct}%</span>
-                </div>
-                <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-green-600 to-green-400" style={{ width: `${healthPct}%` }} />
-                </div>
+            ))}
+            <div className="pt-1.5 border-t border-border/50">
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                <span>OLT Health Score</span>
+                <span className="font-mono font-bold text-green-400">{healthPct}%</span>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-green-600 to-green-400" style={{ width: `${healthPct}%` }} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* 5 ── Bottom row: Bandwidth · ONU Status · Top Clients ──────────── */}
@@ -731,6 +689,70 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 6 ── Recent Alarms — full-width, bottom of dashboard ───────────── */}
+      <Card className="border-border/60 shadow-sm">
+        <CardHeader className="pb-3 border-b border-border/50 py-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-sm font-semibold">Recent Alarms</CardTitle>
+              <CardDescription className="text-xs">
+                {activeAlarms} unacknowledged · latest first · click any row to open device
+              </CardDescription>
+            </div>
+            <Link href="/alarms" className="text-[11px] font-medium text-primary hover:underline shrink-0">
+              View all →
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {/* Column headers */}
+          <div className="hidden sm:grid sm:grid-cols-[20px_1fr_auto_auto] gap-x-4 px-5 py-2 border-b border-border/30 bg-muted/20">
+            <span />
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">Device / Description</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 text-right w-24">Severity</span>
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 text-right w-28">Time</span>
+          </div>
+          {recentAlarms.map(alarm => {
+            const sev  = SEV[alarm.severity];
+            const href = alarm.deviceId.startsWith('olt-')
+              ? `/olts/${alarm.deviceId}`
+              : alarm.deviceId.startsWith('onu-')
+              ? `/onus/${alarm.deviceId}`
+              : '/alarms';
+            return (
+              <Link key={alarm.id} href={href} className="block">
+                <div
+                  className={[
+                    'grid grid-cols-[20px_1fr] sm:grid-cols-[20px_1fr_auto_auto] gap-x-4 items-center',
+                    'px-5 py-3.5 border-b border-border/40 border-l-2',
+                    sev.border,
+                    'hover:bg-muted/30 transition-colors cursor-pointer last:border-b-0',
+                    alarm.acknowledged ? 'opacity-55' : '',
+                  ].join(' ')}
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${sev.dot} ${!alarm.acknowledged && sev.pulse ? 'animate-pulse' : ''}`} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold leading-none">{alarm.deviceName}</span>
+                      {alarm.acknowledged && (
+                        <span className="text-[10px] text-muted-foreground/55 italic">acknowledged</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{alarm.description}</p>
+                  </div>
+                  <span className={`hidden sm:inline-flex items-center justify-center px-2 py-0.5 rounded text-[9px] font-bold border w-24 ${sev.badge}`}>
+                    {alarm.severity}
+                  </span>
+                  <span className="hidden sm:block text-[11px] text-muted-foreground text-right w-28 whitespace-nowrap">
+                    {formatDistanceToNow(new Date(alarm.timestamp), { addSuffix: true })}
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
+        </CardContent>
+      </Card>
     </div>
   );
 }

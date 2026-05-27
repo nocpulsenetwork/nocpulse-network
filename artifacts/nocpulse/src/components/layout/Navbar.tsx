@@ -153,7 +153,7 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
     if (m) m.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const showDropdown = searchOpen && searchQuery.trim().length >= 2;
+  const showDropdown = searchOpen && searchQuery.trim().length >= 1;
 
   return (
     <header className="flex h-14 items-center gap-3 px-4 sm:px-6 w-full overflow-hidden">
@@ -202,7 +202,7 @@ export function Navbar({ onMenuClick, title = 'NOCpulse' }: NavbarProps) {
               onChange={e => { setSearchQuery(e.target.value); setSearchOpen(true); }}
               onFocus={() => setSearchOpen(true)}
               onKeyDown={handleKeyDown}
-              className="w-56 lg:w-72 bg-card pl-9 border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
+              className="w-56 lg:w-72 bg-card text-foreground placeholder:text-muted-foreground pl-9 border-border/60 rounded-lg shadow-sm focus-visible:ring-1 focus-visible:ring-primary/50 transition-shadow"
               autoComplete="off"
             />
           </div>
