@@ -95,6 +95,29 @@ export interface UniversalOLT {
     minor: number;
     warning: number;
   };
+
+  /** PON port summary — one entry per physical PON port on the OLT. */
+  ponPorts: PonPort[];
+}
+
+export interface PonPort {
+  /** Slot/port identifier string, e.g. "0/1/0". */
+  portId: string;
+
+  /** PON technology on this port. */
+  type: OnuType;
+
+  /** Total ONU capacity on this port (typically 64 or 128). */
+  capacity: number;
+
+  /** Number of ONUs currently registered on this port. */
+  registered: number;
+
+  /** Number of registered ONUs currently online. */
+  online: number;
+
+  /** Port administrative + operational status. */
+  status: DeviceStatus;
 }
 
 // ─── Universal ONU ─────────────────────────────────────────────────────────
@@ -213,6 +236,8 @@ export type AlarmType =
   | "config-mismatch" // ONU profile mismatch
   | "unknown";
 
+export type DeviceType = "olt" | "onu";
+
 export interface UniversalAlarm {
   /** Stable unique identifier for this alarm event. */
   id: string;
@@ -226,6 +251,12 @@ export interface UniversalAlarm {
   /** Current lifecycle state. */
   status: AlarmStatus;
 
+  /** Whether this alarm has been acknowledged by an operator. */
+  acknowledged: boolean;
+
+  /** Whether the affected device is an OLT or ONU. */
+  deviceType: DeviceType;
+
   /** ID of the affected OLT or ONU. */
   deviceId: string;
 
@@ -238,14 +269,14 @@ export interface UniversalAlarm {
   /** Vendor that reported this alarm. */
   vendor: Vendor;
 
-  /** Short human-readable alarm message. */
-  message: string;
+  /** Short human-readable alarm title (used as heading in the UI). */
+  title: string;
 
-  /** Extended detail / raw trap message. */
-  detail: string;
+  /** Extended description / raw trap message shown in alarm detail view. */
+  description: string;
 
-  /** ISO 8601 timestamp when this alarm was raised. */
-  raisedAt: string;
+  /** ISO 8601 timestamp when this alarm was raised (primary sort key). */
+  timestamp: string;
 
   /** ISO 8601 timestamp when cleared, or null if still active. */
   clearedAt: string | null;

@@ -1,5 +1,13 @@
 # NOCpulse Backend — Architecture Overview
 
+> **⚠️ MOCK API — All endpoints currently return static mock data.**
+> No real device connections, SNMP, or polling are active yet.
+> Every endpoint returns the full normalized shape so the frontend can
+> bind against the real contract with zero code changes when live adapters land.
+> To switch an endpoint to live data: replace the `MOCK_*` import in the
+> relevant route file with the corresponding service call (e.g. `oltService.getAll()`).
+> CPU impact: **zero** — no intervals, no background loops, no I/O.
+
 Multi-vendor OLT/ONU monitoring backend. Designed to scale from a single OLT to thousands of devices across distributed PoPs.
 
 ---
