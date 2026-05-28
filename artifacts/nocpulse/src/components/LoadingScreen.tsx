@@ -1,61 +1,96 @@
+import logoUrl from '@/assets/logo.png';
 import { useApiData } from "@/contexts/ApiDataContext";
 
 export function LoadingScreen() {
   const { loading } = useApiData();
-
   if (!loading) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#07111f]"
+      className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background"
       aria-label="Loading NOCpulse"
     >
-      {/* Logo mark */}
-      <div className="flex items-center gap-3 mb-8">
-        <svg
-          width="40"
-          height="40"
-          viewBox="0 0 40 40"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          className="shrink-0"
-        >
-          <circle cx="20" cy="20" r="19" stroke="#3b82f6" strokeWidth="1.5" strokeOpacity="0.4" />
-          <circle cx="20" cy="20" r="13" stroke="#3b82f6" strokeWidth="1" strokeOpacity="0.25" />
-          <polyline
-            points="6,22 12,14 18,20 24,10 34,18"
-            stroke="#3b82f6"
-            strokeWidth="2.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            fill="none"
-          />
-        </svg>
-        <div>
-          <div className="text-2xl font-bold tracking-tight text-white leading-none">
-            NOC<span className="text-blue-400">pulse</span>
-          </div>
-          <div className="text-[10px] tracking-[0.2em] text-slate-500 uppercase mt-0.5">
-            Network Operations
-          </div>
-        </div>
-      </div>
-
-      {/* Spinner */}
-      <div className="relative h-8 w-8">
-        <div className="absolute inset-0 rounded-full border-2 border-blue-500/20" />
+      {/* Logo with glow halo */}
+      <div className="relative flex items-center justify-center mb-7">
+        {/* Ambient radial glow */}
         <div
-          className="absolute inset-0 rounded-full border-2 border-transparent border-t-blue-500"
-          style={{ animation: "spin 0.9s linear infinite" }}
+          style={{
+            position: 'absolute',
+            width: 128,
+            height: 128,
+            borderRadius: '50%',
+            background:
+              'radial-gradient(ellipse at center, rgba(59,130,246,0.20) 0%, rgba(59,130,246,0.06) 55%, transparent 75%)',
+            animation: 'np-halo 2.6s ease-in-out infinite',
+          }}
+        />
+        {/* Logo image */}
+        <img
+          src={logoUrl}
+          alt="NOCpulse"
+          style={{
+            width: 80,
+            height: 80,
+            objectFit: 'contain',
+            position: 'relative',
+            zIndex: 1,
+            animation: 'np-logo 2.6s ease-in-out infinite',
+          }}
+          className="sm:w-[88px] sm:h-[88px]"
         />
       </div>
 
-      <p className="mt-5 text-xs text-slate-500 tracking-widest uppercase">
+      {/* Brand name + tagline */}
+      <div className="mb-6 text-center select-none">
+        <div className="text-[22px] font-bold tracking-tight leading-none text-foreground">
+          NOC<span className="text-blue-400">pulse</span>
+        </div>
+        <div className="mt-1.5 text-[9.5px] tracking-[0.22em] text-muted-foreground/60 uppercase">
+          Monitor&nbsp;·&nbsp;Analyze&nbsp;·&nbsp;Optimize
+        </div>
+      </div>
+
+      {/* Slim indeterminate progress bar */}
+      <div
+        className="mb-3 overflow-hidden rounded-full bg-blue-500/10"
+        style={{ width: 136, height: 2 }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: '45%',
+            borderRadius: 9999,
+            background: 'linear-gradient(90deg, transparent, #3b82f6 50%, transparent)',
+            animation: 'np-bar 1.55s ease-in-out infinite',
+          }}
+        />
+      </div>
+
+      <p className="text-[10px] tracking-[0.18em] text-muted-foreground/50 uppercase select-none">
         Connecting to network&hellip;
       </p>
 
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes np-logo {
+          0%, 100% {
+            opacity: 0.90;
+            transform: scale(1);
+            filter: drop-shadow(0 0 8px rgba(59,130,246,0.35));
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.04);
+            filter: drop-shadow(0 0 20px rgba(59,130,246,0.60));
+          }
+        }
+        @keyframes np-halo {
+          0%, 100% { opacity: 0.55; transform: scale(0.90); }
+          50%       { opacity: 1.00; transform: scale(1.10); }
+        }
+        @keyframes np-bar {
+          0%   { transform: translateX(-120%); }
+          100% { transform: translateX(420%); }
+        }
       `}</style>
     </div>
   );

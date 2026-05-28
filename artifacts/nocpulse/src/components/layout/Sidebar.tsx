@@ -7,7 +7,6 @@ import {
   Map,
   Bell,
   Settings,
-  Activity,
   ChevronLeft,
   ChevronRight,
   ClipboardList,
@@ -20,6 +19,7 @@ import {
   Shield,
   Lock,
 } from "lucide-react";
+import logoUrl from '@/assets/logo.png';
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -215,19 +215,28 @@ export function Sidebar({
       <div
         className={cn(
           "flex h-14 items-center border-b shrink-0",
-          collapsed ? "justify-center px-0" : "px-4",
+          collapsed ? "justify-center px-0" : "px-3",
         )}
       >
-        <Activity
+        <img
+          src={logoUrl}
+          alt="NOCpulse"
           className={cn(
-            "text-primary shrink-0",
-            collapsed ? "h-6 w-6" : "h-6 w-6 mr-2",
+            "object-contain shrink-0",
+            collapsed ? "h-7 w-7" : "h-8 w-8 mr-2.5",
           )}
         />
         {!collapsed && (
-          <div className="flex flex-1 items-center justify-between truncate">
-            <span className="text-lg font-bold tracking-tight">NOCpulse</span>
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 shrink-0">
+          <div className="flex flex-1 items-center justify-between min-w-0">
+            <div className="min-w-0">
+              <div className="text-[15px] font-bold tracking-tight leading-none text-foreground">
+                NOCpulse
+              </div>
+              <div className="text-[8px] tracking-[0.12em] text-muted-foreground/55 uppercase mt-0.5 leading-none">
+                Monitor&nbsp;·&nbsp;Analyze&nbsp;·&nbsp;Optimize
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 shrink-0 ml-2">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[9px] font-bold uppercase tracking-wider text-green-500">
                 Live
