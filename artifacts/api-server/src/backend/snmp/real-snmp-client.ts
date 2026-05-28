@@ -201,6 +201,92 @@ export interface ReadOnuTableResult {
   mibUsed: string;
 }
 
+/**
+ * Detailed attributes for a single ONU, read from a vendor-specific SNMP table.
+ *
+ * Fields not supported by a given vendor MIB or firmware version are null.
+ * Traffic counters and optical power are intentionally excluded — use a
+ * separate endpoint for those. Client MAC, ONU uptime, and last-online/offline
+ * timestamps require vendor-specific event/stats tables and are currently
+ * unimplemented (marked null with TODO comments).
+ */
+export interface SnmpOnuDetail {
+  /** Short ONU identifier within its PON port (e.g. "5"). */
+  onuId: string;
+
+  /** Human-readable PON port identifier (e.g. "0/4/3" for Huawei). */
+  ponPort: string;
+
+  /** GPON serial number — 4-char ASCII vendor code + 8 uppercase hex chars. Null for EPON. */
+  serial: string | null;
+
+  /** ONU's own MAC address (EPON). Null for GPON. */
+  mac: string | null;
+
+  /**
+   * Downstream client/CPE MAC address.
+   * Currently null — requires a separate ARP/bridge table walk per ONU.
+   * TODO: Huawei hwEponOnuMacTable; ZTE zxAnEponOnuMacTable.
+   */
+  clientMac: null;
+
+  /** ONU model or type string as reported by the device MIB. */
+  type: string | null;
+
+  /** Administrator-assigned description or name label for this ONU. */
+  description: string | null;
+
+  /** Operational status of the ONU. */
+  status: "online" | "offline" | "unknown";
+
+  /** Physical distance from OLT to ONU in metres. Null if unsupported by firmware. */
+  distanceMeters: number | null;
+
+  /**
+   * ONU uptime in seconds.
+   * Currently null — requires vendor-specific optical stats table.
+   * TODO: Huawei hwGponOnuOptIfTable col 12; ZTE zxAnGponOnuStatTable.
+   */
+  onuUptimeSecs: null;
+
+  /**
+   * ISO 8601 timestamp of the last time this ONU registered as online.
+   * Currently null — requires vendor-specific event/alarm log table.
+   * TODO: Huawei hwGponOnuAlarmTable; ZTE zxAnGponOnuStateChangeTable.
+   */
+  lastOnlineTime: null;
+
+  /**
+   * ISO 8601 timestamp of the last time this ONU went offline.
+   * Currently null — see lastOnlineTime TODO above.
+   */
+  lastOfflineTime: null;
+
+  /** Full OID instance suffix as used in the vendor MIB (e.g. "0.4.3.5"). */
+  rawInstanceOid: string;
+}
+
+/** Return type of {@link RealSnmpClient.readOnuDetails}. */
+export interface ReadOnuDetailResult {
+  /** Whether the SNMP read succeeded. */
+  success: boolean;
+
+  /** Vendor name used to select the MIB. */
+  vendor: string;
+
+  /** Populated ONU detail on success, null on failure. */
+  onu: SnmpOnuDetail | null;
+
+  /** Human-readable status or error description. */
+  message: string;
+
+  /** Round-trip time from call to return, in milliseconds. */
+  latencyMs: number;
+
+  /** MIB table name used (e.g. "hwGponOnuMngTable"). */
+  mibUsed: string;
+}
+
 // ─── Custom error types ────────────────────────────────────────────────────
 
 export class SnmpTimeoutError extends Error {
@@ -703,6 +789,125 @@ export class RealSnmpClient {
       mibUsed:    mib.mibName,
     };
   }
+
+  // ── readOnuDetails ────────────────────────────────────────────────────────
+
+  /**
+   * Read detailed attributes for a single ONU.
+   *
+   * Issues at most 2 SNMP PDUs:
+   *   PDU 1 — GET all available column OIDs for the specified ONU instance
+   *   PDU 2 — GET distance OID (only if the vendor defines one; most don't yet)
+   *
+   * No GETBULK, no walk, no background state.
+   *
+   * Safety contract:
+   *   • Read-only: only snmpGet() — no SET, no walk, no GETBULK
+   *   • One-shot: no interval, no background worker, no persistent session
+   *   • Bounded: at most 2 SNMP PDUs total
+   *
+   * @param vendor      Vendor name — must match a key in VENDOR_ONU_MIBS.
+   * @param instanceOid OID instance suffix for the ONU (e.g. "0.4.3.5" for
+   *                    Huawei, "123.7" for ZTE).  Use {@link buildOnuInstance}
+   *                    to construct this from ponPort + onuId.
+   */
+  async readOnuDetails(vendor: string, instanceOid: string): Promise<ReadOnuDetailResult> {
+    const start = Date.now();
+    const mib = VENDOR_ONU_MIBS[vendor];
+
+    if (!mib) {
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `No MIB configuration for vendor "${vendor}". Supported: ${Object.keys(VENDOR_ONU_MIBS).join(", ")}`,
+        latencyMs: Date.now() - start,
+        mibUsed:   "none",
+      };
+    }
+
+    // Build per-field OIDs (null for unsupported columns)
+    const colMap = {
+      serial: mib.colSerial !== null ? `${mib.tableRoot}.${mib.colSerial}.${instanceOid}` : null,
+      status: mib.colStatus !== null ? `${mib.tableRoot}.${mib.colStatus}.${instanceOid}` : null,
+      type:   mib.colType   !== null ? `${mib.tableRoot}.${mib.colType}.${instanceOid}`   : null,
+      mac:    mib.colMac    !== null ? `${mib.tableRoot}.${mib.colMac}.${instanceOid}`    : null,
+      desc:   mib.colDesc   !== null ? `${mib.tableRoot}.${mib.colDesc}.${instanceOid}`   : null,
+    };
+
+    const oids: string[] = Object.values(colMap).filter((v): v is string => v !== null);
+
+    if (oids.length === 0) {
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `MIB config for "${vendor}" has no readable detail columns.`,
+        latencyMs: Date.now() - start,
+        mibUsed:   mib.mibName,
+      };
+    }
+
+    // ── PDU 1: GET all column OIDs for this ONU instance ─────────────────
+    let attrMap: Record<string, snmp.Varbind>;
+    try {
+      attrMap = indexVarbinds(await this.snmpGet(oids));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `SNMP GET failed for ONU instance ${instanceOid}: ${msg}`,
+        latencyMs: Date.now() - start,
+        mibUsed:   mib.mibName,
+      };
+    }
+
+    // ── PDU 2 (optional): GET distance OID if the vendor defines one ─────
+    let distanceMeters: number | null = null;
+    const distOid = mib.distanceOid ? mib.distanceOid(instanceOid) : null;
+    if (distOid) {
+      try {
+        const distVbs = indexVarbinds(await this.snmpGet([distOid]));
+        const dv = distVbs[distOid];
+        if (dv) distanceMeters = intVal(dv) ?? null;
+      } catch {
+        // Distance not available — non-fatal, continue with null
+      }
+    }
+
+    // ── Parse instance OID into human-readable port + onuId ──────────────
+    const parsed = mib.parseInstance(instanceOid);
+
+    // ── Normalise ONU detail fields ───────────────────────────────────────
+    const rawStatus = colMap.status ? attrMap[colMap.status] : undefined;
+
+    const onu: SnmpOnuDetail = {
+      onuId:           parsed?.onuId   ?? instanceOid.split(".").pop() ?? instanceOid,
+      ponPort:         parsed?.ponPort ?? instanceOid,
+      serial:          colMap.serial   ? parseGponSerial(attrMap[colMap.serial]?.value)  : null,
+      mac:             colMap.mac      ? parseMacAddress(attrMap[colMap.mac]?.value)      : null,
+      clientMac:       null,
+      type:            colMap.type     ? (stringVal(attrMap[colMap.type])  ?? null)       : null,
+      description:     colMap.desc     ? (stringVal(attrMap[colMap.desc])  ?? null)       : null,
+      status:          rawStatus       ? mib.parseStatus(intVal(rawStatus) ?? 2)          : "unknown",
+      distanceMeters,
+      onuUptimeSecs:   null,
+      lastOnlineTime:  null,
+      lastOfflineTime: null,
+      rawInstanceOid:  instanceOid,
+    };
+
+    return {
+      success:   true,
+      vendor,
+      onu,
+      message:   `ONU ${onu.onuId} on port ${onu.ponPort} read from ${mib.mibName}`,
+      latencyMs: Date.now() - start,
+      mibUsed:   mib.mibName,
+    };
+  }
 }
 
 // ─── Helper functions ──────────────────────────────────────────────────────
@@ -913,6 +1118,21 @@ interface VendorOnuMib {
   /** Column number for MAC address (EPON), or null if not applicable. */
   colMac: number | null;
 
+  /** Column number for administrator description/name label, or null if absent in this MIB. */
+  colDesc: number | null;
+
+  /**
+   * Returns the full OID for the ONU's physical distance to the OLT (in metres),
+   * given the ONU instance suffix.  Returns null when the vendor does not publish
+   * a distance OID or the OID is unconfirmed.
+   *
+   * The distance column is typically in a separate optical-info table rather
+   * than the main ONU management table.
+   *
+   * TODO: Confirm exact OIDs against production firmware MIBs for each vendor.
+   */
+  distanceOid: ((instance: string) => string) | null;
+
   /**
    * Parse the OID instance suffix (the part after the column OID) into
    * a human-readable PON port identifier and ONU ID.
@@ -944,15 +1164,20 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   // ── Huawei MA5800-X7 / MA5800-X15 / MA5600T GPON ───────────────────────
   // MIB: HUAWEI-XPON-MIB::hwGponOnuMngTable
   // Instance index: {frame}.{slot}.{port}.{onuId}  — e.g. "0.4.3.5"
-  // Confirmed columns: 1=index, 3=SN, 4=type, 5=runState
+  // Confirmed columns: 1=index, 2=desc, 3=SN, 4=type, 5=runState
   Huawei: {
-    tableRoot: "1.3.6.1.4.1.2011.6.139.9.3.8.100.1",
-    mibName:   "hwGponOnuMngTable",
-    colIndex:  1,   // hwGponOnuMngAttrIndex
-    colSerial: 3,   // hwGponOnuMngAttrSN — OCTET STRING 8 bytes (4 ASCII + 4 hex)
-    colStatus: 5,   // hwGponOnuMngAttrRunState — 1=online, 2=offline
-    colType:   4,   // hwGponOnuMngAttrType — ONU model string
-    colMac:    null,
+    tableRoot:   "1.3.6.1.4.1.2011.6.139.9.3.8.100.1",
+    mibName:     "hwGponOnuMngTable",
+    colIndex:    1,    // hwGponOnuMngAttrIndex
+    colSerial:   3,    // hwGponOnuMngAttrSN — OCTET STRING 8 bytes (4 ASCII + 4 hex)
+    colStatus:   5,    // hwGponOnuMngAttrRunState — 1=online, 2=offline
+    colType:     4,    // hwGponOnuMngAttrType — ONU model string
+    colMac:      null,
+    colDesc:     2,    // hwGponOnuMngAttrDesc — operator-assigned description
+    // Distance is in a separate optical interface table; OID unconfirmed across
+    // firmware versions — left null until validated on production hardware.
+    // TODO: validate 1.3.6.1.4.1.2011.6.139.4.1.3.1.3 (hwGponOnuDistance)
+    distanceOid: null,
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 4) return null;
@@ -966,13 +1191,15 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   // Instance index: {gponIfIndex}.{onuId}  — e.g. "123.7"
   // Confirmed columns: 1=index, 2=SN, 7=operStatus
   ZTE: {
-    tableRoot: "1.3.6.1.4.1.3902.3.101.13.10.1",
-    mibName:   "zxAnGponOnuTable",
-    colIndex:  1,   // zxAnGponOnuIndex
-    colSerial: 2,   // zxAnGponOnuSN — OCTET STRING 8 bytes (GPON SN format)
-    colStatus: 7,   // zxAnGponOnuOperStatus — 1=online, 2=offline
-    colType:   null,
-    colMac:    null,
+    tableRoot:   "1.3.6.1.4.1.3902.3.101.13.10.1",
+    mibName:     "zxAnGponOnuTable",
+    colIndex:    1,    // zxAnGponOnuIndex
+    colSerial:   2,    // zxAnGponOnuSN — OCTET STRING 8 bytes (GPON SN format)
+    colStatus:   7,    // zxAnGponOnuOperStatus — 1=online, 2=offline
+    colType:     null,
+    colMac:      null,
+    colDesc:     null, // No description column in confirmed ZTE GPON ONU MIB
+    distanceOid: null, // TODO: zxAnGponOnuStatTable distance col (unconfirmed OID)
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
@@ -987,13 +1214,15 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   // MIB: BDCOM-EPON-ONU-MIB (enterprise OID space 1.3.6.1.4.1.3320)
   // Instance index: {ponPort}.{onuId} — tentative; verify per firmware
   BDCOM: {
-    tableRoot: "1.3.6.1.4.1.3320.9.1.3.3.1",
-    mibName:   "bdEponOnuTable",
-    colIndex:  1,
-    colSerial: null,
-    colStatus: 3,   // 1=online, 2=offline (tentative — verify per firmware)
-    colType:   null,
-    colMac:    2,   // 6-byte MAC address
+    tableRoot:   "1.3.6.1.4.1.3320.9.1.3.3.1",
+    mibName:     "bdEponOnuTable",
+    colIndex:    1,
+    colSerial:   null,
+    colStatus:   3,    // 1=online, 2=offline (tentative — verify per firmware)
+    colType:     null,
+    colMac:      2,    // 6-byte MAC address
+    colDesc:     null, // No description column in confirmed BDCOM EPON ONU MIB
+    distanceOid: null, // TODO: BDCOM distance OID unconfirmed
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
@@ -1005,13 +1234,15 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   // ── VSOL V1600 / V2801 / V2802 GPON ─────────────────────────────────────
   // Tentative OIDs — verify against device-specific MIB before production use
   VSOL: {
-    tableRoot: "1.3.6.1.4.1.37950.2.1.1.1",
-    mibName:   "vsolGponOnuTable",
-    colIndex:  1,
-    colSerial: 3,
-    colStatus: 5,   // tentative
-    colType:   null,
-    colMac:    2,
+    tableRoot:   "1.3.6.1.4.1.37950.2.1.1.1",
+    mibName:     "vsolGponOnuTable",
+    colIndex:    1,
+    colSerial:   3,
+    colStatus:   5,    // tentative
+    colType:     null,
+    colMac:      2,
+    colDesc:     null, // TODO: confirm description column for VSOL MIB
+    distanceOid: null, // TODO: VSOL distance OID unconfirmed
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
@@ -1023,13 +1254,15 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   // ── C-DATA FD1616GS / FD8920 / FD1204SN GPON ────────────────────────────
   // Tentative OIDs — verify against device-specific MIB before production use
   CDATA: {
-    tableRoot: "1.3.6.1.4.1.34592.5.1.3.1",
-    mibName:   "cdataGponOnuTable",
-    colIndex:  1,
-    colSerial: 3,
-    colStatus: 7,   // tentative
-    colType:   4,
-    colMac:    null,
+    tableRoot:   "1.3.6.1.4.1.34592.5.1.3.1",
+    mibName:     "cdataGponOnuTable",
+    colIndex:    1,
+    colSerial:   3,
+    colStatus:   7,    // tentative
+    colType:     4,
+    colMac:      null,
+    colDesc:     null, // TODO: confirm description column for C-DATA MIB
+    distanceOid: null, // TODO: C-DATA distance OID unconfirmed
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
@@ -1076,4 +1309,42 @@ function parseMacAddress(value: unknown): string | null {
   }
   if (typeof value === "string" && value.includes(":")) return value.toUpperCase();
   return null;
+}
+
+/**
+ * Reconstruct the OID instance suffix for a specific ONU from human-readable
+ * fields returned by the API or UI.
+ *
+ * Use this when you have `ponPort` + `onuId` from user input but do not have
+ * the `rawInstanceOid` that {@link RealSnmpClient.readOnuTable} returns directly.
+ *
+ * Instance format by vendor:
+ * ```
+ *   Huawei — frame.slot.port.onuId  (ponPort "0/4/3", onuId "5"  → "0.4.3.5")
+ *   ZTE    — ifIndex.onuId          (ponPort "gpon-ifIndex:123"   → "123.5")
+ *   Others — portId.onuId           (ponPort "3", onuId "5"       → "3.5")
+ * ```
+ *
+ * Falls back to just `onuId` when `ponPort` is not provided.
+ */
+export function buildOnuInstance(vendor: string, onuId: string, ponPort?: string): string {
+  if (!ponPort) return onuId;
+
+  switch (vendor) {
+    case "Huawei": {
+      // ponPort format: "frame/slot/port"  →  instance: "frame.slot.port.onuId"
+      const parts = ponPort.split("/");
+      if (parts.length === 3) return `${parts.join(".")}.${onuId}`;
+      return `${ponPort}.${onuId}`;
+    }
+    case "ZTE": {
+      // ponPort format: "gpon-ifIndex:123"  →  instance: "123.onuId"
+      const m = ponPort.match(/:(\d+)$/);
+      if (m?.[1]) return `${m[1]}.${onuId}`;
+      return `${ponPort}.${onuId}`;
+    }
+    default:
+      // BDCOM / VSOL / CDATA: ponPort is a plain numeric port ID
+      return `${ponPort}.${onuId}`;
+  }
 }

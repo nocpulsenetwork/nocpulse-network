@@ -28,7 +28,9 @@ import {
   RealSnmpClient,
   detectVendorFromSysInfo,
   extractModelFromDescr,
+  buildOnuInstance,
   type ReadOnuTableResult,
+  type ReadOnuDetailResult,
 } from "../snmp/real-snmp-client";
 
 export const oltRouter = Router();
@@ -264,6 +266,107 @@ oltRouter.post("/test-onu-list", async (req: Request, res: Response) => {
     meta: {
       host:        ip,
       port,
+      generatedAt: probeAt,
+      warning:     "Manual test only — this endpoint does not save or poll the OLT.",
+    },
+  });
+});
+
+// POST /api/olts/test-onu-details — manual read-only ONU detail read
+//
+// Reads detailed attributes for ONE ONU using vendor-specific SNMP MIBs.
+// At most 2 SNMP PDUs: 1 GET for all column attributes, plus 1 optional
+// GET for distance if the vendor supports it. No GETBULK, no walk loop.
+//
+// Safety contract:
+//   • Read-only: snmpGet() only — no SET, no walk, no GETBULK
+//   • One-shot: no interval, no background worker, no persistent session
+//   • Bounded: at most 2 SNMP PDUs total
+//   • Does NOT save to the database
+//   • Does NOT start polling
+//   • Does NOT fetch RX/TX optical power or traffic counters
+//
+// The instance OID is resolved in priority order:
+//   1. `instanceOid` — use directly (raw OID from readOnuTable response)
+//   2. `ponPort` + `onuId` — reconstructed with vendor-specific rules
+//   3. `onuId` alone — used as-is (works for simple 2-segment instances)
+oltRouter.post("/test-onu-details", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+
+  // ── Input validation ────────────────────────────────────────────────────
+  if (typeof body["ip"] !== "string" || !body["ip"].trim()) {
+    res.status(400).json({ error: "Missing required field: ip", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["community"] !== "string" || !body["community"].trim()) {
+    res.status(400).json({ error: "Missing required field: community", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["vendor"] !== "string" || !body["vendor"].trim()) {
+    res.status(400).json({
+      error: "Missing required field: vendor (Huawei, ZTE, BDCOM, VSOL, CDATA)",
+      code: "INVALID_INPUT",
+    });
+    return;
+  }
+  if (typeof body["onuId"] !== "string" || !body["onuId"].trim()) {
+    res.status(400).json({ error: "Missing required field: onuId", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const ip        = (body["ip"] as string).trim();
+  const community = (body["community"] as string).trim();
+  const vendor    = (body["vendor"] as string).trim();
+  const onuId     = (body["onuId"] as string).trim();
+  const port      = body["port"]      !== undefined ? Number(body["port"])      : 161;
+  const timeoutMs = Math.min(body["timeoutMs"] !== undefined ? Number(body["timeoutMs"]) : 3_000, 10_000);
+  const retries   = Math.min(body["retries"]   !== undefined ? Number(body["retries"])   : 1,     2);
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    res.status(400).json({ error: "Invalid port: must be 1–65535", code: "INVALID_INPUT" });
+    return;
+  }
+
+  // ── Resolve OID instance suffix ─────────────────────────────────────────
+  // Priority: explicit instanceOid > reconstruct from ponPort+onuId > onuId alone
+  const instanceOid: string =
+    typeof body["instanceOid"] === "string" && body["instanceOid"].trim()
+      ? (body["instanceOid"] as string).trim()
+      : buildOnuInstance(
+          vendor,
+          onuId,
+          typeof body["ponPort"] === "string" ? (body["ponPort"] as string).trim() : undefined,
+        );
+
+  // ── SNMP details read — read-only, at most 2 PDUs ───────────────────────
+  const client = new RealSnmpClient({ host: ip, community, port, timeoutMs, retries });
+  const probeAt = new Date().toISOString();
+
+  const result: ReadOnuDetailResult = await client.readOnuDetails(vendor, instanceOid);
+
+  if (!result.success) {
+    res.status(502).json({
+      data:  { success: false, vendor, onu: null, message: result.message },
+      error: result.message,
+      code:  "SNMP_READ_FAILED",
+      meta:  { host: ip, port, instanceOid, generatedAt: probeAt },
+    });
+    return;
+  }
+
+  res.json({
+    data: {
+      success:   result.success,
+      vendor:    result.vendor,
+      onu:       result.onu,
+      message:   result.message,
+      latencyMs: result.latencyMs,
+      mibUsed:   result.mibUsed,
+    },
+    meta: {
+      host:        ip,
+      port,
+      instanceOid,
       generatedAt: probeAt,
       warning:     "Manual test only — this endpoint does not save or poll the OLT.",
     },
