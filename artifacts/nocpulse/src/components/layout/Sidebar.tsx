@@ -215,14 +215,25 @@ export function Sidebar({
       <div
         className={cn(
           "flex h-14 items-center border-b shrink-0",
-          collapsed ? "justify-center px-0" : "px-3",
+          collapsed ? "justify-center px-0" : "px-4",
         )}
       >
-        {/* Logo chip — dark container matches the logo's baked-in navy background */}
+        {/*
+          Logo chip strategy:
+          The PNG has a dark-navy background baked in (not transparent).
+          We absolute-position the img LARGER than its container so overflow-hidden
+          crops precisely to the N icon mark, discarding the text rows at the bottom.
+
+          Math (logo is 1024×683):
+            Collapsed  32×32 chip → img 80px wide → 53px tall → top 60% = 32px = N mark ✓
+            Expanded   36×36 chip → img 90px wide → 60px tall → top 60% = 36px = N mark ✓
+          Horizontal center: left = −(imgWidth − chipSize) / 2
+        */}
         <div
           className={cn(
-            "shrink-0 rounded-lg overflow-hidden flex items-center justify-center",
-            collapsed ? "h-8 w-8" : "h-9 w-[54px] mr-2.5",
+            "relative shrink-0 rounded-xl overflow-hidden",
+            "dark:shadow-[0_0_14px_2px_rgba(59,130,246,0.18)]",
+            collapsed ? "h-8 w-8" : "h-9 w-9 mr-3",
           )}
           style={{ background: '#0b1628' }}
         >
@@ -230,22 +241,22 @@ export function Sidebar({
             src={logoUrl}
             alt="NOCpulse"
             style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              /* Pan to the N icon mark — skip the text row at the bottom */
-              objectPosition: 'center 18%',
-              imageRendering: 'auto',
+              position: 'absolute',
+              width:  collapsed ? 80 : 90,
+              height: 'auto',
+              left:   collapsed ? -24 : -27,
+              top: 0,
             }}
           />
         </div>
+
         {!collapsed && (
           <div className="flex flex-1 items-center justify-between min-w-0">
             <div className="min-w-0">
               <div className="text-[15px] font-bold tracking-tight leading-none text-foreground">
                 NOCpulse
               </div>
-              <div className="text-[8px] tracking-[0.12em] text-muted-foreground/55 uppercase mt-0.5 leading-none">
+              <div className="text-[8px] tracking-[0.14em] text-muted-foreground/50 uppercase mt-0.5 leading-none">
                 Monitor&nbsp;·&nbsp;Analyze&nbsp;·&nbsp;Optimize
               </div>
             </div>
