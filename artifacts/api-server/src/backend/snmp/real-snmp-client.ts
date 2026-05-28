@@ -360,6 +360,86 @@ export interface ReadOnuOpticalResult {
   mibUsed: string;
 }
 
+/**
+ * Traffic counters for a single ONU, as read from a vendor-specific SNMP table
+ * or from the standard IF-MIB.
+ *
+ * Byte counters are cumulative since last device reboot or counter reset.
+ * Rates are device-reported (not computed from two readings) and may represent
+ * a moving average rather than an instantaneous snapshot.
+ * Null means the measurement is not available from the MIB used.
+ */
+export interface SnmpOnuTraffic {
+  /** Short ONU identifier within its PON port. */
+  onuId: string;
+
+  /** Human-readable PON port identifier. */
+  ponPort: string;
+
+  /**
+   * Total downstream bytes received by the ONU (cumulative counter).
+   * Read from IF-MIB ifHCInOctets (64-bit) or ifInOctets (32-bit fallback),
+   * or from a vendor-specific statistics table.
+   */
+  downloadBytes: number | null;
+
+  /**
+   * Total upstream bytes sent by the ONU (cumulative counter).
+   * Read from IF-MIB ifHCOutOctets (64-bit) or ifOutOctets (32-bit fallback),
+   * or from a vendor-specific statistics table.
+   */
+  uploadBytes: number | null;
+
+  /**
+   * Sum of downloadBytes + uploadBytes.
+   * Null when either counter is unavailable.
+   */
+  totalBytes: number | null;
+
+  /**
+   * Current downstream rate in kbps, as reported by the device.
+   * Available only from vendor-specific stats tables that expose a rate column.
+   * Not available via IF-MIB (would require two timed readings).
+   */
+  downloadRateKbps: number | null;
+
+  /**
+   * Current upstream rate in kbps, as reported by the device.
+   * Same availability caveat as downloadRateKbps.
+   */
+  uploadRateKbps: number | null;
+
+  /**
+   * IF-MIB interface index used for the counters, if the IF-MIB path was taken.
+   * Null when vendor-specific tables were used instead.
+   */
+  ifIndex: number | null;
+
+  /** Full OID instance suffix used in the vendor MIB (e.g. "0.4.3.5"). */
+  rawInstanceOid: string;
+}
+
+/** Return type of {@link RealSnmpClient.readOnuTraffic}. */
+export interface ReadOnuTrafficResult {
+  /** Whether the SNMP read succeeded. */
+  success: boolean;
+
+  /** Vendor name used to select the traffic MIB. */
+  vendor: string;
+
+  /** Populated traffic data on success, null on failure. */
+  onu: SnmpOnuTraffic | null;
+
+  /** Human-readable status or error description. */
+  message: string;
+
+  /** Round-trip time from call to return, in milliseconds. */
+  latencyMs: number;
+
+  /** MIB table or standard used (e.g. "hwGponOnuStatTable" or "IF-MIB"). */
+  mibUsed: string;
+}
+
 // ─── Custom error types ────────────────────────────────────────────────────
 
 export class SnmpTimeoutError extends Error {
@@ -1091,6 +1171,190 @@ export class RealSnmpClient {
       mibUsed:   mib.mibName,
     };
   }
+
+  // ── readOnuTraffic ────────────────────────────────────────────────────────
+
+  /**
+   * Read traffic counters for a single ONU.
+   *
+   * Two paths — exactly 1 SNMP GET in either case:
+   *
+   *   Path A (preferred): IF-MIB  — when `ifIndex` is provided.
+   *     GETs ifHCInOctets + ifHCOutOctets (64-bit) with Counter32 fallback.
+   *     Vendor-agnostic; works for all 5 supported vendors.
+   *     Note: rates not available from a single reading.
+   *
+   *   Path B: vendor-specific stats table  — when `ifIndex` is omitted.
+   *     GETs up to 4 columns (download/upload bytes + rates).
+   *     Currently configured: Huawei (hwGponOnuStatTable), ZTE (tentative).
+   *
+   * Safety contract:
+   *   • Read-only: only snmpGet() — no SET, no walk, no GETBULK
+   *   • One-shot: no interval, no background worker, no persistent session
+   *   • Bounded: exactly 1 SNMP PDU
+   */
+  async readOnuTraffic(
+    vendor: string,
+    instanceOid: string,
+    ifIndex?: number,
+  ): Promise<ReadOnuTrafficResult> {
+    const start   = Date.now();
+    const onuMib  = VENDOR_ONU_MIBS[vendor];
+    const parsed  = onuMib ? onuMib.parseInstance(instanceOid) : null;
+    const resolvedId   = parsed?.onuId   ?? instanceOid.split(".").pop() ?? instanceOid;
+    const resolvedPort = parsed?.ponPort ?? instanceOid;
+
+    // ── Path A: Standard IF-MIB ──────────────────────────────────────────
+    if (ifIndex !== undefined) {
+      const ifOids = [
+        `${IF_HC_IN_OCTETS}.${ifIndex}`,
+        `${IF_HC_OUT_OCTETS}.${ifIndex}`,
+        `${IF_IN_OCTETS}.${ifIndex}`,
+        `${IF_OUT_OCTETS}.${ifIndex}`,
+      ];
+
+      let attrMap: Record<string, snmp.Varbind>;
+      try {
+        attrMap = indexVarbinds(await this.snmpGet(ifOids));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          success:   false,
+          vendor,
+          onu:       null,
+          message:   `SNMP GET failed for IF-MIB ifIndex ${ifIndex}: ${msg}`,
+          latencyMs: Date.now() - start,
+          mibUsed:   "IF-MIB",
+        };
+      }
+
+      // 64-bit preferred; fall back to 32-bit when HC is absent
+      const hcIn   = parseCounter64(attrMap[`${IF_HC_IN_OCTETS}.${ifIndex}`]?.value);
+      const hcOut  = parseCounter64(attrMap[`${IF_HC_OUT_OCTETS}.${ifIndex}`]?.value);
+      const in32   = intVal(attrMap[`${IF_IN_OCTETS}.${ifIndex}`]);
+      const out32  = intVal(attrMap[`${IF_OUT_OCTETS}.${ifIndex}`]);
+
+      const downloadBytes = hcIn  ?? in32  ?? null;
+      const uploadBytes   = hcOut ?? out32 ?? null;
+
+      const onu: SnmpOnuTraffic = {
+        onuId:            resolvedId,
+        ponPort:          resolvedPort,
+        downloadBytes,
+        uploadBytes,
+        totalBytes:       downloadBytes !== null && uploadBytes !== null
+                            ? downloadBytes + uploadBytes
+                            : null,
+        downloadRateKbps: null, // rates require two timed readings — not available in single GET
+        uploadRateKbps:   null,
+        ifIndex,
+        rawInstanceOid:   instanceOid,
+      };
+
+      return {
+        success:   true,
+        vendor,
+        onu,
+        message:   `ONU ${resolvedId} traffic counters read via IF-MIB (ifIndex ${ifIndex})`,
+        latencyMs: Date.now() - start,
+        mibUsed:   "IF-MIB",
+      };
+    }
+
+    // ── Path B: Vendor-specific stats table ──────────────────────────────
+    const mib = VENDOR_TRAFFIC_MIBS[vendor];
+
+    if (!mib) {
+      const configured = Object.keys(VENDOR_TRAFFIC_MIBS).join(", ");
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `No traffic MIB configured for vendor "${vendor}". ` +
+                   (configured
+                     ? `Configured: ${configured}. `
+                     : "") +
+                   `Alternatively, pass an ifIndex to use IF-MIB directly (works for any vendor).`,
+        latencyMs: Date.now() - start,
+        mibUsed:   "none",
+      };
+    }
+
+    const colMap = {
+      downloadBytes:    mib.colDownloadBytes    !== null
+                          ? `${mib.tableRoot}.${mib.colDownloadBytes}.${instanceOid}`    : null,
+      uploadBytes:      mib.colUploadBytes      !== null
+                          ? `${mib.tableRoot}.${mib.colUploadBytes}.${instanceOid}`      : null,
+      downloadRateKbps: mib.colDownloadRateKbps !== null
+                          ? `${mib.tableRoot}.${mib.colDownloadRateKbps}.${instanceOid}` : null,
+      uploadRateKbps:   mib.colUploadRateKbps   !== null
+                          ? `${mib.tableRoot}.${mib.colUploadRateKbps}.${instanceOid}`   : null,
+    };
+
+    const oids: string[] = Object.values(colMap).filter((v): v is string => v !== null);
+
+    if (oids.length === 0) {
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `Traffic MIB for "${vendor}" has no readable columns. Pass an ifIndex to use IF-MIB instead.`,
+        latencyMs: Date.now() - start,
+        mibUsed:   mib.mibName,
+      };
+    }
+
+    let attrMap: Record<string, snmp.Varbind>;
+    try {
+      attrMap = indexVarbinds(await this.snmpGet(oids));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `SNMP GET failed for ONU traffic instance ${instanceOid}: ${msg}`,
+        latencyMs: Date.now() - start,
+        mibUsed:   mib.mibName,
+      };
+    }
+
+    // Vendor counters may be Counter32 or Counter64 — try both parsers
+    const rawDl    = colMap.downloadBytes
+                       ? (parseCounter64(attrMap[colMap.downloadBytes]?.value) ?? intVal(attrMap[colMap.downloadBytes]))
+                       : undefined;
+    const rawUl    = colMap.uploadBytes
+                       ? (parseCounter64(attrMap[colMap.uploadBytes]?.value)   ?? intVal(attrMap[colMap.uploadBytes]))
+                       : undefined;
+    const rawDlRps = colMap.downloadRateKbps ? intVal(attrMap[colMap.downloadRateKbps]) : undefined;
+    const rawUlRps = colMap.uploadRateKbps   ? intVal(attrMap[colMap.uploadRateKbps])   : undefined;
+
+    const downloadBytes = rawDl ?? null;
+    const uploadBytes   = rawUl ?? null;
+
+    const onu: SnmpOnuTraffic = {
+      onuId:            resolvedId,
+      ponPort:          resolvedPort,
+      downloadBytes,
+      uploadBytes,
+      totalBytes:       downloadBytes !== null && uploadBytes !== null
+                          ? downloadBytes + uploadBytes
+                          : null,
+      downloadRateKbps: rawDlRps ?? null,
+      uploadRateKbps:   rawUlRps ?? null,
+      ifIndex:          null,
+      rawInstanceOid:   instanceOid,
+    };
+
+    return {
+      success:   true,
+      vendor,
+      onu,
+      message:   `ONU ${resolvedId} traffic read from ${mib.mibName}`,
+      latencyMs: Date.now() - start,
+      mibUsed:   mib.mibName,
+    };
+  }
 }
 
 // ─── Helper functions ──────────────────────────────────────────────────────
@@ -1547,6 +1811,86 @@ const VENDOR_OPTICAL_MIBS: Record<string, VendorOpticalMib | undefined> = {
   // TODO: Add VSOL/CDATA optical table OIDs once validated.
 };
 
+// ─── Standard IF-MIB OID prefixes (RFC 2863) ──────────────────────────────
+// These are vendor-agnostic and work on any SNMP-capable device.
+// Append .{ifIndex} to form a complete OID (e.g. "...6.12" for ifIndex 12).
+
+const IF_HC_IN_OCTETS  = "1.3.6.1.2.1.31.1.1.1.6";   // ifHCInOctets  — Counter64 (64-bit preferred)
+const IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10";  // ifHCOutOctets — Counter64 (64-bit preferred)
+const IF_IN_OCTETS     = "1.3.6.1.2.1.2.2.1.10";     // ifInOctets    — Counter32 (32-bit fallback)
+const IF_OUT_OCTETS    = "1.3.6.1.2.1.2.2.1.16";     // ifOutOctets   — Counter32 (32-bit fallback)
+
+// ─── Vendor traffic statistics MIB definitions ────────────────────────────
+
+/**
+ * Per-vendor ONU traffic statistics table MIB configuration.
+ *
+ * Vendor-specific tables typically expose cumulative byte counters and
+ * device-reported moving-average rates. The IF-MIB path (available when the
+ * caller provides an `ifIndex`) is preferred when vendor tables are absent.
+ *
+ * Byte counter columns may be Counter32 (can roll over at 4 GB) or Counter64.
+ * Rate columns are vendor-specific and may represent intervals of 5–300 s.
+ *
+ * Columns marked "tentative" are based on public MIB documentation; always
+ * verify against the specific device's MIB before relying on them in production.
+ *
+ * TODO: Add BDCOM, VSOL, and C-DATA traffic tables once OIDs are validated.
+ */
+interface VendorTrafficMib {
+  /** Root OID of the traffic statistics table (without column or instance suffix). */
+  tableRoot: string;
+
+  /** Short MIB table name for logging and error messages. */
+  mibName: string;
+
+  /** Column for cumulative downstream byte counter. Null = unsupported. */
+  colDownloadBytes: number | null;
+
+  /** Column for cumulative upstream byte counter. Null = unsupported. */
+  colUploadBytes: number | null;
+
+  /** Column for device-reported downstream rate (kbps). Null = unsupported. */
+  colDownloadRateKbps: number | null;
+
+  /** Column for device-reported upstream rate (kbps). Null = unsupported. */
+  colUploadRateKbps: number | null;
+}
+
+const VENDOR_TRAFFIC_MIBS: Record<string, VendorTrafficMib | undefined> = {
+
+  // ── Huawei MA5800 / MA5600 GPON ─────────────────────────────────────────
+  // MIB: HUAWEI-XPON-MIB::hwGponOnuStatTable (tentative OIDs)
+  // Instance index: {frame}.{slot}.{port}.{onuId} — same as hwGponOnuMngTable
+  // TODO: Confirm all column assignments against production firmware MIB file.
+  //       Counter width (32-bit vs 64-bit) varies across MA5800/MA5600 firmware.
+  Huawei: {
+    tableRoot:           "1.3.6.1.4.1.2011.6.139.4.1.5.1",
+    mibName:             "hwGponOnuStatTable",
+    colDownloadBytes:    2,    // tentative — hwGponOnuStatRxBytes
+    colUploadBytes:      3,    // tentative — hwGponOnuStatTxBytes
+    colDownloadRateKbps: 4,    // tentative — hwGponOnuStatRxRate (kbps)
+    colUploadRateKbps:   5,    // tentative — hwGponOnuStatTxRate (kbps)
+  },
+
+  // ── ZTE C300 / C320 / C600 / C650 GPON ─────────────────────────────────
+  // MIB: ZTE-AN-GPON-MIB — ONU traffic statistics table (tentative OIDs)
+  // Instance index: {gponIfIndex}.{onuId} — same as zxAnGponOnuTable
+  // TODO: Validate column numbers across C300 vs C320 firmware lines.
+  ZTE: {
+    tableRoot:           "1.3.6.1.4.1.3902.3.101.13.10.9.1",
+    mibName:             "zxAnGponOnuTrafficTable",
+    colDownloadBytes:    2,    // tentative
+    colUploadBytes:      3,    // tentative
+    colDownloadRateKbps: null, // not confirmed in publicly available ZTE MIBs
+    colUploadRateKbps:   null, // not confirmed
+  },
+
+  // BDCOM / VSOL / CDATA: traffic table OIDs not yet confirmed.
+  // The IF-MIB path (provide ifIndex in the request) works for these vendors.
+  // TODO: Add EPON traffic table OIDs for BDCOM/VSOL/CDATA once validated.
+};
+
 // ─── ONU value parsers ─────────────────────────────────────────────────────
 
 /**
@@ -1635,4 +1979,42 @@ function deriveOpticalStatus(rxPowerDbm: number | null): "good" | "weak" | "crit
   if (rxPowerDbm >= -28)   return "good";
   if (rxPowerDbm >= -30)   return "weak";
   return "critical";
+}
+
+/**
+ * Parse a SNMP Counter64 value into a JavaScript number.
+ *
+ * net-snmp may represent Counter64 as a Buffer, plain number, BigInt, or an
+ * object with `{ high, low }` depending on the library version and value size.
+ * Handles all known representations.
+ *
+ * Precision: JavaScript doubles hold integers exactly up to 2⁵³ (≈ 9 × 10¹⁵),
+ * which is ~9 petabytes — safe for per-ONU traffic counters.
+ */
+function parseCounter64(value: unknown): number | null {
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+
+  if (Buffer.isBuffer(value)) {
+    if (value.length === 8) {
+      const high = value.readUInt32BE(0);
+      const low  = value.readUInt32BE(4);
+      return high * 4294967296 + low;
+    }
+    if (value.length > 0) {
+      let n = 0;
+      for (let i = 0; i < value.length; i++) n = n * 256 + (value[i] ?? 0);
+      return n;
+    }
+    return null;
+  }
+
+  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
+    const obj = value as Record<string, unknown>;
+    if (typeof obj["high"] === "number" && typeof obj["low"] === "number") {
+      return (obj["high"] >>> 0) * 4294967296 + (obj["low"] >>> 0);
+    }
+  }
+
+  return null;
 }

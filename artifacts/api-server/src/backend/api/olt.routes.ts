@@ -32,6 +32,7 @@ import {
   type ReadOnuTableResult,
   type ReadOnuDetailResult,
   type ReadOnuOpticalResult,
+  type ReadOnuTrafficResult,
 } from "../snmp/real-snmp-client";
 
 export const oltRouter = Router();
@@ -471,6 +472,120 @@ oltRouter.post("/test-onu-optical", async (req: Request, res: Response) => {
       instanceOid,
       generatedAt: probeAt,
       warning:     "Manual test only — this endpoint does not save or poll the OLT.",
+    },
+  });
+});
+
+// POST /api/olts/test-onu-traffic — manual read-only ONU traffic counter read
+//
+// Reads cumulative download/upload byte counters and device-reported rates for
+// ONE ONU. Exactly 1 SNMP GET.
+//
+// Two data paths:
+//   • Provide `ifIndex` → standard IF-MIB (ifHCInOctets / ifHCOutOctets, 64-bit)
+//                          Works for ANY vendor. Rates not available (single GET).
+//   • Omit `ifIndex`    → vendor-specific stats table (Huawei / ZTE configured;
+//                          others return 422 with suggestion to use ifIndex).
+//
+// Safety contract:
+//   • Read-only: snmpGet() only — no SET, no walk, no GETBULK
+//   • One-shot: no interval, no background worker, no persistent session
+//   • Bounded: exactly 1 SNMP PDU
+//   • Does NOT save to the database
+//   • Does NOT start polling
+//
+// Note: byte counters are cumulative since last device reboot or counter reset.
+//       Rates (when returned) are device-reported moving averages.
+//       Instantaneous rate requires two readings + time delta — not done here.
+oltRouter.post("/test-onu-traffic", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+
+  // ── Input validation ────────────────────────────────────────────────────
+  if (typeof body["ip"] !== "string" || !body["ip"].trim()) {
+    res.status(400).json({ error: "Missing required field: ip", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["community"] !== "string" || !body["community"].trim()) {
+    res.status(400).json({ error: "Missing required field: community", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["vendor"] !== "string" || !body["vendor"].trim()) {
+    res.status(400).json({
+      error: "Missing required field: vendor (Huawei/ZTE for vendor tables, or any vendor with ifIndex)",
+      code: "INVALID_INPUT",
+    });
+    return;
+  }
+  if (typeof body["onuId"] !== "string" || !body["onuId"].trim()) {
+    res.status(400).json({ error: "Missing required field: onuId", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const ip        = (body["ip"] as string).trim();
+  const community = (body["community"] as string).trim();
+  const vendor    = (body["vendor"] as string).trim();
+  const onuId     = (body["onuId"] as string).trim();
+  const port      = body["port"]      !== undefined ? Number(body["port"])      : 161;
+  const timeoutMs = Math.min(body["timeoutMs"] !== undefined ? Number(body["timeoutMs"]) : 3_000, 10_000);
+  const retries   = Math.min(body["retries"]   !== undefined ? Number(body["retries"])   : 1,     2);
+  const ifIndex   = body["ifIndex"] !== undefined ? Number(body["ifIndex"]) : undefined;
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    res.status(400).json({ error: "Invalid port: must be 1–65535", code: "INVALID_INPUT" });
+    return;
+  }
+  if (ifIndex !== undefined && (!Number.isInteger(ifIndex) || ifIndex < 1)) {
+    res.status(400).json({ error: "Invalid ifIndex: must be a positive integer", code: "INVALID_INPUT" });
+    return;
+  }
+
+  // ── Resolve OID instance suffix ─────────────────────────────────────────
+  const instanceOid: string =
+    typeof body["instanceOid"] === "string" && body["instanceOid"].trim()
+      ? (body["instanceOid"] as string).trim()
+      : buildOnuInstance(
+          vendor,
+          onuId,
+          typeof body["ponPort"] === "string" ? (body["ponPort"] as string).trim() : undefined,
+        );
+
+  // ── SNMP traffic read — exactly 1 PDU ───────────────────────────────────
+  const client  = new RealSnmpClient({ host: ip, community, port, timeoutMs, retries });
+  const probeAt = new Date().toISOString();
+
+  const result: ReadOnuTrafficResult = await client.readOnuTraffic(vendor, instanceOid, ifIndex);
+
+  if (!result.success) {
+    const status = result.message.includes("No traffic MIB")
+                || result.message.includes("no readable")
+                || result.message.includes("not configured")
+                  ? 422 : 502;
+    res.status(status).json({
+      data:  { success: false, vendor, onu: null, message: result.message },
+      error: result.message,
+      code:  "TRAFFIC_READ_FAILED",
+      meta:  { host: ip, port, instanceOid, ifIndex: ifIndex ?? null, generatedAt: probeAt },
+    });
+    return;
+  }
+
+  res.json({
+    data: {
+      success:   result.success,
+      vendor:    result.vendor,
+      onu:       result.onu,
+      message:   result.message,
+      latencyMs: result.latencyMs,
+      mibUsed:   result.mibUsed,
+    },
+    meta: {
+      host:        ip,
+      port,
+      instanceOid,
+      ifIndex:     ifIndex ?? null,
+      generatedAt: probeAt,
+      warning:     "Manual test only. Byte counters are cumulative since last reset. " +
+                   "Rates (if present) are device-reported averages, not instantaneous.",
     },
   });
 });
