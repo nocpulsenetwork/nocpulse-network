@@ -69,11 +69,15 @@ export default function Login() {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
+      console.log('[NOCpulse login] entered email:', email);
       const account = DEMO_ACCOUNTS.find(a => a.email === email && a.password === password);
+      console.log('[NOCpulse login] matched account:', account ? `${account.email} → ${account.role}` : 'none');
       if (account) {
+        console.log('[NOCpulse login] result: SUCCESS — role', account.role);
         login(account.role);
         navigate('/');
       } else {
+        console.log('[NOCpulse login] result: FAIL — password entered:', JSON.stringify(password));
         setError('Invalid credentials. Use one of the demo accounts listed below.');
       }
     }, 1200);
@@ -266,7 +270,7 @@ export default function Login() {
         <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
-            <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Demo Accounts · Password: <span className="font-mono text-primary">demo1234</span></span>
+            <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Demo Accounts · Password: <span className="font-mono text-primary normal-case">demo1234</span></span>
           </div>
           <div className="grid grid-cols-1 gap-1.5">
             {DEMO_ACCOUNTS.map(a => {
