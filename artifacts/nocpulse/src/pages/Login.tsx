@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { Activity, Eye, EyeOff, Lock, Mail, ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight, RefreshCw, Activity } from 'lucide-react';
+import logoMainUrl from '@/assets/logo-main.png';
 import { Button } from '@/components/ui/button';
 
 function PasswordStrength({ password }: { password: string }) {
@@ -85,15 +86,19 @@ export default function Login() {
       <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-cyan-500/8 rounded-full blur-3xl pointer-events-none" />
 
       <div className="relative z-10 w-full max-w-md mx-auto px-4">
-        {/* Logo */}
-        <div className="flex flex-col items-center mb-8 gap-3">
-          <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shadow-lg shadow-primary/10">
-            <Activity className="h-7 w-7 text-primary" />
-          </div>
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight">NOCpulse</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Enterprise ISP Monitoring Platform</p>
-          </div>
+        {/* Logo — logo-main.png has a near-black bg; screen blend dissolves it
+             against the page background so the N mark floats cleanly */}
+        <div className="flex flex-col items-center mb-8">
+          <img
+            src={logoMainUrl}
+            alt="NOCpulse"
+            style={{
+              width: 'clamp(160px, 40vw, 220px)',
+              height: 'auto',
+              display: 'block',
+              mixBlendMode: 'screen',
+            }}
+          />
         </div>
 
         {/* Card */}

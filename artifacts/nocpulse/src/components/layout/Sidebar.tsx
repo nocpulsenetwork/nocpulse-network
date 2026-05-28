@@ -19,7 +19,7 @@ import {
   Shield,
   Lock,
 } from "lucide-react";
-import logoUrl from '@/assets/logo.png';
+import logoIconUrl from '@/assets/logo-icon.png';
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -235,17 +235,25 @@ export function Sidebar({
             "dark:shadow-[0_0_14px_2px_rgba(59,130,246,0.18)]",
             collapsed ? "h-8 w-8" : "h-9 w-9 mr-3",
           )}
-          style={{ background: '#0b1628' }}
+          /* Near-black container — identical to logo-icon.png's own background,
+             so the chip edge is invisible in dark mode.
+             mix-blend-mode:screen on the img dissolves noise/grain artifacts. */
+          style={{ background: '#030609' }}
         >
           <img
-            src={logoUrl}
+            src={logoIconUrl}
             alt="NOCpulse"
+            /*
+              logo-icon.png has a near-black background.
+              mix-blend-mode:screen makes those dark pixels dissolve into
+              the sidebar background in both light and dark mode, leaving
+              only the coloured N mark visible — no container edge needed.
+            */
             style={{
-              position: 'absolute',
-              width:  collapsed ? 80 : 90,
-              height: 'auto',
-              left:   collapsed ? -24 : -27,
-              top: 0,
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              mixBlendMode: 'screen',
             }}
           />
         </div>
