@@ -87,8 +87,15 @@ export function ApiDataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    /* Safety net: loading screen must never persist longer than 1500 ms.
+       If the fetch resolves first, it clears this timer. */
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) setState((prev) => ({ ...prev, loading: false }));
+    }, 1500);
+
     Promise.all([fetchOlts(), fetchOnus(), fetchAlarms()])
       .then(([olts, onus, alarms]) => {
+        clearTimeout(safetyTimer);
         if (cancelled) return;
         setState({
           olts,
@@ -101,6 +108,7 @@ export function ApiDataProvider({ children }: { children: ReactNode }) {
         });
       })
       .catch((err: unknown) => {
+        clearTimeout(safetyTimer);
         if (cancelled) return;
         setState((prev) => ({
           ...prev,
@@ -112,6 +120,7 @@ export function ApiDataProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      clearTimeout(safetyTimer);
     };
   }, []);
 

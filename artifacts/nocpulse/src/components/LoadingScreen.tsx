@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import logoUrl from '@/assets/logo.png';
 import { useApiData } from "@/contexts/ApiDataContext";
 
 export function LoadingScreen() {
   const { loading } = useApiData();
+  const [logoError, setLogoError] = useState(false);
+
   if (!loading) return null;
 
   return (
@@ -24,20 +27,31 @@ export function LoadingScreen() {
             animation: 'np-halo 2.6s ease-in-out infinite',
           }}
         />
-        {/* Logo image */}
-        <img
-          src={logoUrl}
-          alt="NOCpulse"
-          style={{
-            width: 80,
-            height: 80,
-            objectFit: 'contain',
-            position: 'relative',
-            zIndex: 1,
-            animation: 'np-logo 2.6s ease-in-out infinite',
-          }}
-          className="sm:w-[88px] sm:h-[88px]"
-        />
+        {/* Logo image — falls back to SVG mark if PNG fails to load */}
+        {!logoError ? (
+          <img
+            src={logoUrl}
+            alt="NOCpulse"
+            onError={() => setLogoError(true)}
+            style={{
+              width: 80,
+              height: 80,
+              objectFit: 'contain',
+              position: 'relative',
+              zIndex: 1,
+              animation: 'np-logo 2.6s ease-in-out infinite',
+            }}
+          />
+        ) : (
+          <svg
+            width="80" height="80" viewBox="0 0 40 40" fill="none"
+            style={{ position: 'relative', zIndex: 1, animation: 'np-logo 2.6s ease-in-out infinite' }}
+          >
+            <circle cx="20" cy="20" r="19" stroke="#3b82f6" strokeWidth="1.5" strokeOpacity="0.4" />
+            <polyline points="6,22 12,14 18,20 24,10 34,18"
+              stroke="#3b82f6" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+          </svg>
+        )}
       </div>
 
       {/* Brand name + tagline */}
