@@ -287,6 +287,79 @@ export interface ReadOnuDetailResult {
   mibUsed: string;
 }
 
+/**
+ * Optical transceiver measurements for a single ONU.
+ *
+ * All power values are in dBm (floating-point, 2 decimal places).
+ * Raw SNMP integers are multiplied by the vendor scale factor
+ * (typically 0.01, so a raw value of −2730 = −27.30 dBm).
+ * Null means the measurement is not available from the device MIB.
+ */
+export interface SnmpOnuOptical {
+  /** Short ONU identifier within its PON port. */
+  onuId: string;
+
+  /** Human-readable PON port identifier (e.g. "0/4/3"). */
+  ponPort: string;
+
+  /**
+   * ONU optical receive power (dBm).
+   * Typical GPON ONT range: −8 to −27 dBm. Below −30 dBm is critical.
+   */
+  rxPowerDbm: number | null;
+
+  /**
+   * ONU optical transmit power (dBm).
+   * Typical GPON ONT TX range: +0.5 to +5 dBm.
+   */
+  txPowerDbm: number | null;
+
+  /**
+   * OLT receive power — the signal strength measured at the OLT's receiver (dBm).
+   * Useful for diagnosing upstream fibre attenuation.
+   */
+  oltRxPowerDbm: number | null;
+
+  /**
+   * ONU optical module temperature in degrees Celsius.
+   * Null if not reported by the device firmware.
+   */
+  temperatureC: number | null;
+
+  /**
+   * Derived optical health status based on ONU RX power thresholds:
+   *   good     — RX ≥ −28 dBm  (normal operating range)
+   *   weak     — −30 ≤ RX < −28 dBm  (marginal; monitor closely)
+   *   critical — RX < −30 dBm  (below receiver sensitivity; likely to drop)
+   *   unknown  — RX power not available
+   */
+  opticalStatus: "good" | "weak" | "critical" | "unknown";
+
+  /** Full OID instance suffix used in the vendor MIB (e.g. "0.4.3.5"). */
+  rawInstanceOid: string;
+}
+
+/** Return type of {@link RealSnmpClient.readOnuOptical}. */
+export interface ReadOnuOpticalResult {
+  /** Whether the SNMP read succeeded. */
+  success: boolean;
+
+  /** Vendor name used to select the optical MIB. */
+  vendor: string;
+
+  /** Populated optical data on success, null on failure. */
+  onu: SnmpOnuOptical | null;
+
+  /** Human-readable status or error description. */
+  message: string;
+
+  /** Round-trip time from call to return, in milliseconds. */
+  latencyMs: number;
+
+  /** MIB table name used (e.g. "hwGponOnuOptIfInfoTable"). */
+  mibUsed: string;
+}
+
 // ─── Custom error types ────────────────────────────────────────────────────
 
 export class SnmpTimeoutError extends Error {
@@ -908,6 +981,116 @@ export class RealSnmpClient {
       mibUsed:   mib.mibName,
     };
   }
+
+  // ── readOnuOptical ────────────────────────────────────────────────────────
+
+  /**
+   * Read optical transceiver measurements for a single ONU.
+   *
+   * Issues exactly 1 SNMP GET with all available optical column OIDs.
+   * No GETBULK, no walk, no background state.
+   *
+   * Safety contract:
+   *   • Read-only: only snmpGet() — no SET, no walk, no GETBULK
+   *   • One-shot: no interval, no background worker, no persistent session
+   *   • Bounded: exactly 1 SNMP PDU
+   *
+   * @param vendor      Vendor name — must match a key in VENDOR_OPTICAL_MIBS.
+   * @param instanceOid OID instance suffix (same format as readOnuDetails).
+   *                    Use {@link buildOnuInstance} to construct from ponPort + onuId.
+   */
+  async readOnuOptical(vendor: string, instanceOid: string): Promise<ReadOnuOpticalResult> {
+    const start = Date.now();
+    const mib = VENDOR_OPTICAL_MIBS[vendor];
+
+    if (!mib) {
+      const configured = Object.keys(VENDOR_OPTICAL_MIBS).join(", ");
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `Optical power MIB not available for vendor "${vendor}". ` +
+                   (configured
+                     ? `Currently configured: ${configured}.`
+                     : `No vendors configured yet — see TODO comments in VENDOR_OPTICAL_MIBS.`),
+        latencyMs: Date.now() - start,
+        mibUsed:   "none",
+      };
+    }
+
+    // Build per-field OIDs (null entries skipped — columns unsupported by this vendor)
+    const colMap = {
+      rxPower:     mib.colRxPower     !== null ? `${mib.tableRoot}.${mib.colRxPower}.${instanceOid}`     : null,
+      txPower:     mib.colTxPower     !== null ? `${mib.tableRoot}.${mib.colTxPower}.${instanceOid}`     : null,
+      oltRxPower:  mib.colOltRxPower  !== null ? `${mib.tableRoot}.${mib.colOltRxPower}.${instanceOid}`  : null,
+      temperature: mib.colTemperature !== null ? `${mib.tableRoot}.${mib.colTemperature}.${instanceOid}` : null,
+    };
+
+    const oids: string[] = Object.values(colMap).filter((v): v is string => v !== null);
+
+    if (oids.length === 0) {
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `Optical MIB config for "${vendor}" has no readable columns.`,
+        latencyMs: Date.now() - start,
+        mibUsed:   mib.mibName,
+      };
+    }
+
+    // ── Single GET for all optical column OIDs ────────────────────────────
+    let attrMap: Record<string, snmp.Varbind>;
+    try {
+      attrMap = indexVarbinds(await this.snmpGet(oids));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success:   false,
+        vendor,
+        onu:       null,
+        message:   `SNMP GET failed for ONU optical instance ${instanceOid}: ${msg}`,
+        latencyMs: Date.now() - start,
+        mibUsed:   mib.mibName,
+      };
+    }
+
+    // ── Scale raw SNMP integers to dBm / °C ──────────────────────────────
+    const rawRx    = colMap.rxPower     ? intVal(attrMap[colMap.rxPower])     : undefined;
+    const rawTx    = colMap.txPower     ? intVal(attrMap[colMap.txPower])     : undefined;
+    const rawOltRx = colMap.oltRxPower  ? intVal(attrMap[colMap.oltRxPower])  : undefined;
+    const rawTemp  = colMap.temperature ? intVal(attrMap[colMap.temperature]) : undefined;
+
+    // Round to 2 decimal places for power, 1 for temperature — avoids float noise.
+    const rxPowerDbm    = rawRx    !== undefined ? Math.round(rawRx    * mib.powerScale       * 100) / 100 : null;
+    const txPowerDbm    = rawTx    !== undefined ? Math.round(rawTx    * mib.powerScale       * 100) / 100 : null;
+    const oltRxPowerDbm = rawOltRx !== undefined ? Math.round(rawOltRx * mib.powerScale       * 100) / 100 : null;
+    const temperatureC  = rawTemp  !== undefined ? Math.round(rawTemp  * mib.temperatureScale * 10)  / 10  : null;
+
+    // ── Parse instance OID into human-readable port + onuId ──────────────
+    const onuMib = VENDOR_ONU_MIBS[vendor];
+    const parsed = onuMib ? onuMib.parseInstance(instanceOid) : null;
+
+    const onu: SnmpOnuOptical = {
+      onuId:          parsed?.onuId   ?? instanceOid.split(".").pop() ?? instanceOid,
+      ponPort:        parsed?.ponPort ?? instanceOid,
+      rxPowerDbm,
+      txPowerDbm,
+      oltRxPowerDbm,
+      temperatureC,
+      opticalStatus:  deriveOpticalStatus(rxPowerDbm),
+      rawInstanceOid: instanceOid,
+    };
+
+    return {
+      success:   true,
+      vendor,
+      onu,
+      message:   `ONU ${onu.onuId} optical data read from ${mib.mibName}`,
+      latencyMs: Date.now() - start,
+      mibUsed:   mib.mibName,
+    };
+  }
 }
 
 // ─── Helper functions ──────────────────────────────────────────────────────
@@ -1272,6 +1455,98 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   },
 };
 
+// ─── Vendor optical power MIB definitions ─────────────────────────────────
+
+/**
+ * Per-vendor optical interface table MIB configuration.
+ *
+ * All power columns store raw integers where:
+ *   dBm = rawValue × powerScale   (Huawei: 0.01 — raw −2730 = −27.30 dBm)
+ * Temperature columns store raw integers where:
+ *   °C   = rawValue × temperatureScale  (typical: 0.1 — raw 273 = 27.3 °C)
+ *
+ * Columns marked "tentative" are based on public MIB documentation but have
+ * not been verified on production hardware across all firmware versions.
+ * Always confirm against the specific device's compiled MIB before relying on
+ * these in production monitoring.
+ */
+interface VendorOpticalMib {
+  /** Root OID of the optical interface info table (without column or instance suffix). */
+  tableRoot: string;
+
+  /** Short MIB table name for logging and error messages. */
+  mibName: string;
+
+  /** Column for ONU receive power. Raw integer × powerScale = dBm. Null = unsupported. */
+  colRxPower: number | null;
+
+  /** Column for ONU transmit power. Raw integer × powerScale = dBm. Null = unsupported. */
+  colTxPower: number | null;
+
+  /** Column for OLT receive power (upstream signal). Raw integer × powerScale = dBm. */
+  colOltRxPower: number | null;
+
+  /** Column for ONU module temperature. Raw integer × temperatureScale = °C. Null = unsupported. */
+  colTemperature: number | null;
+
+  /** Multiply raw SNMP integer by this to get dBm. Most vendors use 0.01. */
+  powerScale: number;
+
+  /** Multiply raw SNMP integer by this to get °C. Typical: 0.1 or 1. */
+  temperatureScale: number;
+}
+
+/**
+ * Per-vendor optical interface table MIB configurations.
+ *
+ * The optical info table uses the same instance index format as the ONU
+ * management table for each vendor, so the same `buildOnuInstance()` logic
+ * applies. Vendors without a confirmed optical table are simply absent from
+ * this map — the caller receives a clear "not supported" message.
+ *
+ * TODO: Add BDCOM, VSOL, and C-DATA optical tables once OIDs are confirmed.
+ */
+const VENDOR_OPTICAL_MIBS: Record<string, VendorOpticalMib | undefined> = {
+
+  // ── Huawei MA5800-X7 / MA5800-X15 / MA5600T GPON ───────────────────────
+  // MIB: HUAWEI-XPON-MIB::hwGponOnuOptIfInfoTable
+  // Instance index: {frame}.{slot}.{port}.{onuId} — same as hwGponOnuMngTable
+  // Confirmed: cols 2, 3, 4 (RX / TX / OLT-RX) @ 0.01 dBm resolution
+  // Temperature col 9 is tentative — verify per firmware version
+  Huawei: {
+    tableRoot:        "1.3.6.1.4.1.2011.6.139.4.1.4.1",
+    mibName:          "hwGponOnuOptIfInfoTable",
+    colRxPower:       2,    // hwGponOnuOptIfInfoRxPower    — 0.01 dBm
+    colTxPower:       3,    // hwGponOnuOptIfInfoTxPower    — 0.01 dBm
+    colOltRxPower:    4,    // hwGponOnuOptIfInfoOltRxPower — 0.01 dBm
+    colTemperature:   9,    // hwGponOnuOptIfInfoTemperature — tentative, 0.1 °C
+    powerScale:       0.01,
+    temperatureScale: 0.1,
+  },
+
+  // ── ZTE C300 / C320 / C600 / C650 GPON ─────────────────────────────────
+  // MIB: ZTE-AN-GPON-MIB — optical performance stats table (OIDs tentative)
+  // Instance index: {gponIfIndex}.{onuId} — same as zxAnGponOnuTable
+  // TODO: Validate all column assignments against production device MIB file.
+  //       Column numbers vary significantly across C300 vs C320 firmware lines.
+  ZTE: {
+    tableRoot:        "1.3.6.1.4.1.3902.3.101.13.10.8.1",
+    mibName:          "zxAnGponOnuPerfTable",
+    colRxPower:       4,    // tentative — zxAnGponOnuRxPower (0.01 dBm)
+    colTxPower:       5,    // tentative — zxAnGponOnuTxPower (0.01 dBm)
+    colOltRxPower:    6,    // tentative — zxAnGponOltRxPower (0.01 dBm)
+    colTemperature:   null, // not confirmed in publicly available ZTE GPON MIBs
+    powerScale:       0.01,
+    temperatureScale: 1,
+  },
+
+  // BDCOM / VSOL / CDATA:
+  // Optical power MIBs not yet confirmed — entries absent so the endpoint
+  // returns a clear "not supported" message instead of silently returning nulls.
+  // TODO: Add BDCOM bdEponOnuOptIfInfoTable OIDs once validated.
+  // TODO: Add VSOL/CDATA optical table OIDs once validated.
+};
+
 // ─── ONU value parsers ─────────────────────────────────────────────────────
 
 /**
@@ -1347,4 +1622,17 @@ export function buildOnuInstance(vendor: string, onuId: string, ponPort?: string
       // BDCOM / VSOL / CDATA: ponPort is a plain numeric port ID
       return `${ponPort}.${onuId}`;
   }
+}
+
+/**
+ * Derive a simple optical health status label from ONU receive power.
+ *
+ * Thresholds are based on ITU-T G.984.2 Class B+ which specifies −28 dBm
+ * as the minimum ONT receiver sensitivity at 1490 nm.
+ */
+function deriveOpticalStatus(rxPowerDbm: number | null): "good" | "weak" | "critical" | "unknown" {
+  if (rxPowerDbm === null) return "unknown";
+  if (rxPowerDbm >= -28)   return "good";
+  if (rxPowerDbm >= -30)   return "weak";
+  return "critical";
 }

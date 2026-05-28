@@ -31,6 +31,7 @@ import {
   buildOnuInstance,
   type ReadOnuTableResult,
   type ReadOnuDetailResult,
+  type ReadOnuOpticalResult,
 } from "../snmp/real-snmp-client";
 
 export const oltRouter = Router();
@@ -349,6 +350,107 @@ oltRouter.post("/test-onu-details", async (req: Request, res: Response) => {
       data:  { success: false, vendor, onu: null, message: result.message },
       error: result.message,
       code:  "SNMP_READ_FAILED",
+      meta:  { host: ip, port, instanceOid, generatedAt: probeAt },
+    });
+    return;
+  }
+
+  res.json({
+    data: {
+      success:   result.success,
+      vendor:    result.vendor,
+      onu:       result.onu,
+      message:   result.message,
+      latencyMs: result.latencyMs,
+      mibUsed:   result.mibUsed,
+    },
+    meta: {
+      host:        ip,
+      port,
+      instanceOid,
+      generatedAt: probeAt,
+      warning:     "Manual test only — this endpoint does not save or poll the OLT.",
+    },
+  });
+});
+
+// POST /api/olts/test-onu-optical — manual read-only ONU optical power read
+//
+// Reads RX power, TX power, OLT RX power, and temperature for ONE ONU using
+// vendor-specific SNMP optical interface table MIBs. Exactly 1 SNMP GET.
+//
+// Safety contract:
+//   • Read-only: snmpGet() only — no SET, no walk, no GETBULK
+//   • One-shot: no interval, no background worker, no persistent session
+//   • Bounded: exactly 1 SNMP PDU
+//   • Does NOT save to the database
+//   • Does NOT start polling
+//   • Does NOT fetch traffic counters
+//
+// Instance OID resolution order (same as test-onu-details):
+//   1. `instanceOid` — use directly (rawInstanceOid from the list response)
+//   2. `ponPort` + `onuId` — reconstructed with vendor-specific rules
+//   3. `onuId` alone — used as-is
+oltRouter.post("/test-onu-optical", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+
+  // ── Input validation ────────────────────────────────────────────────────
+  if (typeof body["ip"] !== "string" || !body["ip"].trim()) {
+    res.status(400).json({ error: "Missing required field: ip", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["community"] !== "string" || !body["community"].trim()) {
+    res.status(400).json({ error: "Missing required field: community", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["vendor"] !== "string" || !body["vendor"].trim()) {
+    res.status(400).json({
+      error: "Missing required field: vendor (optical currently supported: Huawei, ZTE)",
+      code: "INVALID_INPUT",
+    });
+    return;
+  }
+  if (typeof body["onuId"] !== "string" || !body["onuId"].trim()) {
+    res.status(400).json({ error: "Missing required field: onuId", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const ip        = (body["ip"] as string).trim();
+  const community = (body["community"] as string).trim();
+  const vendor    = (body["vendor"] as string).trim();
+  const onuId     = (body["onuId"] as string).trim();
+  const port      = body["port"]      !== undefined ? Number(body["port"])      : 161;
+  const timeoutMs = Math.min(body["timeoutMs"] !== undefined ? Number(body["timeoutMs"]) : 3_000, 10_000);
+  const retries   = Math.min(body["retries"]   !== undefined ? Number(body["retries"])   : 1,     2);
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    res.status(400).json({ error: "Invalid port: must be 1–65535", code: "INVALID_INPUT" });
+    return;
+  }
+
+  // ── Resolve OID instance suffix ─────────────────────────────────────────
+  const instanceOid: string =
+    typeof body["instanceOid"] === "string" && body["instanceOid"].trim()
+      ? (body["instanceOid"] as string).trim()
+      : buildOnuInstance(
+          vendor,
+          onuId,
+          typeof body["ponPort"] === "string" ? (body["ponPort"] as string).trim() : undefined,
+        );
+
+  // ── SNMP optical read — exactly 1 PDU ───────────────────────────────────
+  const client  = new RealSnmpClient({ host: ip, community, port, timeoutMs, retries });
+  const probeAt = new Date().toISOString();
+
+  const result: ReadOnuOpticalResult = await client.readOnuOptical(vendor, instanceOid);
+
+  if (!result.success) {
+    // 422 for "not supported by vendor", 502 for SNMP failure
+    const status = result.message.includes("not available") || result.message.includes("no readable") ? 422 : 502;
+    res.status(status).json({
+      data:  { success: false, vendor, onu: null, message: result.message },
+      error: result.message,
+      code:  "OPTICAL_READ_FAILED",
       meta:  { host: ip, port, instanceOid, generatedAt: probeAt },
     });
     return;
