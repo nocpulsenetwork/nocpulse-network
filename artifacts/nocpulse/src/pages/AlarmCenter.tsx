@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { type Alarm, NOC_STAFF, type NocStaff } from '@/data/mockData';
 import { useApiData } from '@/contexts/ApiDataContext';
+import { PermissionBanner } from '@/components/PermissionBanner';
+import { usePermissions } from '@/lib/permissions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -416,6 +418,7 @@ function EmptyState({ icon: Icon, message }: { icon: React.ElementType; message:
 }
 
 export default function AlarmCenter() {
+  const { can } = usePermissions();
   const { alarms: apiAlarms } = useApiData();
   const [tick, setTick] = useState(0);
   const [enriched, setEnriched] = useState<EnrichedAlarm[]>(() =>
@@ -589,6 +592,8 @@ export default function AlarmCenter() {
         </div>
       </div>
 
+      <PermissionBanner context="Alarm Center — monitoring and acknowledgement" />
+
       {/* Summary strip */}
       <div className="flex items-center gap-2 flex-wrap p-4 rounded-xl border border-border/60 bg-card/60 backdrop-blur-sm">
         <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
@@ -684,7 +689,7 @@ export default function AlarmCenter() {
             <EmptyState icon={ShieldCheck} message={severityFilter !== 'All' ? `No active ${severityFilter} alarms` : 'No active alarms — all systems operational'} />
           ) : (
             displayAll.map(alarm => (
-              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />
+              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={can('alarm.acknowledge') ? handleAcknowledge : undefined} onView={() => markViewed(alarm.id)} />
             ))
           )}
         </TabsContent>
@@ -695,7 +700,7 @@ export default function AlarmCenter() {
             <EmptyState icon={ShieldCheck} message="No critical alarms" />
           ) : (
             displayCritical.map(alarm => (
-              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />
+              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={can('alarm.acknowledge') ? handleAcknowledge : undefined} onView={() => markViewed(alarm.id)} />
             ))
           )}
         </TabsContent>
@@ -706,7 +711,7 @@ export default function AlarmCenter() {
             <EmptyState icon={ShieldCheck} message="No warnings" />
           ) : (
             displayWarning.map(alarm => (
-              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={handleAcknowledge} onView={() => markViewed(alarm.id)} />
+              <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onAcknowledge={can('alarm.acknowledge') ? handleAcknowledge : undefined} onView={() => markViewed(alarm.id)} />
             ))
           )}
         </TabsContent>

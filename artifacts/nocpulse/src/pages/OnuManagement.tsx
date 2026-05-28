@@ -32,6 +32,8 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link, useLocation } from "wouter";
+import { PermissionBanner } from "@/components/PermissionBanner";
+import { usePermissions } from "@/lib/permissions";
 import {
   Select,
   SelectContent,
@@ -125,6 +127,7 @@ type ConfirmAction = { type: "reboot" | "disable" | "enable"; onuId: string } | 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OnuManagement() {
+  const { can } = usePermissions();
   const { onus, olts } = useApiData();
   const [, setLocation] = useLocation();
 
@@ -312,6 +315,8 @@ export default function OnuManagement() {
           Export CSV
         </Button>
       </div>
+
+      <PermissionBanner context="ONU Management — device monitoring and configuration" />
 
       {/* Active filter chips */}
       {hasActiveFilters && (
@@ -667,37 +672,45 @@ export default function OnuManagement() {
                               View ONU Details
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              className="gap-2 cursor-pointer"
-                              onClick={() => setConfirmAction({ type: "reboot", onuId: onu.id })}
+                              className={`gap-2 ${can('onu.manage') ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
+                              disabled={!can('onu.manage')}
+                              onClick={() => can('onu.manage') && setConfirmAction({ type: "reboot", onuId: onu.id })}
                             >
                               <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
                               Instant Reboot
+                              {!can('onu.manage') && <span className="ml-auto text-[9px] opacity-60">Admin+</span>}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {onu.status !== "Offline" ? (
                               <DropdownMenuItem
-                                className="gap-2 cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-500/10"
-                                onClick={() => setConfirmAction({ type: "disable", onuId: onu.id })}
+                                className={`gap-2 ${can('onu.manage') ? 'cursor-pointer text-red-500 focus:text-red-500 focus:bg-red-500/10' : 'cursor-not-allowed opacity-40'}`}
+                                disabled={!can('onu.manage')}
+                                onClick={() => can('onu.manage') && setConfirmAction({ type: "disable", onuId: onu.id })}
                               >
                                 <PowerOff className="h-3.5 w-3.5" />
                                 Disable Service
+                                {!can('onu.manage') && <span className="ml-auto text-[9px] opacity-60">Admin+</span>}
                               </DropdownMenuItem>
                             ) : (
                               <DropdownMenuItem
-                                className="gap-2 cursor-pointer text-green-500 focus:text-green-500 focus:bg-green-500/10"
-                                onClick={() => setConfirmAction({ type: "enable", onuId: onu.id })}
+                                className={`gap-2 ${can('onu.manage') ? 'cursor-pointer text-green-500 focus:text-green-500 focus:bg-green-500/10' : 'cursor-not-allowed opacity-40'}`}
+                                disabled={!can('onu.manage')}
+                                onClick={() => can('onu.manage') && setConfirmAction({ type: "enable", onuId: onu.id })}
                               >
                                 <Power className="h-3.5 w-3.5" />
                                 Restore Service
+                                {!can('onu.manage') && <span className="ml-auto text-[9px] opacity-60">Admin+</span>}
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              className="gap-2 cursor-pointer"
-                              onClick={() => { setEditingOnu(onu.id); setEditDesc(onu.description); }}
+                              className={`gap-2 ${can('onu.manage') ? 'cursor-pointer' : 'cursor-not-allowed opacity-40'}`}
+                              disabled={!can('onu.manage')}
+                              onClick={() => can('onu.manage') && (setEditingOnu(onu.id), setEditDesc(onu.description))}
                             >
                               <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                               Edit Description
+                              {!can('onu.manage') && <span className="ml-auto text-[9px] opacity-60">Admin+</span>}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

@@ -45,6 +45,7 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
+import { PermissionBanner } from "@/components/PermissionBanner";
 
 function BrandBadge({ brand }: { brand: string }) {
   const colors: Record<string, string> = {
@@ -247,6 +248,8 @@ export default function OltManagement() {
           </div>
         </div>
       </div>
+
+      <PermissionBanner context="OLT Management — view and navigation" />
 
       <div className="flex flex-wrap items-center gap-2 sm:gap-3 bg-card/60 backdrop-blur-sm p-3 sm:p-4 rounded-xl border border-border/60">
         <div className="relative flex-1 min-w-[140px] sm:flex-none sm:w-full sm:max-w-[240px]">

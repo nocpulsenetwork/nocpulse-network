@@ -5,6 +5,8 @@ import {
   Calendar, UserCheck, MoreHorizontal, RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PermissionBanner } from '@/components/PermissionBanner';
+import { usePermissions } from '@/lib/permissions';
 
 interface Subscriber {
   id: string;
@@ -277,6 +279,7 @@ function SubscriberRow({ sub, expanded, onToggle }: { sub: Subscriber; expanded:
 }
 
 export default function SubscriberManagement() {
+  const { can } = usePermissions();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -303,11 +306,21 @@ export default function SubscriberManagement() {
           <h1 className="text-2xl font-bold tracking-tight">Subscriber Management</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage ISP client accounts, plan limits, and subscription status</p>
         </div>
-        <Button className="gap-2 text-sm" disabled>
+        <Button
+          className="gap-2 text-sm"
+          disabled={!can('subscribers.manage')}
+          title={!can('subscribers.manage') ? 'Requires Admin or higher' : undefined}
+        >
           <Plus className="h-4 w-4" /> Add Subscriber
-          <span className="text-[9px] opacity-60 ml-1">· API required</span>
+          {can('subscribers.manage') ? (
+            <span className="text-[9px] opacity-60 ml-1">· API required</span>
+          ) : (
+            <span className="text-[9px] opacity-60 ml-1">· Restricted</span>
+          )}
         </Button>
       </div>
+
+      <PermissionBanner context="Subscriber Management — account administration" />
 
       {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

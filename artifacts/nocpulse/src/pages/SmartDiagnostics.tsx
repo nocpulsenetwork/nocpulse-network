@@ -6,6 +6,8 @@ import {
   ArrowRight, Clock, Zap, RotateCcw, Cable, GitBranch, Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { PermissionBanner } from '@/components/PermissionBanner';
+import { usePermissions } from '@/lib/permissions';
 
 type Severity = 'Critical' | 'Major' | 'Minor' | 'OK';
 
@@ -339,6 +341,7 @@ function fmtTime(d: Date) {
 }
 
 export default function SmartDiagnostics() {
+  const { can } = usePermissions();
   const [syncState, setSyncState] = useState<'idle' | 'syncing' | 'done'>('idle');
   const [lastScan, setLastScan] = useState('');
   const hasAutoSynced = useRef(false);
@@ -387,13 +390,16 @@ export default function SmartDiagnostics() {
             size="sm"
             className="gap-1.5 text-xs"
             onClick={runSync}
-            disabled={syncState === 'syncing'}
+            disabled={syncState === 'syncing' || !can('diagnostics.run')}
+            title={!can('diagnostics.run') ? 'Requires NOC Engineer or higher' : undefined}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${syncState === 'syncing' ? 'animate-spin' : ''}`} />
             {syncState === 'syncing' ? 'Syncing…' : syncState === 'done' ? 'Completed' : 'Run Scan'}
           </Button>
         </div>
       </div>
+
+      <PermissionBanner context="Smart Diagnostics — network health analysis" />
 
       {/* Summary strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
