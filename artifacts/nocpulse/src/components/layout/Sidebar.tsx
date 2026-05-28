@@ -218,14 +218,27 @@ export function Sidebar({
           collapsed ? "justify-center px-0" : "px-3",
         )}
       >
-        <img
-          src={logoUrl}
-          alt="NOCpulse"
+        {/* Logo chip — dark container matches the logo's baked-in navy background */}
+        <div
           className={cn(
-            "object-contain shrink-0",
-            collapsed ? "h-7 w-7" : "h-8 w-8 mr-2.5",
+            "shrink-0 rounded-lg overflow-hidden flex items-center justify-center",
+            collapsed ? "h-8 w-8" : "h-9 w-[54px] mr-2.5",
           )}
-        />
+          style={{ background: '#0b1628' }}
+        >
+          <img
+            src={logoUrl}
+            alt="NOCpulse"
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              /* Pan to the N icon mark — skip the text row at the bottom */
+              objectPosition: 'center 18%',
+              imageRendering: 'auto',
+            }}
+          />
+        </div>
         {!collapsed && (
           <div className="flex flex-1 items-center justify-between min-w-0">
             <div className="min-w-0">

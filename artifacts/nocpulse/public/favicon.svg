@@ -1,12 +1,16 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="180" height="180" rx="38" fill="#0b1a2e"/>
-  <circle cx="90" cy="90" r="68" stroke="#3b82f6" stroke-width="1.5" stroke-opacity="0.25"/>
-  <polyline
-    points="22,100 52,58 82,82 112,38 150,72"
-    stroke="#3b82f6"
-    stroke-width="11"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    fill="none"
-  />
+  <rect width="180" height="180" rx="36" fill="#0b1628"/>
+  <defs>
+    <linearGradient id="ng" x1="30" y1="28" x2="148" y2="148" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#22c55e"/>
+    </linearGradient>
+  </defs>
+  <!-- N letter strokes -->
+  <path d="M34 148 L34 32 L53 32 L130 116 L130 32 L148 32 L148 148 L129 148 L52 64 L52 148 Z"
+        fill="url(#ng)"/>
+  <!-- Pulse line through the N -->
+  <polyline points="44,100 62,80 76,90 96,58 114,72 132,90"
+    stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"
+    fill="none" opacity="0.85"/>
 </svg>
