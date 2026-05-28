@@ -24,6 +24,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
 import {
   Search, LayoutGrid, List, Cpu, MemoryStick, Thermometer,
   Activity, Eye, MoreHorizontal, Wifi, WifiOff,
@@ -40,6 +41,7 @@ interface ManagedOlt extends OltDevice {
   addedDate: string;
   isEnabled: boolean;
   isCustom: boolean;
+  safePollingMode: boolean;
 }
 
 interface OltFormData {
@@ -51,6 +53,7 @@ interface OltFormData {
   community: string;
   location: string;
   description: string;
+  safePollingMode: boolean;
 }
 
 type FormErrors = Partial<Record<keyof OltFormData, string>>;
@@ -59,7 +62,19 @@ type TestState = "idle" | "testing" | "pass" | "fail";
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const STORAGE_KEY = "nocpulse-managed-olts";
-const VENDORS = ["Huawei", "ZTE", "Nokia", "Fiberhome", "Calix", "Other"] as const;
+const VENDORS = [
+  "Huawei", "ZTE", "BDCOM", "VSOL", "CDATA", "HSGQ",
+  "Syrotech", "Corelink", "Zibix", "Nokia", "Fiberhome", "Calix", "Generic",
+] as const;
+
+const INVENTORY_SYNC_KEY = "nocpulse-inventory";
+const OLT_MODEL_MAP: Record<string, string> = {
+  "Huawei:GPON": "MA5800-X15",    "Huawei:EPON": "MA5600T",
+  "ZTE:GPON": "ZXA10 C300",       "ZTE:EPON": "ZXA10 C600",
+  "Nokia:GPON": "ISAM 7360",      "Nokia:EPON": "ISAM 7363",
+  "Fiberhome:GPON": "AN5516-06",  "Fiberhome:EPON": "AN5516-04",
+  "Calix:GPON": "E7-2",           "Calix:EPON": "E3-48C",
+};
 
 const DEFAULT_FORM: OltFormData = {
   name: "",
@@ -70,6 +85,7 @@ const DEFAULT_FORM: OltFormData = {
   community: "public",
   location: "",
   description: "",
+  safePollingMode: false,
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -106,7 +122,38 @@ function seedFromApi(apiOlts: OltDevice[]): ManagedOlt[] {
     addedDate: olt.lastSync,
     isEnabled: true,
     isCustom: false,
+    safePollingMode: false,
   }));
+}
+
+function syncOltToInventory(olt: ManagedOlt): void {
+  try {
+    const raw = localStorage.getItem(INVENTORY_SYNC_KEY);
+    if (!raw) return; // inventory not seeded yet; DeviceInventory will pick it up on mount
+    const inv = JSON.parse(raw) as Array<{ id: string; ip: string }>;
+    const invId = `inv-olt-${olt.id}`;
+    if (inv.some((d) => d.id === invId || d.ip === olt.ip)) return;
+    const entry = {
+      id: invId,
+      name: olt.name,
+      deviceType: "OLT",
+      vendor: olt.brand,
+      model: OLT_MODEL_MAP[`${olt.brand}:${olt.type}`] ?? `${olt.brand} OLT`,
+      ip: olt.ip,
+      macOrSerial: `SN:${olt.id.replace(/-/g, "").toUpperCase()}`,
+      status: olt.status,
+      location: olt.location,
+      lastSeen: olt.lastSeen,
+      addedDate: olt.addedDate,
+      isEnabled: olt.isEnabled,
+      description: olt.description,
+      isCustom: olt.isCustom,
+      sourceId: olt.isCustom ? undefined : olt.id,
+    };
+    localStorage.setItem(INVENTORY_SYNC_KEY, JSON.stringify([...inv, entry]));
+  } catch {
+    // Silently ignore storage errors
+  }
 }
 
 function loadOlts(): ManagedOlt[] | null {
@@ -168,6 +215,7 @@ function createFromForm(form: OltFormData): ManagedOlt {
     addedDate: now,
     isEnabled: true,
     isCustom: true,
+    safePollingMode: form.safePollingMode,
   };
 }
 
@@ -183,6 +231,7 @@ function applyFormToOlt(existing: ManagedOlt, form: OltFormData): ManagedOlt {
     snmpVersion: form.snmpVersion,
     community: form.community.trim() || "public",
     description: form.description.trim(),
+    safePollingMode: form.safePollingMode,
   };
 }
 
@@ -196,6 +245,7 @@ function oltToForm(olt: ManagedOlt): OltFormData {
     community: olt.community,
     location: olt.location,
     description: olt.description,
+    safePollingMode: olt.safePollingMode ?? false,
   };
 }
 
@@ -203,11 +253,19 @@ function oltToForm(olt: ManagedOlt): OltFormData {
 
 function BrandBadge({ brand }: { brand: string }) {
   const colors: Record<string, string> = {
-    Huawei: "bg-red-500/10 text-red-400 border-red-500/20",
-    ZTE: "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    Nokia: "bg-purple-500/10 text-purple-400 border-purple-500/20",
+    Huawei:    "bg-red-500/10 text-red-400 border-red-500/20",
+    ZTE:       "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    BDCOM:     "bg-teal-500/10 text-teal-400 border-teal-500/20",
+    VSOL:      "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+    CDATA:     "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    HSGQ:      "bg-pink-500/10 text-pink-400 border-pink-500/20",
+    Syrotech:  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    Corelink:  "bg-sky-500/10 text-sky-400 border-sky-500/20",
+    Zibix:     "bg-violet-500/10 text-violet-400 border-violet-500/20",
+    Nokia:     "bg-purple-500/10 text-purple-400 border-purple-500/20",
     Fiberhome: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    Calix: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    Calix:     "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
+    Generic:   "bg-slate-500/10 text-slate-400 border-slate-500/20",
   };
   return (
     <span
@@ -548,6 +606,20 @@ function OltFormModal({
             </div>
           </div>
 
+          {/* Safe Polling Mode */}
+          <div className="flex items-center justify-between rounded-lg border border-border/50 bg-background/30 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium leading-none">Safe Polling Mode</p>
+              <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">
+                Reduce polling frequency for legacy or resource-constrained devices
+              </p>
+            </div>
+            <Switch
+              checked={form.safePollingMode}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, safePollingMode: v }))}
+            />
+          </div>
+
           {/* Location */}
           <div>
             <label className={labelCls}>Location</label>
@@ -668,6 +740,7 @@ export default function OltManagement() {
     if (modal?.mode === "add") {
       const newOlt = createFromForm(form);
       setManagedOlts((prev) => (prev ? [...prev, newOlt] : [newOlt]));
+      syncOltToInventory(newOlt);
       toast.success(`${newOlt.name} added`, {
         description: `${newOlt.brand} ${newOlt.type} · ${newOlt.ip}`,
       });
@@ -877,9 +950,16 @@ export default function OltManagement() {
 
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-mono text-[10px] text-muted-foreground">{olt.ip}</span>
-                    <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-mono">
-                      SNMP {olt.snmpVersion.toUpperCase()}
-                    </span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wider font-mono">
+                        SNMP {olt.snmpVersion.toUpperCase()}
+                      </span>
+                      {olt.safePollingMode && (
+                        <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase tracking-wider">
+                          SPM
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   <div className="h-px w-full bg-border/60" />
@@ -1052,9 +1132,16 @@ export default function OltManagement() {
 
                       {/* SNMP */}
                       <TableCell>
-                        <span className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">
-                          {olt.snmpVersion}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] text-muted-foreground font-mono uppercase tracking-wider">
+                            {olt.snmpVersion}
+                          </span>
+                          {olt.safePollingMode && (
+                            <span className="text-[9px] px-1 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold uppercase tracking-wider">
+                              SPM
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
 
                       {/* Status */}

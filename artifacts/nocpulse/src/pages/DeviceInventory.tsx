@@ -202,6 +202,50 @@ function storeInventory(devices: InventoryDevice[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(devices));
 }
 
+interface StoredManagedOlt {
+  id: string;
+  name: string;
+  brand: string;
+  ip: string;
+  type: "GPON" | "EPON";
+  location: string;
+  status: "Online" | "Offline" | "Degraded";
+  lastSeen: string;
+  addedDate: string;
+  isEnabled: boolean;
+  description: string;
+  isCustom: boolean;
+}
+
+function loadManagedOlts(): StoredManagedOlt[] {
+  try {
+    const raw = localStorage.getItem("nocpulse-managed-olts");
+    return raw ? (JSON.parse(raw) as StoredManagedOlt[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function managedOltToInventory(m: StoredManagedOlt): InventoryDevice {
+  return {
+    id: `inv-olt-${m.id}`,
+    name: m.name,
+    deviceType: "OLT",
+    vendor: m.brand,
+    model: OLT_MODELS[`${m.brand}:${m.type}`] ?? `${m.brand} OLT`,
+    ip: m.ip,
+    macOrSerial: `SN:${m.id.replace(/-/g, "").toUpperCase()}`,
+    status: m.status,
+    location: m.location,
+    lastSeen: m.lastSeen,
+    addedDate: m.addedDate,
+    isEnabled: m.isEnabled,
+    description: m.description,
+    isCustom: m.isCustom,
+    sourceId: m.isCustom ? undefined : m.id,
+  };
+}
+
 function validateForm(
   form: InventoryFormData,
   devices: InventoryDevice[],
@@ -595,13 +639,26 @@ export default function DeviceInventory() {
   } | null>(null);
   const [testStates, setTestStates] = useState<Record<string, TestState>>({});
 
-  // Seed on first load
+  // Seed on first load, and merge in any OLTs added via OLT Management
   useEffect(() => {
     const stored = loadInventory();
+    const managed = loadManagedOlts();
+
+    function mergeManaged(base: InventoryDevice[]): InventoryDevice[] {
+      const existingIds = new Set(base.map((d) => d.id));
+      const existingIps = new Set(base.map((d) => d.ip));
+      const toAdd = managed
+        .filter((m) => !existingIds.has(`inv-olt-${m.id}`) && !existingIps.has(m.ip))
+        .map(managedOltToInventory);
+      return toAdd.length > 0 ? [...base, ...toAdd] : base;
+    }
+
     if (stored && stored.length > 0) {
-      setDevices(stored);
+      const merged = mergeManaged(stored);
+      setDevices(merged);
+      if (merged !== stored) storeInventory(merged);
     } else if (apiOlts.length > 0) {
-      const seeded = seedFromApi(apiOlts, apiOnus);
+      const seeded = mergeManaged(seedFromApi(apiOlts, apiOnus));
       setDevices(seeded);
       storeInventory(seeded);
     }
