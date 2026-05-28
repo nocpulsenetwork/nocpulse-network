@@ -34,7 +34,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
-  const { role, user } = useRole();
+  const { role, user, logout } = useRole();
   const roleStyle = ROLE_LABELS[role];
   const RoleIcon =
     role === "super_admin" ? Crown : role === "admin" ? ShieldCheck : Shield;
@@ -463,11 +463,12 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild className="cursor-pointer gap-2 text-muted-foreground hover:text-foreground">
-              <Link href="/login" className="w-full flex items-center">
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Link>
+            <DropdownMenuItem
+              className="cursor-pointer gap-2 text-muted-foreground hover:text-foreground"
+              onClick={() => { logout(); window.location.href = '/login'; }}
+            >
+              <LogOut className="h-4 w-4" />
+              Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RoleGuard } from '@/components/RoleGuard';
 
 type Role = 'Super Admin' | 'Admin' | 'Staff';
 
@@ -155,6 +156,10 @@ export default function StaffManagement() {
   const adminCount = STAFF.filter(s => s.role === 'Admin' || s.role === 'Super Admin').length;
 
   return (
+    <RoleGuard
+      allow={['super_admin', 'admin']}
+      message="Staff & Permissions management is restricted to Super Admins and Admins only."
+    >
     <div className="space-y-6 max-w-6xl">
       <div className="flex items-start justify-between">
         <div>
@@ -422,5 +427,6 @@ export default function StaffManagement() {
         </TabsContent>
       </Tabs>
     </div>
+    </RoleGuard>
   );
 }

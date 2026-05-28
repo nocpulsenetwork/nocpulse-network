@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useRole } from '@/contexts/RoleContext';
+import { RoleGuard } from '@/components/RoleGuard';
 import { olts, onus } from '@/data/mockData';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -86,7 +87,7 @@ const TIMEZONES = [
 
 export default function Settings() {
   const { theme, setTheme } = useTheme();
-  const { isSuperAdmin } = useRole();
+  const { isSuperAdmin, canAdminister: _unused } = useRole();
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [showSnmp, setShowSnmp] = useState(false);
   const [showSshKey, setShowSshKey] = useState(false);
@@ -116,12 +117,35 @@ export default function Settings() {
   const handleCopy = () => { setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const handleTgTest = () => { setTgTestSent(true); setTimeout(() => setTgTestSent(false), 3000); };
 
+  const { canAdminister, isViewer, role } = useRole();
+
   return (
     <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground text-sm mt-1">System configuration, integrations, and security settings</p>
       </div>
+
+      {/* Role access notice for non-admin users */}
+      {!canAdminister && (
+        <div className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm ${
+          isViewer
+            ? 'bg-slate-500/5 border-slate-500/20 text-slate-400'
+            : 'bg-amber-500/5 border-amber-500/20 text-amber-400'
+        }`}>
+          <Lock className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <p className="font-semibold text-foreground">
+              {isViewer ? 'Read-Only View' : 'Limited Access'}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {isViewer
+                ? 'You have view-only access. Settings cannot be changed with the Viewer role.'
+                : 'NOC Engineers can view settings but cannot modify credentials or system configuration. Contact an Admin for changes.'}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── BACKEND PREPARATION STATUS ── */}
       <SectionCard title="Backend Integration Status" description="Connection readiness for NOCpulse API and services" icon={HardDrive} iconColor="text-primary">

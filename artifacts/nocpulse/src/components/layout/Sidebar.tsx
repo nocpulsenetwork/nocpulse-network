@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Shield,
   Lock,
+  Eye,
 } from "lucide-react";
 import logoIconUrl from '@/assets/logo-icon.png';
 import { cn } from "@/lib/utils";
@@ -44,9 +45,10 @@ type NavItem = {
 };
 
 const roleOrder: Record<UserRole, number> = {
-  super_admin: 3,
-  admin: 2,
-  staff: 1,
+  super_admin:  4,
+  admin:        3,
+  noc_engineer: 2,
+  viewer:       1,
 };
 
 export function Sidebar({
@@ -56,7 +58,7 @@ export function Sidebar({
   onNavClick,
 }: SidebarProps) {
   const [location] = useLocation();
-  const { role, setRole, isSuperAdmin, isAdmin, isStaff, user } = useRole();
+  const { role, setRole, isSuperAdmin, isAdmin, user } = useRole();
 
   const canAccess = (minRole?: UserRole) => {
     if (!minRole) return true;
@@ -312,8 +314,8 @@ export function Sidebar({
           )}
         </nav>
 
-        {/* Staff restriction notice */}
-        {isStaff && !collapsed && (
+        {/* Restricted access notice for noc_engineer / viewer */}
+        {!isAdmin && !collapsed && (
           <div className="mx-3 mt-4 mb-2 rounded-lg border border-slate-500/20 bg-slate-500/5 px-3 py-2.5 flex items-start gap-2">
             <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
             <div>
@@ -321,7 +323,7 @@ export function Sidebar({
                 Restricted Access
               </p>
               <p className="text-[9px] text-muted-foreground leading-snug mt-0.5">
-                Some sections are hidden based on your Staff role.
+                Some sections require Admin or Super Admin permissions.
               </p>
             </div>
           </div>
@@ -405,9 +407,10 @@ export function Sidebar({
               </p>
               <div className="flex gap-1">
                 {[
-                  { r: "super_admin" as UserRole, label: "SAdm", Icon: Crown },
-                  { r: "admin" as UserRole, label: "Admin", Icon: ShieldCheck },
-                  { r: "staff" as UserRole, label: "Staff", Icon: Shield },
+                  { r: "super_admin"  as UserRole, label: "SAdm", Icon: Crown      },
+                  { r: "admin"        as UserRole, label: "Adm",  Icon: ShieldCheck },
+                  { r: "noc_engineer" as UserRole, label: "NOC",  Icon: Shield      },
+                  { r: "viewer"       as UserRole, label: "View", Icon: Eye         },
                 ].map(({ r, label, Icon }) => {
                   const rs = ROLE_LABELS[r];
                   const active = role === r;

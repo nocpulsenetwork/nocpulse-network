@@ -1,8 +1,16 @@
 import { useState } from 'react';
 import { useLocation } from 'wouter';
-import { Eye, EyeOff, Lock, Mail, ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight, RefreshCw, Activity } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight, RefreshCw, Activity, Crown, Shield } from 'lucide-react';
 import logoMainUrl from '@/assets/logo-main.png';
 import { Button } from '@/components/ui/button';
+import { useRole, type UserRole, ROLE_LABELS } from '@/contexts/RoleContext';
+
+const DEMO_ACCOUNTS: { email: string; password: string; role: UserRole }[] = [
+  { email: 'admin@nocpulse.io',   password: 'demo1234', role: 'super_admin'  },
+  { email: 'manager@nocpulse.io', password: 'demo1234', role: 'admin'        },
+  { email: 'noc@nocpulse.io',     password: 'demo1234', role: 'noc_engineer' },
+  { email: 'viewer@nocpulse.io',  password: 'demo1234', role: 'viewer'       },
+];
 
 function PasswordStrength({ password }: { password: string }) {
   if (!password) return null;
@@ -44,6 +52,7 @@ function PasswordStrength({ password }: { password: string }) {
 
 export default function Login() {
   const [, navigate] = useLocation();
+  const { login } = useRole();
   const [view, setView] = useState<'login' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -60,10 +69,12 @@ export default function Login() {
     setLoading(true);
     setTimeout(() => {
       setLoading(false);
-      if (email === 'admin@nocpulse.io' && password === 'demo1234') {
+      const account = DEMO_ACCOUNTS.find(a => a.email === email && a.password === password);
+      if (account) {
+        login(account.role);
         navigate('/');
       } else {
-        setError('Invalid credentials. Try admin@nocpulse.io / demo1234');
+        setError('Invalid credentials. Use one of the demo accounts listed below.');
       }
     }, 1200);
   };
@@ -251,13 +262,33 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Demo credentials hint */}
-        <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 flex items-start gap-2.5">
-          <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-          <div className="text-[11px] text-muted-foreground leading-relaxed">
-            <span className="text-foreground font-semibold">Demo credentials — </span>
-            Email: <span className="font-mono text-primary">admin@nocpulse.io</span> · Password: <span className="font-mono text-primary">demo1234</span>
+        {/* Demo credentials hint — all 4 roles */}
+        <div className="mt-4 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span className="text-[11px] font-semibold text-foreground uppercase tracking-wider">Demo Accounts · Password: <span className="font-mono text-primary">demo1234</span></span>
           </div>
+          <div className="grid grid-cols-1 gap-1.5">
+            {DEMO_ACCOUNTS.map(a => {
+              const rl = ROLE_LABELS[a.role];
+              const RoleIcon = a.role === 'super_admin' ? Crown : a.role === 'admin' ? ShieldCheck : a.role === 'noc_engineer' ? Shield : Eye;
+              return (
+                <button
+                  key={a.role}
+                  type="button"
+                  onClick={() => { setEmail(a.email); setPassword('demo1234'); }}
+                  className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg border border-border/40 bg-card/50 hover:bg-card hover:border-border transition-all text-left group"
+                >
+                  <div className={`h-5 w-5 rounded flex items-center justify-center ${rl.bg} border ${rl.border} shrink-0`}>
+                    <RoleIcon className={`h-3 w-3 ${rl.color}`} />
+                  </div>
+                  <span className={`text-[10px] font-bold uppercase tracking-wider ${rl.color} shrink-0 w-[82px]`}>{rl.label}</span>
+                  <span className="font-mono text-[10px] text-muted-foreground truncate group-hover:text-foreground transition-colors">{a.email}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[9px] text-muted-foreground/60 text-center">Click any row to auto-fill credentials</p>
         </div>
 
         {/* Security badges */}

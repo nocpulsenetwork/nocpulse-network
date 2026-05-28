@@ -1,9 +1,9 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { RoleProvider } from "@/contexts/RoleContext";
+import { RoleProvider, useRole } from "@/contexts/RoleContext";
 import { ApiDataProvider } from "@/contexts/ApiDataContext";
 import { LoadingScreen } from "@/components/LoadingScreen";
 import { useEffect } from "react";
@@ -27,14 +27,25 @@ import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = useRole();
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    if (!isAuthenticated) navigate('/login');
+  }, [isAuthenticated]);
+  if (!isAuthenticated) return null;
+  return <>{children}</>;
+}
+
 function Router() {
   return (
     <Switch>
       {/* Standalone routes — no sidebar/navbar */}
       <Route path="/login" component={Login} />
 
-      {/* App routes — wrapped in Layout */}
+      {/* App routes — protected and wrapped in Layout */}
       <Route>
+        <ProtectedRoute>
         <Layout>
           <Switch>
             <Route path="/" component={Dashboard} />
@@ -54,6 +65,7 @@ function Router() {
             <Route component={NotFound} />
           </Switch>
         </Layout>
+        </ProtectedRoute>
       </Route>
     </Switch>
   );
