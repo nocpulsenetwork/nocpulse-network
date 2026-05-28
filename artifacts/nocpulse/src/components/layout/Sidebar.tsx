@@ -211,73 +211,75 @@ export function Sidebar({
         className,
       )}
     >
-      {/* Brand header */}
+      {/* ── Brand header ─────────────────────────────────────────────────────
+           Height bumped to 70 px to give the larger logo chip proper breathing room.
+
+           LIGHT MODE logo trick:
+             logo-icon.png has a near-black background baked into the PNG.
+             CSS  filter: invert(1) hue-rotate(180deg)  converts it cleanly:
+               • dark bg  →  near-white  →  invisible on white container  ✓
+               • blue  invert→orange, hue+180°→blue again  (slightly deeper)  ✓
+               • green invert→pink,   hue+180°→lime-green  ✓
+             Result: the N mark appears to float on a crisp white glass card —
+             no black box, no dark edge — naturally integrated with the light sidebar.
+
+           DARK MODE:
+             No filter. Deep navy container (#081221) seamlessly hosts the logo.
+             Subtle blue ring + drop-shadow give the premium NOC monitoring feel.
+      ──────────────────────────────────────────────────────────────────────── */}
       <div
         className={cn(
-          "flex h-14 items-center border-b shrink-0",
-          collapsed ? "justify-center px-0" : "px-4",
+          "flex h-[70px] items-center border-b shrink-0",
+          collapsed ? "justify-center px-0" : "px-4 gap-3",
         )}
       >
-        {/*
-          Theme-adaptive logo chip.
-
-          logo-icon.png has a near-black background baked into the PNG — it cannot
-          be made truly transparent via CSS alone.  Strategy:
-
-          DARK MODE  — container matches the logo's own near-black (#030609), so
-                       the chip edge is invisible against the dark sidebar.
-                       A subtle blue ring + drop-shadow adds premium NOC feel.
-
-          LIGHT MODE — a slate-700→900 gradient chip makes the dark logo background
-                       look INTENTIONAL (like a branded icon badge), not accidental.
-                       This is exactly the pattern used by Cisco Meraki, Ubiquiti
-                       UniFi, and other enterprise dashboards.
-        */}
+        {/* Logo chip */}
         <div
           className={cn(
-            "relative shrink-0 rounded-xl overflow-hidden",
-            // Light mode: premium slate gradient badge
-            "bg-gradient-to-br from-slate-600 to-slate-900",
-            "ring-1 ring-slate-500/30",
-            "shadow-md shadow-slate-900/25",
-            // Dark mode overrides: seamless flat chip + glow
-            "dark:from-[#020407] dark:to-[#030609]",
-            "dark:ring-[rgba(59,130,246,0.20)]",
-            "dark:shadow-[0_0_14px_2px_rgba(59,130,246,0.16)]",
-            // Size: 25% larger than before
-            collapsed ? "h-10 w-10" : "h-11 w-11 mr-3",
+            "relative shrink-0 rounded-[20px] overflow-hidden",
+            // ── Light mode: frosted white glass card ──────────────────────
+            "bg-white",
+            "ring-1 ring-gray-200/70",
+            "shadow-[0_2px_10px_rgba(0,0,0,0.08)]",
+            // ── Dark mode: deep navy + blue glow ──────────────────────────
+            "dark:bg-[#081221]",
+            "dark:ring-[rgba(59,130,246,0.22)]",
+            "dark:shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_0_20px_4px_rgba(59,130,246,0.16)]",
+            // ── Size ─────────────────────────────────────────────────────
+            collapsed ? "h-[46px] w-[46px]" : "h-14 w-14",
           )}
         >
           <img
             src={logoIconUrl}
             alt="NOCpulse"
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              /* 2 px breathing room so the icon doesn't press against chip edges */
-              padding: 2,
+            className={cn(
+              "w-full h-full object-contain",
               /*
-                screen blend: dark logo pixels screen against the chip background.
-                Dark mode  — screen(near-black, near-black) ≈ near-black → seamless.
-                Light mode — screen(near-black, slate-700)  ≈ softened edge → less harsh.
+                Light mode: invert(1) flips the near-black background to near-white
+                (transparent on white card), then hue-rotate(180deg) maps the
+                inverted hue of each colour back to its original hue.
+                Dark mode:  no filter — render PNG exactly as designed.
               */
-              mixBlendMode: 'screen',
-            }}
+              "[filter:invert(1)_hue-rotate(180deg)]",
+              "dark:[filter:none]",
+            )}
+            style={{ padding: 6 }}
           />
         </div>
 
+        {/* Brand text — only shown in expanded state */}
         {!collapsed && (
           <div className="flex flex-1 items-center justify-between min-w-0">
             <div className="min-w-0">
               <div className="text-[15px] font-bold tracking-tight leading-none text-foreground">
                 NOCpulse
               </div>
-              <div className="text-[8px] tracking-[0.14em] text-muted-foreground/50 uppercase mt-0.5 leading-none">
+              <div className="text-[8px] tracking-[0.16em] text-muted-foreground/45 uppercase mt-[5px] leading-none">
                 Monitor&nbsp;·&nbsp;Analyze&nbsp;·&nbsp;Optimize
               </div>
             </div>
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20 shrink-0 ml-2">
+            {/* Live indicator */}
+            <div className="flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-green-500/10 border border-green-500/20 shrink-0 ml-2">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[9px] font-bold uppercase tracking-wider text-green-500">
                 Live
@@ -288,8 +290,8 @@ export function Sidebar({
       </div>
 
       {/* Nav */}
-      <div className="flex-1 overflow-y-auto py-2 flex flex-col">
-        <nav className="grid items-start px-2 text-sm font-medium gap-1">
+      <div className="flex-1 overflow-y-auto py-3 flex flex-col">
+        <nav className="grid items-start px-2 text-sm font-medium gap-0.5">
           {!collapsed && (
             <div className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 px-3 mb-1 mt-2">
               Main
