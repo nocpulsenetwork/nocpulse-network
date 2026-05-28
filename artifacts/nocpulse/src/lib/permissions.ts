@@ -2,7 +2,8 @@ import { useRole, type UserRole } from '@/contexts/RoleContext';
 
 // ── Permission declarations ────────────────────────────────────────────────
 export type Permission =
-  | 'olt.manage'           // add / edit / reboot / configure OLTs
+  | 'olt.manage'           // add / edit / delete / enable-disable OLTs
+  | 'olt.test'             // test SNMP connection to an OLT
   | 'onu.manage'           // reboot / disable / enable / edit ONUs
   | 'alarm.acknowledge'    // acknowledge + verify alarms
   | 'alarm.manage'         // bulk close, delete alarms
@@ -27,6 +28,7 @@ const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     'subscribers.manage',
   ],
   noc_engineer: [
+    'olt.test',
     'alarm.acknowledge',
     'diagnostics.run',
   ],
@@ -62,8 +64,8 @@ export const ROLE_MATRIX: Record<UserRole, {
     cantDo: ['Staff management', 'System credentials & security settings'],
   },
   noc_engineer: {
-    canDo:  ['View OLTs & ONUs', 'Acknowledge alarms', 'Run diagnostics', 'View all reports'],
-    cantDo: ['OLT/ONU configuration', 'Bulk alarm management', 'Staff & subscriber management'],
+    canDo:  ['View OLTs & ONUs', 'Test OLT connections', 'Acknowledge alarms', 'Run diagnostics'],
+    cantDo: ['Add/Edit/Delete OLTs', 'ONU configuration', 'Staff & subscriber management'],
   },
   viewer: {
     canDo:  ['Read-only access to all pages & data'],
