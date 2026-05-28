@@ -4,6 +4,8 @@ import { useRole, type UserRole } from '@/contexts/RoleContext';
 export type Permission =
   | 'olt.manage'           // add / edit / delete / enable-disable OLTs
   | 'olt.test'             // test SNMP connection to an OLT
+  | 'inventory.manage'     // add / edit / delete / enable-disable inventory devices
+  | 'inventory.test'       // test connection to any inventory device
   | 'onu.manage'           // reboot / disable / enable / edit ONUs
   | 'alarm.acknowledge'    // acknowledge + verify alarms
   | 'alarm.manage'         // bulk close, delete alarms
@@ -16,19 +18,24 @@ export type Permission =
 // Everything NOT listed here is view-only / read-only for that role.
 const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   super_admin: [
-    'olt.manage', 'onu.manage',
+    'olt.manage', 'olt.test',
+    'inventory.manage', 'inventory.test',
+    'onu.manage',
     'alarm.acknowledge', 'alarm.manage',
     'diagnostics.run',
     'staff.manage', 'subscribers.manage', 'settings.admin',
   ],
   admin: [
-    'olt.manage', 'onu.manage',
+    'olt.manage', 'olt.test',
+    'inventory.manage', 'inventory.test',
+    'onu.manage',
     'alarm.acknowledge', 'alarm.manage',
     'diagnostics.run',
     'subscribers.manage',
   ],
   noc_engineer: [
     'olt.test',
+    'inventory.test',
     'alarm.acknowledge',
     'diagnostics.run',
   ],
@@ -64,8 +71,8 @@ export const ROLE_MATRIX: Record<UserRole, {
     cantDo: ['Staff management', 'System credentials & security settings'],
   },
   noc_engineer: {
-    canDo:  ['View OLTs & ONUs', 'Test OLT connections', 'Acknowledge alarms', 'Run diagnostics'],
-    cantDo: ['Add/Edit/Delete OLTs', 'ONU configuration', 'Staff & subscriber management'],
+    canDo:  ['View all devices & inventory', 'Test device connections', 'Acknowledge alarms', 'Run diagnostics'],
+    cantDo: ['Add/Edit/Delete devices', 'ONU configuration', 'Staff & subscriber management'],
   },
   viewer: {
     canDo:  ['Read-only access to all pages & data'],

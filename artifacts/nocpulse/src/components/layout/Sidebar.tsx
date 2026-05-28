@@ -19,6 +19,7 @@ import {
   Shield,
   Lock,
   Eye,
+  HardDrive,
 } from "lucide-react";
 import logoIconUrl from '@/assets/logo-icon.png';
 import { cn } from "@/lib/utils";
@@ -73,6 +74,7 @@ export function Sidebar({
   const networkItems: NavItem[] = [
     { href: "/olts", label: "OLT Management", icon: Server, minRole: "admin" },
     { href: "/onus", label: "ONU Management", icon: Cpu },
+    { href: "/inventory", label: "Device Inventory", icon: HardDrive },
     {
       href: "/diagram",
       label: "Device Diagram",

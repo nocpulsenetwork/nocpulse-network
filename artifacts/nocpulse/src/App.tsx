@@ -23,6 +23,7 @@ import SubscriberManagement from "@/pages/SubscriberManagement";
 import ActivityLogs from "@/pages/ActivityLogs";
 import NotificationCenter from "@/pages/NotificationCenter";
 import SmartDiagnostics from "@/pages/SmartDiagnostics";
+import DeviceInventory from "@/pages/DeviceInventory";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient();
@@ -59,6 +60,7 @@ function Router() {
             <Route path="/activity-logs" component={ActivityLogs} />
             <Route path="/notifications" component={NotificationCenter} />
             <Route path="/diagnostics" component={SmartDiagnostics} />
+            <Route path="/inventory" component={DeviceInventory} />
             <Route path="/staff" component={StaffManagement} />
             <Route path="/subscribers" component={SubscriberManagement} />
             <Route path="/settings" component={Settings} />
