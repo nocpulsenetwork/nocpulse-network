@@ -1,9 +1,21 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>NOCpulse</title>
+    <script>
+      try {
+        var t = localStorage.getItem('nocpulse-theme') || 'dark';
+        var r = document.documentElement;
+        r.classList.remove('light','dark');
+        if (t === 'system') {
+          r.classList.add(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        } else {
+          r.classList.add(t);
+        }
+      } catch(e) { document.documentElement.classList.add('dark'); }
+    </script>
     <meta name="description" content="NOCpulse — built on Replit. Update this description to reflect the app." />
     <meta name="robots" content="index, follow" />
     <meta property="og:title" content="NOCpulse" />

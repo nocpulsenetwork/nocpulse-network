@@ -13,6 +13,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
   ComposedChart,
   Area,
   Line,
@@ -83,6 +91,9 @@ export default function OnuDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [modal, setModal] = useState<"reboot" | "disable" | "enable" | null>(null);
+  const [customDescription, setCustomDescription] = useState("");
+  const [editDescOpen, setEditDescOpen] = useState(false);
+  const [editDescDraft, setEditDescDraft] = useState("");
 
   const id = params?.id;
   const onu = onus.find((o) => o.id === id);
@@ -105,7 +116,7 @@ export default function OnuDetail() {
   const parentOlt = olts.find((o) => o.id === onu.oltId);
 
   const displayDescription =
-    onu.description || onu.customerName || onu.onuNo || "Unknown ONU";
+    customDescription || onu.description || onu.customerName || onu.onuNo || "Unknown ONU";
 
   const isPoorSignal = onu.signalLevel < -28;
   const isWarningSignal = onu.signalLevel >= -28 && onu.signalLevel < -25;
@@ -304,7 +315,7 @@ export default function OnuDetail() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onClick={() => toast.info("Description editor coming soon")}>
+              <DropdownMenuItem onClick={() => { setEditDescDraft(customDescription || onu.description); setEditDescOpen(true); }}>
                 Edit Description
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -424,16 +435,16 @@ export default function OnuDetail() {
               { label: "PON Port", value: onu.ponPort },
               { label: "VLAN", value: `${onu.vlanId}`, mono: true },
               { label: "ONU Type", value: onu.onuType },
-              { label: "ONU MAC", value: onu.macAddress, mono: true },
-              { label: "Client MAC", value: onu.clientMac, mono: true },
+              { label: "ONU MAC", value: onu.macAddress || "N/A", mono: true },
+              { label: "Client MAC", value: (onu.clientMac && onu.clientMac !== onu.macAddress) ? onu.clientMac : "N/A", mono: true },
               { label: "Client IP", value: clientIp, mono: true },
               { label: "Serial No.", value: onu.macAddress.replace(/:/g, "").slice(0, 12), mono: true },
               { label: "Router Vendor", value: routerInfo.vendor },
               { label: "Router Model", value: routerInfo.model },
             ] as { label: string; value: string; mono?: boolean }[]).map(({ label, value, mono }) => (
-              <div key={label} className="flex items-center justify-between gap-2 text-xs">
+              <div key={label} className="flex items-start justify-between gap-2 text-xs">
                 <span className="text-muted-foreground shrink-0">{label}</span>
-                <span className={`font-medium text-right truncate ${mono ? "font-mono" : ""}`}>{value}</span>
+                <span className={`font-medium text-right ${mono ? "font-mono break-all" : "truncate"}`}>{value}</span>
               </div>
             ))}
           </CardContent>
@@ -458,9 +469,9 @@ export default function OnuDetail() {
               { label: "VLAN Tag", value: `${onu.vlanId}`, mono: true },
               { label: "Last Sync", value: onu.lastSync },
             ] as { label: string; value: string; mono?: boolean }[]).map(({ label, value, mono }) => (
-              <div key={label} className="flex items-center justify-between gap-2 text-xs">
+              <div key={label} className="flex items-start justify-between gap-2 text-xs">
                 <span className="text-muted-foreground shrink-0">{label}</span>
-                <span className={`font-medium text-right truncate ${mono ? "font-mono" : ""} ${label === "Status" ? (onu.status === "Online" ? "text-green-500" : onu.status === "Offline" ? "text-red-400" : "text-amber-400") : ""}`}>
+                <span className={`font-medium text-right ${mono ? "font-mono break-all" : "truncate"} ${label === "Status" ? (onu.status === "Online" ? "text-green-500" : onu.status === "Offline" ? "text-red-400" : "text-amber-400") : ""}`}>
                   {value}
                 </span>
               </div>
@@ -854,6 +865,35 @@ export default function OnuDetail() {
         variant="warning"
         icon="enable"
       />
+      {/* ── Edit Description Dialog ── */}
+      <Dialog open={editDescOpen} onOpenChange={setEditDescOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Edit Description</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={editDescDraft}
+            onChange={(e) => setEditDescDraft(e.target.value)}
+            placeholder="Enter device description…"
+            className="min-h-[80px] text-sm font-medium resize-none"
+            autoFocus
+          />
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" size="sm" onClick={() => setEditDescOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setCustomDescription(editDescDraft.trim());
+                setEditDescOpen(false);
+              }}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

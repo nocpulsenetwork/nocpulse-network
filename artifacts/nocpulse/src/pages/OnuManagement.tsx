@@ -490,7 +490,7 @@ export default function OnuManagement() {
                 <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2">
                   <span className="text-violet-400">TX</span>
                 </TableHead>
-                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 text-right hidden lg:table-cell">
+                <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 text-right hidden md:table-cell">
                   <span className="text-orange-400">Dist</span>
                 </TableHead>
                 <TableHead className="sticky top-0 bg-card z-10 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground whitespace-nowrap px-3 py-2 hidden md:table-cell">
@@ -563,6 +563,11 @@ export default function OnuManagement() {
                           <span className={`text-[9px] font-semibold border rounded px-1 py-px ${getOnuTypeBadgeClass(onu.onuType)}`}>
                             {onu.onuType}
                           </span>
+                          {onu.distance && (
+                            <span className="md:hidden text-[9px] font-mono font-semibold text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 rounded px-1 py-px">
+                              {onu.distance}
+                            </span>
+                          )}
                         </div>
                       </TableCell>
 
@@ -611,7 +616,7 @@ export default function OnuManagement() {
                       </TableCell>
 
                       {/* Distance */}
-                      <TableCell className="px-3 py-2 text-right whitespace-nowrap hidden lg:table-cell">
+                      <TableCell className="px-3 py-2 text-right whitespace-nowrap hidden md:table-cell">
                         <span className="text-[11px] font-semibold font-mono text-cyan-300">{onu.distance}</span>
                       </TableCell>
 

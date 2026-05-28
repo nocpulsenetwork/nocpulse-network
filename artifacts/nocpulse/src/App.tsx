@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { RoleProvider } from "@/contexts/RoleContext";
 import { ApiDataProvider } from "@/contexts/ApiDataContext";
+import { LoadingScreen } from "@/components/LoadingScreen";
 import { useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
@@ -94,6 +95,7 @@ function App() {
       <RoleProvider>
         <QueryClientProvider client={queryClient}>
           <ApiDataProvider>
+            <LoadingScreen />
             <TooltipProvider>
               <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
                 <Router />

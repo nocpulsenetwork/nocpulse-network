@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useApiData } from '@/contexts/ApiDataContext';
 import { type OltDevice } from '@/data/mockData';
 import { MetricCard } from '@/components/MetricCard';
@@ -11,7 +12,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell,
 } from 'recharts';
-import { Link } from 'wouter';
+import { Link, useLocation } from 'wouter';
 import { formatDistanceToNow } from 'date-fns';
 
 /* ── Static mock data ────────────────────────────────────────────────── */
@@ -33,17 +34,23 @@ const FIBER_TOTAL = 186;
 
 /* ── SVG topology — node positions in 580 × 320 viewBox ─────────────── */
 const OLT_POS: Record<string, { x: number; y: number }> = {
-  'olt-01': { x: 430, y: 62 },   // Data Center Alpha
-  'olt-06': { x: 465, y: 86 },   // Data Center Alpha
-  'olt-02': { x: 250, y: 42 },   // North Hub
-  'olt-09': { x: 302, y: 52 },   // North Hub
-  'olt-03': { x: 250, y: 278 },  // South Node
-  'olt-10': { x: 304, y: 288 },  // South Node
-  'olt-04': { x: 494, y: 138 },  // East Hub
-  'olt-11': { x: 502, y: 172 },  // East Hub
-  'olt-05': { x: 374, y: 92 },   // West Node (East-01)
-  'olt-07': { x: 102, y: 68 },   // Metro Exchange
-  'olt-08': { x: 112, y: 248 },  // Suburban Hub 1
+  'olt-001': { x: 430, y: 62 },  // Core-OLT-HW-01
+  'olt-002': { x: 250, y: 42 },  // North-OLT-ZTE-01
+  'olt-003': { x: 250, y: 278 }, // South-OLT-BDCOM-01
+  'olt-004': { x: 494, y: 138 }, // East-OLT-VSOL-01
+  'olt-005': { x: 102, y: 68 },  // West-OLT-CDATA-01
+  // legacy mock IDs kept so offline/demo mode still renders nodes
+  'olt-01':  { x: 430, y: 62 },
+  'olt-02':  { x: 250, y: 42 },
+  'olt-03':  { x: 250, y: 278 },
+  'olt-04':  { x: 494, y: 138 },
+  'olt-05':  { x: 374, y: 92 },
+  'olt-06':  { x: 465, y: 86 },
+  'olt-07':  { x: 102, y: 68 },
+  'olt-08':  { x: 112, y: 248 },
+  'olt-09':  { x: 302, y: 52 },
+  'olt-10':  { x: 304, y: 288 },
+  'olt-11':  { x: 502, y: 172 },
 };
 const CORE = { x: 290, y: 165 };
 /* ONU satellite dot offsets around each OLT */
@@ -96,6 +103,13 @@ function LegendDot({ color, glow, label }: { color: string; glow?: boolean; labe
    • "Dhaka Core" centre label
 ══════════════════════════════════════════════════════════════════════ */
 function NetworkTopology({ olts }: { olts: OltDevice[] }) {
+  const [zoom, setZoom] = useState(1);
+  const [, navigate] = useLocation();
+
+  const ZOOM_MIN = 0.6;
+  const ZOOM_MAX = 2.2;
+  const ZOOM_STEP = 0.2;
+
   return (
     <div
       className="relative w-full overflow-hidden rounded-b-xl"
@@ -133,6 +147,7 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
         viewBox="0 0 580 340"
         className="relative w-full h-full"
         preserveAspectRatio="xMidYMid meet"
+        style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}
       >
         <defs>
           {/* ── Glow filters (cheap: single blur + merge) ── */}
@@ -242,7 +257,7 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
           const label    = olt.name.replace('OLT-', '');
           const above    = pos.y < CORE.y;
           return (
-            <g key={`nm-olt-${olt.id}`}>
+            <g key={`nm-olt-${olt.id}`} style={{ cursor: 'pointer' }} onClick={() => navigate(`/olts/${olt.id}`)}>
               {/* Halo rings */}
               <circle cx={pos.x} cy={pos.y} r={20} fill={color} fillOpacity={0.05} />
               <circle cx={pos.x} cy={pos.y} r={13} fill={color} fillOpacity={0.11} />
@@ -288,14 +303,14 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
         ))}
 
         {/* ── Core node — rendered last (on top of all lines/ONUs) ── */}
-        <g filter="url(#nm-fc)">
+        <g filter="url(#nm-fc)" style={{ cursor: 'pointer' }} onClick={() => navigate('/olts')}>
           <circle cx={CORE.x} cy={CORE.y} r={44} fill="rgba(59,130,246,0.08)" />
           <circle cx={CORE.x} cy={CORE.y} r={30} fill="rgba(59,130,246,0.18)" />
           <circle cx={CORE.x} cy={CORE.y} r={18} fill="url(#nm-rg-core)" />
           <circle cx={CORE.x} cy={CORE.y} r={18} fill="none" stroke="rgba(147,197,253,0.55)" strokeWidth="1.3" />
         </g>
         {/* Specular highlight on core */}
-        <circle cx={CORE.x - 5} cy={CORE.y - 6} r={5.5} fill="rgba(255,255,255,0.2)" />
+        <circle cx={CORE.x - 5} cy={CORE.y - 6} r={5.5} fill="rgba(255,255,255,0.2)" style={{ pointerEvents: 'none' }} />
         {/* "Dhaka Core" text */}
         <text
           x={CORE.x}
@@ -335,15 +350,18 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
 
       {/* ── Zoom controls ── */}
       <div className="absolute bottom-3 right-3 flex flex-col gap-1">
-        {(['Zoom in', '+'] as const).map((_, i) => (
-          <button
-            key={i}
-            aria-label={i === 0 ? 'Zoom in' : 'Zoom out'}
-            className="h-8 w-8 rounded-lg border border-white/10 bg-black/45 backdrop-blur-md text-slate-300 hover:text-white hover:bg-white/12 flex items-center justify-center text-base font-bold transition-all"
-          >
-            {i === 0 ? '+' : '−'}
-          </button>
-        ))}
+        <button
+          aria-label="Zoom in"
+          disabled={zoom >= ZOOM_MAX}
+          onClick={() => setZoom(z => Math.min(ZOOM_MAX, parseFloat((z + ZOOM_STEP).toFixed(1))))}
+          className="h-8 w-8 rounded-lg border border-white/10 bg-black/45 backdrop-blur-md text-slate-300 hover:text-white hover:bg-white/12 flex items-center justify-center text-base font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        >+</button>
+        <button
+          aria-label="Zoom out"
+          disabled={zoom <= ZOOM_MIN}
+          onClick={() => setZoom(z => Math.max(ZOOM_MIN, parseFloat((z - ZOOM_STEP).toFixed(1))))}
+          className="h-8 w-8 rounded-lg border border-white/10 bg-black/45 backdrop-blur-md text-slate-300 hover:text-white hover:bg-white/12 flex items-center justify-center text-base font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+        >−</button>
       </div>
     </div>
   );
