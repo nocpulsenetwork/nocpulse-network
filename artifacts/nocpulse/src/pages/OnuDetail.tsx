@@ -223,7 +223,8 @@ export default function OnuDetail() {
         ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
         : "bg-primary/10 text-primary border-primary/20";
 
-  const macPrefix = onu.clientMac.slice(0, 8).toUpperCase();
+  const hasClientMac = Boolean(onu.clientMac && onu.clientMac !== onu.macAddress);
+  const macPrefix = hasClientMac ? onu.clientMac.slice(0, 8).toUpperCase() : "";
   const routerInfo = MAC_VENDOR_MAP[macPrefix] ?? { vendor: "Unknown", model: "Generic Router" };
 
   const pppoeUser = `pppoe_${onu.customerName.toLowerCase().replace(/[\s.]+/g, "_")}@isp.net`;
@@ -436,15 +437,20 @@ export default function OnuDetail() {
               { label: "VLAN", value: `${onu.vlanId}`, mono: true },
               { label: "ONU Type", value: onu.onuType },
               { label: "ONU MAC", value: onu.macAddress || "N/A", mono: true },
-              { label: "Client MAC", value: (onu.clientMac && onu.clientMac !== onu.macAddress) ? onu.clientMac : "N/A", mono: true },
+              { label: "Client MAC", value: hasClientMac ? onu.clientMac : "Auto Detect Pending", mono: hasClientMac, note: "Auto-detected from active session / line connection" },
               { label: "Client IP", value: clientIp, mono: true },
               { label: "Serial No.", value: onu.macAddress.replace(/:/g, "").slice(0, 12), mono: true },
               { label: "Router Vendor", value: routerInfo.vendor },
               { label: "Router Model", value: routerInfo.model },
-            ] as { label: string; value: string; mono?: boolean }[]).map(({ label, value, mono }) => (
-              <div key={label} className="flex items-start justify-between gap-2 text-xs">
-                <span className="text-muted-foreground shrink-0">{label}</span>
-                <span className={`font-medium text-right ${mono ? "font-mono break-all" : "truncate"}`}>{value}</span>
+            ] as { label: string; value: string; mono?: boolean; note?: string }[]).map(({ label, value, mono, note }) => (
+              <div key={label}>
+                <div className="flex items-start justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground shrink-0">{label}</span>
+                  <span className={`font-medium text-right ${mono ? "font-mono break-all" : "truncate"}`}>{value}</span>
+                </div>
+                {note && (
+                  <p className="text-right text-[10px] text-muted-foreground/55 mt-0.5 leading-tight">{note}</p>
+                )}
               </div>
             ))}
           </CardContent>

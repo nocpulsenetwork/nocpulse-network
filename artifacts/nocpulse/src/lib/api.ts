@@ -185,7 +185,7 @@ function transformOnu(o: ApiONU): OnuDevice {
     txPower: o.txPower ?? -5.0,
     status,
     macAddress: o.mac,
-    clientMac: o.mac,
+    clientMac: "",
     customerName: o.name,
     lastSync: o.status === "online" ? "Just now" : "Offline",
     bandwidth: "N/A",

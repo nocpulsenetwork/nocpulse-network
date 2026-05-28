@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApiData } from '@/contexts/ApiDataContext';
-import { type OltDevice } from '@/data/mockData';
+import { type OltDevice, type OnuDevice } from '@/data/mockData';
 import { MetricCard } from '@/components/MetricCard';
 import {
   Server, Cpu, AlertTriangle, Shield, Users, RefreshCw,
@@ -102,22 +102,62 @@ function LegendDot({ color, glow, label }: { color: string; glow?: boolean; labe
    • Per-status glow filters: green / amber / red / blue
    • "Dhaka Core" centre label
 ══════════════════════════════════════════════════════════════════════ */
-function NetworkTopology({ olts }: { olts: OltDevice[] }) {
+function NetworkTopology({ olts, onus }: { olts: OltDevice[]; onus: OnuDevice[] }) {
   const [zoom, setZoom] = useState(1);
+  const [pan,  setPan]  = useState({ x: 0, y: 0 });
   const [, navigate] = useLocation();
 
   const ZOOM_MIN = 0.6;
   const ZOOM_MAX = 2.2;
   const ZOOM_STEP = 0.2;
 
+  /* Drag tracking — refs so dragging never causes extra re-renders */
+  const dragging   = useRef(false);
+  const dragOrigin = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const didDrag    = useRef(false);
+
+  const getXY = (e: React.MouseEvent | React.TouchEvent) =>
+    'touches' in e
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      : { x: (e as React.MouseEvent).clientX, y: (e as React.MouseEvent).clientY };
+
+  const onDragStart = (e: React.MouseEvent | React.TouchEvent) => {
+    const { x, y } = getXY(e);
+    dragging.current   = true;
+    didDrag.current    = false;
+    dragOrigin.current = { x, y, panX: pan.x, panY: pan.y };
+  };
+
+  const onDragMove = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!dragging.current) return;
+    const { x, y } = getXY(e);
+    const dx = x - dragOrigin.current.x;
+    const dy = y - dragOrigin.current.y;
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag.current = true;
+    if (didDrag.current) setPan({ x: dragOrigin.current.panX + dx, y: dragOrigin.current.panY + dy });
+  };
+
+  const onDragEnd = () => { dragging.current = false; };
+
+  /* Use this wrapper on every clickable node so clicks are swallowed after a drag */
+  const goTo = (path: string) => { if (!didDrag.current) navigate(path); };
+
   return (
     <div
-      className="relative w-full overflow-hidden rounded-b-xl"
+      className="relative w-full overflow-hidden rounded-b-xl select-none"
       style={{
         height: 340,
-        /* fixed NOC dark background — identical in light & dark themes */
         background: 'linear-gradient(160deg, #07111f 0%, #0b1a2e 45%, #091522 70%, #080e1c 100%)',
+        cursor: 'grab',
+        touchAction: 'none',
       }}
+      onMouseDown={onDragStart}
+      onMouseMove={onDragMove}
+      onMouseUp={onDragEnd}
+      onMouseLeave={onDragEnd}
+      onTouchStart={onDragStart}
+      onTouchMove={onDragMove}
+      onTouchEnd={onDragEnd}
     >
       {/* Central blue radial atmosphere */}
       <div
@@ -147,7 +187,11 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
         viewBox="0 0 580 340"
         className="relative w-full h-full"
         preserveAspectRatio="xMidYMid meet"
-        style={{ transform: `scale(${zoom})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: 'center center',
+          transition: dragging.current ? 'none' : 'transform 0.15s ease',
+        }}
       >
         <defs>
           {/* ── Glow filters (cheap: single blur + merge) ── */}
@@ -222,21 +266,46 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
           );
         })}
 
-        {/* ── ONU satellite dots ── */}
+        {/* ── ONU satellite dots — clickable when real ONU IDs are available ── */}
         {olts
           .filter(o => o.status !== 'Offline')
           .flatMap(olt => {
             const pos = OLT_POS[olt.id];
             if (!pos) return [];
+            const oltOnus = onus.filter(o => o.oltId === olt.id).slice(0, ONU_OFF.length);
+
+            if (oltOnus.length > 0) {
+              /* Real ONU IDs available — render clickable dots */
+              return oltOnus.map((onu, j) => {
+                const [dx, dy] = ONU_OFF[j % ONU_OFF.length];
+                const isWarn = onu.status === 'Degraded';
+                const isOff  = onu.status === 'Offline';
+                const dotColor = isOff ? '#ef4444' : isWarn ? '#f59e0b' : '#3b82f6';
+                return (
+                  <g
+                    key={`nm-onu-${onu.id}`}
+                    filter="url(#nm-fb)"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => goTo(`/onus/${onu.id}`)}
+                  >
+                    {/* Invisible enlarged hit-target */}
+                    <circle cx={pos.x + dx} cy={pos.y + dy} r={11} fill="transparent" />
+                    <line x1={pos.x} y1={pos.y} x2={pos.x + dx} y2={pos.y + dy}
+                      stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.28" />
+                    <circle cx={pos.x + dx} cy={pos.y + dy} r={6}   fill={dotColor} fillOpacity={0.12} />
+                    <circle cx={pos.x + dx} cy={pos.y + dy} r={4}   fill={dotColor} fillOpacity={0.85} />
+                    <circle cx={pos.x + dx - 1} cy={pos.y + dy - 1} r={1.2} fill="rgba(255,255,255,0.35)" />
+                  </g>
+                );
+              });
+            }
+
+            /* Fallback: decorative dots (no real IDs) */
             const count = Math.min(5, Math.max(2, Math.round(olt.activeOnus / 100)));
             return ONU_OFF.slice(0, count).map(([dx, dy], j) => (
               <g key={`nm-onu-${olt.id}-${j}`} filter="url(#nm-fb)">
-                <line
-                  x1={pos.x} y1={pos.y}
-                  x2={pos.x + dx} y2={pos.y + dy}
-                  stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.28"
-                />
-                {/* ONU dot: glow halo + filled circle */}
+                <line x1={pos.x} y1={pos.y} x2={pos.x + dx} y2={pos.y + dy}
+                  stroke="#3b82f6" strokeWidth="0.8" strokeOpacity="0.28" />
                 <circle cx={pos.x + dx} cy={pos.y + dy} r={6}   fill="#3b82f6" fillOpacity={0.12} />
                 <circle cx={pos.x + dx} cy={pos.y + dy} r={4}   fill="#3b82f6" fillOpacity={0.85} />
                 <circle cx={pos.x + dx - 1} cy={pos.y + dy - 1} r={1.2} fill="rgba(255,255,255,0.35)" />
@@ -257,18 +326,14 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
           const label    = olt.name.replace('OLT-', '');
           const above    = pos.y < CORE.y;
           return (
-            <g key={`nm-olt-${olt.id}`} style={{ cursor: 'pointer' }} onClick={() => navigate(`/olts/${olt.id}`)}>
-              {/* Halo rings */}
+            <g key={`nm-olt-${olt.id}`} style={{ cursor: 'pointer' }} onClick={() => goTo(`/olts/${olt.id}`)}>
               <circle cx={pos.x} cy={pos.y} r={20} fill={color} fillOpacity={0.05} />
               <circle cx={pos.x} cy={pos.y} r={13} fill={color} fillOpacity={0.11} />
-              {/* Glowing filled node */}
               <g filter={`url(#${filt})`}>
-                <circle cx={pos.x} cy={pos.y} r={9}  fill={grad} />
-                <circle cx={pos.x} cy={pos.y} r={9}  fill="none" stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
+                <circle cx={pos.x} cy={pos.y} r={9} fill={grad} />
+                <circle cx={pos.x} cy={pos.y} r={9} fill="none" stroke={color} strokeWidth="0.9" strokeOpacity="0.55" />
               </g>
-              {/* Specular highlight */}
               <circle cx={pos.x - 2.8} cy={pos.y - 3} r={2.5} fill="rgba(255,255,255,0.22)" />
-              {/* Label */}
               <text
                 x={pos.x}
                 y={pos.y + (above ? -22 : 26)}
@@ -302,42 +367,26 @@ function NetworkTopology({ olts }: { olts: OltDevice[] }) {
           </text>
         ))}
 
-        {/* ── Core node — rendered last (on top of all lines/ONUs) ── */}
-        <g filter="url(#nm-fc)" style={{ cursor: 'pointer' }} onClick={() => navigate('/olts')}>
+        {/* ── Core node — rendered last (on top) ── */}
+        <g filter="url(#nm-fc)" style={{ cursor: 'pointer' }} onClick={() => goTo('/olts')}>
           <circle cx={CORE.x} cy={CORE.y} r={44} fill="rgba(59,130,246,0.08)" />
           <circle cx={CORE.x} cy={CORE.y} r={30} fill="rgba(59,130,246,0.18)" />
           <circle cx={CORE.x} cy={CORE.y} r={18} fill="url(#nm-rg-core)" />
           <circle cx={CORE.x} cy={CORE.y} r={18} fill="none" stroke="rgba(147,197,253,0.55)" strokeWidth="1.3" />
         </g>
-        {/* Specular highlight on core */}
         <circle cx={CORE.x - 5} cy={CORE.y - 6} r={5.5} fill="rgba(255,255,255,0.2)" style={{ pointerEvents: 'none' }} />
-        {/* "Dhaka Core" text */}
         <text
-          x={CORE.x}
-          y={CORE.y + 1}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fill="#ffffff"
-          fontSize="8.5"
-          fontWeight="800"
-          letterSpacing="0.5"
+          x={CORE.x} y={CORE.y + 1}
+          textAnchor="middle" dominantBaseline="middle"
+          fill="#ffffff" fontSize="8.5" fontWeight="800" letterSpacing="0.5"
           style={{ pointerEvents: 'none' }}
-        >
-          Dhaka Core
-        </text>
-        {/* "Network Core" subtitle below node */}
+        >Dhaka Core</text>
         <text
-          x={CORE.x}
-          y={CORE.y + 50}
+          x={CORE.x} y={CORE.y + 50}
           textAnchor="middle"
-          fill="rgba(147,197,253,0.55)"
-          fontSize="7.5"
-          fontWeight="500"
-          letterSpacing="0.8"
+          fill="rgba(147,197,253,0.55)" fontSize="7.5" fontWeight="500" letterSpacing="0.8"
           style={{ pointerEvents: 'none' }}
-        >
-          NETWORK CORE
-        </text>
+        >NETWORK CORE</text>
       </svg>
 
       {/* ── Legend ── */}
@@ -522,7 +571,7 @@ export default function Dashboard() {
               </div>
             </div>
           </CardHeader>
-          <NetworkTopology olts={olts} />
+          <NetworkTopology olts={olts} onus={onus} />
         </Card>
 
         {/* Fiber Overview + Device Health — stacked in right column */}
