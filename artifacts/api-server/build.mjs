@@ -29,6 +29,8 @@ async function buildAll() {
     // - use path traversal to read files (e.g. @google-cloud/secret-manager loads sibling .proto files)
     external: [
       "*.node",
+      // net-snmp is CJS with internal dynamic require() calls — must stay external
+      "net-snmp",
       "sharp",
       "better-sqlite3",
       "sqlite3",

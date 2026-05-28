@@ -5,6 +5,7 @@ import { oltRouter } from "../backend/api/olt.routes";
 import { onuRouter } from "../backend/api/onu.routes";
 import { alarmRouter } from "../backend/api/alarm.routes";
 import { pollingRouter } from "../backend/api/polling.routes";
+import { snmpTestRouter } from "../backend/api/snmp-test.routes";
 
 const router: IRouter = Router();
 
@@ -21,5 +22,10 @@ router.use("/alarms", alarmRouter);
 
 // Polling engine control and status
 router.use("/polling", pollingRouter);
+
+// SNMP manual test endpoints — read-only, one-shot, no auto-polling
+// POST /api/snmp/test  — quick connectivity probe
+// POST /api/snmp/probe — full read-only system info collection
+router.use("/snmp", snmpTestRouter);
 
 export default router;
