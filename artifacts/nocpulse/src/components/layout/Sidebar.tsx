@@ -219,40 +219,49 @@ export function Sidebar({
         )}
       >
         {/*
-          Logo chip strategy:
-          The PNG has a dark-navy background baked in (not transparent).
-          We absolute-position the img LARGER than its container so overflow-hidden
-          crops precisely to the N icon mark, discarding the text rows at the bottom.
+          Theme-adaptive logo chip.
 
-          Math (logo is 1024×683):
-            Collapsed  32×32 chip → img 80px wide → 53px tall → top 60% = 32px = N mark ✓
-            Expanded   36×36 chip → img 90px wide → 60px tall → top 60% = 36px = N mark ✓
-          Horizontal center: left = −(imgWidth − chipSize) / 2
+          logo-icon.png has a near-black background baked into the PNG — it cannot
+          be made truly transparent via CSS alone.  Strategy:
+
+          DARK MODE  — container matches the logo's own near-black (#030609), so
+                       the chip edge is invisible against the dark sidebar.
+                       A subtle blue ring + drop-shadow adds premium NOC feel.
+
+          LIGHT MODE — a slate-700→900 gradient chip makes the dark logo background
+                       look INTENTIONAL (like a branded icon badge), not accidental.
+                       This is exactly the pattern used by Cisco Meraki, Ubiquiti
+                       UniFi, and other enterprise dashboards.
         */}
         <div
           className={cn(
             "relative shrink-0 rounded-xl overflow-hidden",
-            "dark:shadow-[0_0_14px_2px_rgba(59,130,246,0.18)]",
-            collapsed ? "h-8 w-8" : "h-9 w-9 mr-3",
+            // Light mode: premium slate gradient badge
+            "bg-gradient-to-br from-slate-600 to-slate-900",
+            "ring-1 ring-slate-500/30",
+            "shadow-md shadow-slate-900/25",
+            // Dark mode overrides: seamless flat chip + glow
+            "dark:from-[#020407] dark:to-[#030609]",
+            "dark:ring-[rgba(59,130,246,0.20)]",
+            "dark:shadow-[0_0_14px_2px_rgba(59,130,246,0.16)]",
+            // Size: 25% larger than before
+            collapsed ? "h-10 w-10" : "h-11 w-11 mr-3",
           )}
-          /* Near-black container — identical to logo-icon.png's own background,
-             so the chip edge is invisible in dark mode.
-             mix-blend-mode:screen on the img dissolves noise/grain artifacts. */
-          style={{ background: '#030609' }}
         >
           <img
             src={logoIconUrl}
             alt="NOCpulse"
-            /*
-              logo-icon.png has a near-black background.
-              mix-blend-mode:screen makes those dark pixels dissolve into
-              the sidebar background in both light and dark mode, leaving
-              only the coloured N mark visible — no container edge needed.
-            */
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'contain',
+              /* 2 px breathing room so the icon doesn't press against chip edges */
+              padding: 2,
+              /*
+                screen blend: dark logo pixels screen against the chip background.
+                Dark mode  — screen(near-black, near-black) ≈ near-black → seamless.
+                Light mode — screen(near-black, slate-700)  ≈ softened edge → less harsh.
+              */
               mixBlendMode: 'screen',
             }}
           />
