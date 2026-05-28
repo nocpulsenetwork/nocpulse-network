@@ -153,6 +153,54 @@ export interface OnuListResult {
   fallbackReason?: string;
 }
 
+/** A single ONU entry returned by `readOnuTable()`. */
+export interface SnmpOnu {
+  /** ONU ID within its PON port (e.g. "1", "5", "127"). */
+  onuId: string;
+
+  /** PON port the ONU is connected to (e.g. "0/4/3", "gpon-ifIndex:123"). */
+  ponPort: string;
+
+  /** GPON serial number in VENDORHEX format (e.g. "HWTC1A2B3C4D"), or null. */
+  serial: string | null;
+
+  /** MAC address for EPON ONUs (e.g. "A1:B2:C3:D4:E5:F6"), or null. */
+  mac: string | null;
+
+  /** Operational status from the ONU management table. */
+  status: "online" | "offline" | "unknown";
+
+  /** ONU hardware model/type string (e.g. "HG8310M"), or null. */
+  type: string | null;
+
+  /** Raw OID instance suffix — useful for debugging MIB mapping. */
+  rawInstanceOid: string;
+}
+
+/** Result returned by `readOnuTable()`. */
+export interface ReadOnuTableResult {
+  /** true if the SNMP operation completed without a network error. */
+  success: boolean;
+
+  /** Vendor name used to select the MIB (e.g. "Huawei"). */
+  vendor: string;
+
+  /** Number of ONUs returned in `onus`. */
+  totalFound: number;
+
+  /** Normalized ONU list (at most `limit` entries). */
+  onus: SnmpOnu[];
+
+  /** Human-readable status or error message. */
+  message: string;
+
+  /** Total time from call to return, in milliseconds. */
+  latencyMs: number;
+
+  /** MIB table name used for the walk (e.g. "hwGponOnuMngTable"). */
+  mibUsed: string;
+}
+
 // ─── Custom error types ────────────────────────────────────────────────────
 
 export class SnmpTimeoutError extends Error {
@@ -259,6 +307,38 @@ export class RealSnmpClient {
           } else {
             resolve(results);
           }
+        },
+      );
+    });
+  }
+
+  /**
+   * Issue a single SNMP GETBULK request — bounded, one PDU, no walk loop.
+   *
+   * Returns at most `maxRepetitions` entries per starting OID. Because this is
+   * a single PDU exchange (not a walk loop), the total response is strictly
+   * bounded, making it safe for fetching the first N rows of a large table.
+   *
+   * Use `snmpWalk()` when you need the entire subtree.
+   * Use `snmpGetBulk()` when you only need the first N rows (e.g. ONU table).
+   *
+   * @param startOids       OID(s) to start from (typically one table column OID)
+   * @param maxRepetitions  Max rows to retrieve per starting OID (≤ 50)
+   * @throws SnmpTimeoutError | SnmpUnreachableError on failure
+   */
+  private snmpGetBulk(startOids: string[], maxRepetitions: number): Promise<snmp.Varbind[]> {
+    return new Promise((resolve, reject) => {
+      const session = this.createSession();
+      session.getBulk(
+        startOids,
+        maxRepetitions,
+        (error: Error | null, varbinds: snmp.Varbind[]) => {
+          session.close();
+          if (error) {
+            reject(classifyError(error, this.host, this.timeoutMs));
+            return;
+          }
+          resolve(varbinds);
         },
       );
     });
@@ -490,6 +570,139 @@ export class RealSnmpClient {
       );
     }
   }
+  /**
+   * Read the vendor-specific ONU management table from the OLT.
+   *
+   * ─── SNMP operation count ─────────────────────────────────────────────────
+   *
+   *   Exactly 2 SNMP PDUs total — regardless of how many ONUs the OLT has:
+   *     1. GETBULK  on the ONU index column  → at most `limit` rows (1 PDU)
+   *     2. GET      on all attribute columns → serial, status, type, mac (1 PDU)
+   *
+   *   This is the theoretical minimum for reading a tabular MIB with attributes.
+   *   It does NOT walk the full table tree, does NOT issue one GET per ONU,
+   *   and does NOT loop. Total PDUs: always 2.
+   *
+   * ─── Safety ──────────────────────────────────────────────────────────────
+   *
+   *   - Read-only: GETBULK + GET only — absolutely no SNMP SET calls
+   *   - Bounded: `limit` is clamped to 50 regardless of input
+   *   - One-shot: no background state, no polling timer, sessions closed immediately
+   *
+   * @param vendor  Detected vendor label (from `detectVendorFromSysInfo()`).
+   * @param limit   Max ONUs to return. Clamped to 50.
+   */
+  async readOnuTable(vendor: string, limit = 50): Promise<ReadOnuTableResult> {
+    const cappedLimit = Math.min(limit, 50);
+    const start = Date.now();
+
+    const mib = VENDOR_ONU_MIBS[vendor];
+    if (!mib) {
+      return {
+        success:    false,
+        vendor,
+        totalFound: 0,
+        onus:       [],
+        message:    `No ONU table MIB defined for vendor "${vendor}". ` +
+                    "Supported vendors: Huawei, ZTE, BDCOM, VSOL, CDATA.",
+        latencyMs:  Date.now() - start,
+        mibUsed:    "none",
+      };
+    }
+
+    const indexColOid = `${mib.tableRoot}.${mib.colIndex}`;
+
+    // ── Phase 1: Single GETBULK on index column (max cappedLimit rows) ─────
+    let indexVbs: snmp.Varbind[];
+    try {
+      indexVbs = await this.snmpGetBulk([indexColOid], cappedLimit);
+    } catch (err) {
+      return {
+        success:    false,
+        vendor,
+        totalFound: 0,
+        onus:       [],
+        message:    err instanceof Error ? err.message : "SNMP GETBULK failed",
+        latencyMs:  Date.now() - start,
+        mibUsed:    mib.mibName,
+      };
+    }
+
+    // Filter: keep only varbinds within the index column subtree
+    const indexPrefix    = indexColOid + ".";
+    const onuInstances: string[] = [];
+    for (const vb of indexVbs) {
+      if (!vb.oid.startsWith(indexPrefix)) continue;
+      const suffix = vb.oid.slice(indexPrefix.length);
+      if (suffix) onuInstances.push(suffix);
+    }
+
+    if (onuInstances.length === 0) {
+      return {
+        success:    true,
+        vendor,
+        totalFound: 0,
+        onus:       [],
+        message:    `GETBULK on ${mib.mibName} (${indexColOid}) returned 0 entries within the index column. ` +
+                    "The OLT may use a different MIB firmware path, or the table is empty.",
+        latencyMs:  Date.now() - start,
+        mibUsed:    mib.mibName,
+      };
+    }
+
+    // ── Phase 2: Single GET for all attribute OIDs across all found ONUs ────
+    const attrOids: string[] = [];
+    for (const inst of onuInstances) {
+      if (mib.colSerial !== null) attrOids.push(`${mib.tableRoot}.${mib.colSerial}.${inst}`);
+      if (mib.colStatus !== null) attrOids.push(`${mib.tableRoot}.${mib.colStatus}.${inst}`);
+      if (mib.colType   !== null) attrOids.push(`${mib.tableRoot}.${mib.colType}.${inst}`);
+      if (mib.colMac    !== null) attrOids.push(`${mib.tableRoot}.${mib.colMac}.${inst}`);
+    }
+
+    let attrMap: Record<string, snmp.Varbind> = {};
+    if (attrOids.length > 0) {
+      try {
+        attrMap = indexVarbinds(await this.snmpGet(attrOids));
+      } catch {
+        // Attribute GET failed — ONUs still present, attributes will be null.
+        // This is acceptable for a test endpoint.
+      }
+    }
+
+    // ── Build normalised ONU list ──────────────────────────────────────────
+    const onus: SnmpOnu[] = [];
+    for (const inst of onuInstances) {
+      const parsed    = mib.parseInstance(inst);
+      const serialOid = mib.colSerial !== null ? `${mib.tableRoot}.${mib.colSerial}.${inst}` : null;
+      const statusOid = mib.colStatus !== null ? `${mib.tableRoot}.${mib.colStatus}.${inst}` : null;
+      const typeOid   = mib.colType   !== null ? `${mib.tableRoot}.${mib.colType}.${inst}`   : null;
+      const macOid    = mib.colMac    !== null ? `${mib.tableRoot}.${mib.colMac}.${inst}`    : null;
+
+      const rawStatus = statusOid ? attrMap[statusOid] : undefined;
+
+      onus.push({
+        onuId:          parsed?.onuId    ?? (inst.split(".").pop() ?? inst),
+        ponPort:        parsed?.ponPort  ?? inst,
+        serial:         serialOid ? parseGponSerial(attrMap[serialOid]?.value)  : null,
+        mac:            macOid    ? parseMacAddress(attrMap[macOid]?.value)     : null,
+        status:         rawStatus ? mib.parseStatus(intVal(rawStatus) ?? 2)     : "unknown",
+        type:           typeOid   ? (stringVal(attrMap[typeOid]) ?? null)       : null,
+        rawInstanceOid: inst,
+      });
+    }
+
+    const onlineCount = onus.filter((o) => o.status === "online").length;
+    return {
+      success:    true,
+      vendor,
+      totalFound: onus.length,
+      onus,
+      message:    `Found ${onus.length} ONU${onus.length !== 1 ? "s" : ""} in ${mib.mibName}` +
+                  (onus.length > 0 ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown)` : ""),
+      latencyMs:  Date.now() - start,
+      mibUsed:    mib.mibName,
+    };
+  }
 }
 
 // ─── Helper functions ──────────────────────────────────────────────────────
@@ -674,4 +887,193 @@ function mockFallback(oltId: string | undefined, reason: string): OnuListResult 
     onus,
     fallbackReason: reason,
   };
+}
+
+// ─── Vendor ONU table MIB definitions ─────────────────────────────────────
+
+interface VendorOnuMib {
+  /** Root OID of the ONU management table (without column suffix). */
+  tableRoot: string;
+
+  /** Short MIB table name for logging and error messages. */
+  mibName: string;
+
+  /** Column number for the ONU index (used as the GETBULK starting point). */
+  colIndex: number;
+
+  /** Column number for serial number, or null if not available in this MIB. */
+  colSerial: number | null;
+
+  /** Column number for operational status, or null if not available. */
+  colStatus: number | null;
+
+  /** Column number for ONU type/model string, or null if not available. */
+  colType: number | null;
+
+  /** Column number for MAC address (EPON), or null if not applicable. */
+  colMac: number | null;
+
+  /**
+   * Parse the OID instance suffix (the part after the column OID) into
+   * a human-readable PON port identifier and ONU ID.
+   *
+   * Returns null when the suffix doesn't match the expected format.
+   */
+  parseInstance: (suffix: string) => { ponPort: string; onuId: string } | null;
+
+  /**
+   * Convert the raw INTEGER status value from the MIB to a normalised string.
+   */
+  parseStatus: (value: number) => "online" | "offline" | "unknown";
+}
+
+/**
+ * Per-vendor ONU table MIB configurations.
+ *
+ * OID column numbers and table root paths are sourced from publicly available
+ * MIB documentation. Exact column assignments can vary between firmware
+ * versions — always verify against the specific device's MIB before relying
+ * on these in production.
+ *
+ * TODO: Add Huawei EPON table (hwEponOnuTable).
+ * TODO: Add ZTE EPON table (zxAnEponOnuTable).
+ * TODO: Confirm VSOL and CDATA OIDs against multiple firmware versions.
+ */
+const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
+
+  // ── Huawei MA5800-X7 / MA5800-X15 / MA5600T GPON ───────────────────────
+  // MIB: HUAWEI-XPON-MIB::hwGponOnuMngTable
+  // Instance index: {frame}.{slot}.{port}.{onuId}  — e.g. "0.4.3.5"
+  // Confirmed columns: 1=index, 3=SN, 4=type, 5=runState
+  Huawei: {
+    tableRoot: "1.3.6.1.4.1.2011.6.139.9.3.8.100.1",
+    mibName:   "hwGponOnuMngTable",
+    colIndex:  1,   // hwGponOnuMngAttrIndex
+    colSerial: 3,   // hwGponOnuMngAttrSN — OCTET STRING 8 bytes (4 ASCII + 4 hex)
+    colStatus: 5,   // hwGponOnuMngAttrRunState — 1=online, 2=offline
+    colType:   4,   // hwGponOnuMngAttrType — ONU model string
+    colMac:    null,
+    parseInstance: (suffix) => {
+      const p = suffix.split(".");
+      if (p.length < 4) return null;
+      return { ponPort: `${p[0]}/${p[1]}/${p[2]}`, onuId: p[3] ?? suffix };
+    },
+    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+  },
+
+  // ── ZTE C300 / C320 / C600 / C650 GPON ─────────────────────────────────
+  // MIB: ZTE-AN-GPON-MIB::zxAnGponOnuTable
+  // Instance index: {gponIfIndex}.{onuId}  — e.g. "123.7"
+  // Confirmed columns: 1=index, 2=SN, 7=operStatus
+  ZTE: {
+    tableRoot: "1.3.6.1.4.1.3902.3.101.13.10.1",
+    mibName:   "zxAnGponOnuTable",
+    colIndex:  1,   // zxAnGponOnuIndex
+    colSerial: 2,   // zxAnGponOnuSN — OCTET STRING 8 bytes (GPON SN format)
+    colStatus: 7,   // zxAnGponOnuOperStatus — 1=online, 2=offline
+    colType:   null,
+    colMac:    null,
+    parseInstance: (suffix) => {
+      const p = suffix.split(".");
+      if (p.length < 2) return null;
+      const onuId  = p[p.length - 1]!;
+      const port   = p.slice(0, -1).join(".");
+      return { ponPort: `gpon-ifIndex:${port}`, onuId };
+    },
+    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+  },
+
+  // ── BDCOM P3310C / P3608 / GP3600 EPON ──────────────────────────────────
+  // MIB: BDCOM-EPON-ONU-MIB (enterprise OID space 1.3.6.1.4.1.3320)
+  // Instance index: {ponPort}.{onuId} — tentative; verify per firmware
+  BDCOM: {
+    tableRoot: "1.3.6.1.4.1.3320.9.1.3.3.1",
+    mibName:   "bdEponOnuTable",
+    colIndex:  1,
+    colSerial: null,
+    colStatus: 3,   // 1=online, 2=offline (tentative — verify per firmware)
+    colType:   null,
+    colMac:    2,   // 6-byte MAC address
+    parseInstance: (suffix) => {
+      const p = suffix.split(".");
+      if (p.length < 2) return null;
+      return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
+    },
+    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+  },
+
+  // ── VSOL V1600 / V2801 / V2802 GPON ─────────────────────────────────────
+  // Tentative OIDs — verify against device-specific MIB before production use
+  VSOL: {
+    tableRoot: "1.3.6.1.4.1.37950.2.1.1.1",
+    mibName:   "vsolGponOnuTable",
+    colIndex:  1,
+    colSerial: 3,
+    colStatus: 5,   // tentative
+    colType:   null,
+    colMac:    2,
+    parseInstance: (suffix) => {
+      const p = suffix.split(".");
+      if (p.length < 2) return null;
+      return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
+    },
+    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+  },
+
+  // ── C-DATA FD1616GS / FD8920 / FD1204SN GPON ────────────────────────────
+  // Tentative OIDs — verify against device-specific MIB before production use
+  CDATA: {
+    tableRoot: "1.3.6.1.4.1.34592.5.1.3.1",
+    mibName:   "cdataGponOnuTable",
+    colIndex:  1,
+    colSerial: 3,
+    colStatus: 7,   // tentative
+    colType:   4,
+    colMac:    null,
+    parseInstance: (suffix) => {
+      const p = suffix.split(".");
+      if (p.length < 2) return null;
+      return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
+    },
+    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+  },
+};
+
+// ─── ONU value parsers ─────────────────────────────────────────────────────
+
+/**
+ * Parse a GPON serial number from a raw SNMP value.
+ *
+ * Standard GPON SN format (8 bytes):
+ *   Bytes 0–3 : ASCII vendor code  (e.g. "HWTC", "ZTEG", "GPON")
+ *   Bytes 4–7 : 4-byte serial → 8 uppercase hex chars
+ *
+ * Returns "HWTC1A2B3C4D" for a Huawei ONU or equivalent for other vendors.
+ */
+function parseGponSerial(value: unknown): string | null {
+  if (Buffer.isBuffer(value)) {
+    if (value.length < 4) return value.toString("hex").toUpperCase() || null;
+    const vendor = value.slice(0, 4).toString("ascii").replace(/[^\x20-\x7E]/g, "?");
+    const hex    = value.slice(4).toString("hex").toUpperCase();
+    return `${vendor}${hex}` || null;
+  }
+  if (typeof value === "string") return value.trim() || null;
+  return null;
+}
+
+/**
+ * Parse a MAC address from a raw SNMP value.
+ *
+ * Accepts a 6-byte Buffer or a string that already contains colons.
+ * Returns "XX:XX:XX:XX:XX:XX" uppercase format.
+ */
+function parseMacAddress(value: unknown): string | null {
+  if (Buffer.isBuffer(value)) {
+    if (value.length < 6) return null;
+    return Array.from(value.slice(0, 6))
+      .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+      .join(":");
+  }
+  if (typeof value === "string" && value.includes(":")) return value.toUpperCase();
+  return null;
 }

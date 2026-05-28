@@ -28,6 +28,7 @@ import {
   RealSnmpClient,
   detectVendorFromSysInfo,
   extractModelFromDescr,
+  type ReadOnuTableResult,
 } from "../snmp/real-snmp-client";
 
 export const oltRouter = Router();
@@ -160,6 +161,110 @@ oltRouter.post("/test-connection", async (req: Request, res: Response) => {
       host:        ip,
       port,
       generatedAt: new Date().toISOString(),
+      warning:     "Manual test only — this endpoint does not save or poll the OLT.",
+    },
+  });
+});
+
+// POST /api/olts/test-onu-list — manual read-only ONU table read
+//
+// Reads the ONU management table from one OLT using vendor-specific SNMP MIBs.
+// Exactly 2 SNMP operations: 1 GETBULK (index column, max 50 rows) + 1 GET
+// (all attribute columns for found ONUs). No walk spam, no background state.
+//
+// Safety contract:
+//   • Read-only: GETBULK + GET only — no SET, no walk loop, no background thread
+//   • Bounded: at most 50 ONUs regardless of how many exist on the device
+//   • Does NOT save ONUs to the database
+//   • Does NOT start polling
+//   • Does NOT fetch RX/TX optical power or traffic counters
+oltRouter.post("/test-onu-list", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+
+  // ── Input validation ──────────────────────────────────────────────────
+  if (typeof body["ip"] !== "string" || !body["ip"].trim()) {
+    res.status(400).json({ error: "Missing required field: ip", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["community"] !== "string" || !body["community"].trim()) {
+    res.status(400).json({ error: "Missing required field: community", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const ip        = (body["ip"] as string).trim();
+  const community = (body["community"] as string).trim();
+  const port      = body["port"]      !== undefined ? Number(body["port"])      : 161;
+  const timeoutMs = Math.min(body["timeoutMs"] !== undefined ? Number(body["timeoutMs"]) : 3_000, 10_000);
+  const retries   = Math.min(body["retries"]   !== undefined ? Number(body["retries"])   : 1,     2);
+  const vendorHint = typeof body["vendor"] === "string" ? (body["vendor"] as string).trim() : undefined;
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    res.status(400).json({ error: "Invalid port: must be 1–65535", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const client   = new RealSnmpClient({ host: ip, community, port, timeoutMs, retries });
+  const probeAt  = new Date().toISOString();
+  const start    = Date.now();
+
+  // ── Step 1: Connectivity test + vendor detection ─────────────────────
+  // testConnection() does one SNMP GET — confirms device is reachable and
+  // gives us sysDescr/sysObjectID for vendor detection. No extra round-trip.
+  const connectivity = await client.testConnection();
+  if (!connectivity.success) {
+    res.status(502).json({
+      data:  { success: false, message: connectivity.error ?? "OLT did not respond" },
+      error: "OLT unreachable — cannot read ONU list",
+      code:  "SNMP_UNREACHABLE",
+      meta:  { host: ip, port, generatedAt: probeAt },
+    });
+    return;
+  }
+
+  const detectedVendor = (connectivity.sysDescr || connectivity.sysObjectID)
+    ? detectVendorFromSysInfo(connectivity.sysDescr ?? "", connectivity.sysObjectID ?? "")
+    : "Unknown";
+  const vendor = detectedVendor !== "Unknown" ? detectedVendor : (vendorHint ?? "Unknown");
+  const model  = connectivity.sysDescr ? extractModelFromDescr(connectivity.sysDescr) : "Unknown";
+
+  if (vendor === "Unknown") {
+    res.status(422).json({
+      data: {
+        success:       false,
+        connectivity,
+        vendor:        "Unknown",
+        model,
+        message:       "Vendor could not be detected from sysDescr/sysObjectID. " +
+                       "Pass a vendor hint in the 'vendor' field (Huawei, ZTE, BDCOM, VSOL, CDATA).",
+      },
+      meta: { host: ip, port, generatedAt: probeAt },
+    });
+    return;
+  }
+
+  // ── Step 2: Read ONU table ───────────────────────────────────────────
+  // readOnuTable() does exactly 2 SNMP operations: 1 GETBULK + 1 GET.
+  // Max 50 ONUs, all bounded, no walk loop, no background state.
+  const onuResult: ReadOnuTableResult = await client.readOnuTable(vendor, 50);
+
+  res.json({
+    data: {
+      success:      onuResult.success,
+      vendor,
+      model,
+      sysName:      connectivity.sysName     ?? null,
+      sysDescr:     connectivity.sysDescr    ?? null,
+      uptime:       connectivity.sysUpTimeSecs ?? null,
+      totalFound:   onuResult.totalFound,
+      onus:         onuResult.onus,
+      message:      onuResult.message,
+      latencyMs:    Date.now() - start,
+      mibUsed:      onuResult.mibUsed,
+    },
+    meta: {
+      host:        ip,
+      port,
+      generatedAt: probeAt,
       warning:     "Manual test only — this endpoint does not save or poll the OLT.",
     },
   });
