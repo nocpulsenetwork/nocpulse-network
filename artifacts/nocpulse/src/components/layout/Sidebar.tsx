@@ -227,26 +227,31 @@ export function Sidebar({
              No filter. Deep navy container (#081221) seamlessly hosts the logo.
              Subtle blue ring + drop-shadow give the premium NOC monitoring feel.
       ──────────────────────────────────────────────────────────────────────── */}
+      {/*
+        Expanded  → vertical stack, chip centered, text below  (chip 96 × 96 px)
+        Collapsed → centered chip only, smaller to fit w-16 sidebar (chip 48 × 48 px)
+      */}
       <div
         className={cn(
-          "flex h-[70px] items-center border-b shrink-0",
-          collapsed ? "justify-center px-0" : "px-4 gap-3",
+          "flex border-b shrink-0",
+          collapsed
+            ? "h-[70px] items-center justify-center"
+            : "flex-col items-center justify-center py-5 px-4 gap-3",
         )}
       >
-        {/* Logo chip */}
+        {/* ── Logo chip ─────────────────────────────────────────────────── */}
         <div
           className={cn(
-            "relative shrink-0 rounded-[20px] overflow-hidden",
-            // ── Light mode: frosted white glass card ──────────────────────
-            "bg-white",
-            "ring-1 ring-gray-200/70",
-            "shadow-[0_2px_10px_rgba(0,0,0,0.08)]",
-            // ── Dark mode: deep navy + blue glow ──────────────────────────
+            "relative shrink-0 rounded-[22px] overflow-hidden",
+            // Light mode — white glass card
+            "bg-white ring-1 ring-gray-200/70",
+            "shadow-[0_2px_12px_rgba(0,0,0,0.09)]",
+            // Dark mode — deep navy + layered blue glow
             "dark:bg-[#081221]",
             "dark:ring-[rgba(59,130,246,0.22)]",
-            "dark:shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_0_20px_4px_rgba(59,130,246,0.16)]",
-            // ── Size ─────────────────────────────────────────────────────
-            collapsed ? "h-[46px] w-[46px]" : "h-14 w-14",
+            "dark:shadow-[0_0_0_1px_rgba(59,130,246,0.12),0_0_24px_6px_rgba(59,130,246,0.18)]",
+            // Size
+            collapsed ? "h-12 w-12" : "h-24 w-24",
           )}
         >
           <img
@@ -254,32 +259,26 @@ export function Sidebar({
             alt="NOCpulse"
             className={cn(
               "w-full h-full object-contain",
-              /*
-                Light mode: invert(1) flips the near-black background to near-white
-                (transparent on white card), then hue-rotate(180deg) maps the
-                inverted hue of each colour back to its original hue.
-                Dark mode:  no filter — render PNG exactly as designed.
-              */
+              // Light: invert makes near-black bg → near-white (invisible on white card);
+              // hue-rotate(180°) maps inverted colours back to their original hues.
+              // Dark: no filter — PNG renders as designed.
               "[filter:invert(1)_hue-rotate(180deg)]",
               "dark:[filter:none]",
             )}
-            style={{ padding: 6 }}
+            style={{ padding: collapsed ? 5 : 10 }}
           />
         </div>
 
-        {/* Brand text — only shown in expanded state */}
+        {/* ── Brand text — expanded only ────────────────────────────────── */}
         {!collapsed && (
-          <div className="flex flex-1 items-center justify-between min-w-0">
-            <div className="min-w-0">
-              <div className="text-[15px] font-bold tracking-tight leading-none text-foreground">
-                NOCpulse
-              </div>
-              <div className="text-[8px] tracking-[0.16em] text-muted-foreground/45 uppercase mt-[5px] leading-none">
-                Monitor&nbsp;·&nbsp;Analyze&nbsp;·&nbsp;Optimize
-              </div>
+          <div className="flex flex-col items-center gap-1.5 text-center w-full">
+            <div className="text-[14px] font-bold tracking-tight leading-none text-foreground">
+              NOCpulse
             </div>
-            {/* Live indicator */}
-            <div className="flex items-center gap-1.5 px-2 py-[3px] rounded-full bg-green-500/10 border border-green-500/20 shrink-0 ml-2">
+            <div className="text-[8px] tracking-[0.18em] text-muted-foreground/45 uppercase leading-none">
+              Monitor&nbsp;·&nbsp;Analyze&nbsp;·&nbsp;Optimize
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-[3px] rounded-full bg-green-500/10 border border-green-500/20 mt-0.5">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className="text-[9px] font-bold uppercase tracking-wider text-green-500">
                 Live
