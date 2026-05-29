@@ -31,8 +31,6 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { toast } from "sonner";
-import { ConfirmModal } from "@/components/ConfirmModal";
 import {
   Signal,
   Radio,
@@ -45,8 +43,6 @@ import {
   WifiOff,
   RefreshCw,
   Bell,
-  Power,
-  PowerOff,
   TrendingDown,
   TrendingUp,
   Minus,
@@ -90,7 +86,6 @@ export default function OnuDetail() {
   const { onus, olts } = useApiData();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const [modal, setModal] = useState<"reboot" | "disable" | "enable" | null>(null);
   const [customDescription, setCustomDescription] = useState("");
   const [editDescOpen, setEditDescOpen] = useState(false);
   const [editDescDraft, setEditDescDraft] = useState("");
@@ -301,14 +296,6 @@ export default function OnuDetail() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <Button
-            size="sm"
-            variant="outline"
-            className="bg-amber-500/10 text-amber-500 border-amber-500/20 hover:bg-amber-500/20"
-            onClick={() => setModal("reboot")}
-          >
-            <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Reboot ONU
-          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" variant="outline" className="w-8 p-0">
@@ -319,19 +306,6 @@ export default function OnuDetail() {
               <DropdownMenuItem onClick={() => { setEditDescDraft(customDescription || onu.description); setEditDescOpen(true); }}>
                 Edit Description
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {onu.status !== "Offline" ? (
-                <DropdownMenuItem
-                  className="text-red-500"
-                  onClick={() => setModal("disable")}
-                >
-                  <PowerOff className="h-4 w-4 mr-2" /> Disable ONU
-                </DropdownMenuItem>
-              ) : (
-                <DropdownMenuItem onClick={() => setModal("enable")}>
-                  <Power className="h-4 w-4 mr-2" /> Enable ONU
-                </DropdownMenuItem>
-              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setLocation(`/olts/${onu.oltId}`)}>
                 View Parent OLT
@@ -837,40 +811,6 @@ export default function OnuDetail() {
         </Card>
       </div>
 
-      {/* ── Confirmation Modals ── */}
-      <ConfirmModal
-        open={modal === "reboot"}
-        onClose={() => setModal(null)}
-        onConfirm={() => toast.success(`Reboot sent to ${displayDescription}`, { description: "ONU will restart within 30 seconds" })}
-        title="Reboot ONU"
-        description="This will send a remote reboot command to the ONU. The customer will lose connectivity for approximately 30–60 seconds while the device restarts."
-        device={`${onu.onuNo} — ${displayDescription}`}
-        confirmLabel="Reboot ONU"
-        variant="warning"
-        icon="reboot"
-      />
-      <ConfirmModal
-        open={modal === "disable"}
-        onClose={() => setModal(null)}
-        onConfirm={() => toast.error(`ONU disabled: ${displayDescription}`, { description: "Service suspended. Use Enable to restore." })}
-        title="Disable ONU"
-        description="This will administratively shut down the ONU on the OLT. The customer will lose all internet access immediately."
-        device={`${onu.onuNo} — ${displayDescription}`}
-        confirmLabel="Disable ONU"
-        variant="danger"
-        icon="disable"
-      />
-      <ConfirmModal
-        open={modal === "enable"}
-        onClose={() => setModal(null)}
-        onConfirm={() => toast.success(`ONU enabled: ${displayDescription}`, { description: "ONU is coming back online" })}
-        title="Enable ONU"
-        description="This will bring the ONU back online and restore the customer's internet service."
-        device={`${onu.onuNo} — ${displayDescription}`}
-        confirmLabel="Enable ONU"
-        variant="warning"
-        icon="enable"
-      />
       {/* ── Edit Description Dialog ── */}
       <Dialog open={editDescOpen} onOpenChange={setEditDescOpen}>
         <DialogContent className="max-w-sm">
