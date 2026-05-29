@@ -9,6 +9,7 @@ import { snmpTestRouter } from "../backend/api/snmp-test.routes";
 import { cacheRouter } from "../backend/api/cache.routes";
 import { exportRouter } from "../backend/api/export.routes";
 import { actionsRouter } from "../backend/api/actions.routes";
+import { vendorRouter } from "../backend/api/vendor.routes";
 
 const router: IRouter = Router();
 
@@ -42,5 +43,9 @@ router.use("/export", exportRouter);
 // ONU action framework — simulation only, no real SNMP writes
 // POST /api/actions/reboot, /api/actions/disable, /api/actions/enable
 router.use("/actions", actionsRouter);
+
+// Vendor profiles — static read-only multi-vendor support registry
+// GET /api/vendors, /api/vendors/:vendor
+router.use("/vendors", vendorRouter);
 
 export default router;
