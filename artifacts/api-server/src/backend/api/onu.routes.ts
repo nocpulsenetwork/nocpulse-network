@@ -28,6 +28,8 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { MOCK_ONUS } from "../mock/mock-data";
 import type { ApiListResponse, ApiDetailResponse, ApiError } from "../types/universal.types";
+import type { DetectedAlarm } from "../services/alarm-detector";
+import { detectAlarmsForOnu } from "../services/alarm-detector";
 
 export const onuRouter = Router();
 
@@ -60,6 +62,22 @@ onuRouter.get("/", (req: Request, res: Response) => {
       total: results.length,
       page: 1,
       pageSize: results.length,
+      source: META_SOURCE,
+      generatedAt: new Date().toISOString(),
+    },
+  };
+  res.json(body);
+});
+
+// GET /api/onus/:id/alarms — detected alarms for one ONU
+onuRouter.get("/:id/alarms", (req: Request, res: Response) => {
+  const alarms: DetectedAlarm[] = detectAlarmsForOnu(req.params["id"] as string, MOCK_ONUS);
+  const body: ApiListResponse<DetectedAlarm> = {
+    data: alarms,
+    meta: {
+      total: alarms.length,
+      page: 1,
+      pageSize: alarms.length,
       source: META_SOURCE,
       generatedAt: new Date().toISOString(),
     },

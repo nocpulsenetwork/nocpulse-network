@@ -22,8 +22,10 @@
 
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { MOCK_OLTS } from "../mock/mock-data";
+import { MOCK_OLTS, MOCK_ONUS } from "../mock/mock-data";
 import type { ApiListResponse, ApiDetailResponse, ApiError } from "../types/universal.types";
+import type { DetectedAlarm } from "../services/alarm-detector";
+import { detectAlarmsForOlt } from "../services/alarm-detector";
 import {
   RealSnmpClient,
   detectVendorFromSysInfo,
@@ -47,6 +49,22 @@ oltRouter.get("/", (_req: Request, res: Response) => {
       total: MOCK_OLTS.length,
       page: 1,
       pageSize: MOCK_OLTS.length,
+      source: META_SOURCE,
+      generatedAt: new Date().toISOString(),
+    },
+  };
+  res.json(body);
+});
+
+// GET /api/olts/:id/alarms — detected alarms for one OLT and all its ONUs
+oltRouter.get("/:id/alarms", (req: Request, res: Response) => {
+  const alarms: DetectedAlarm[] = detectAlarmsForOlt(req.params["id"] as string, MOCK_OLTS, MOCK_ONUS);
+  const body: ApiListResponse<DetectedAlarm> = {
+    data: alarms,
+    meta: {
+      total: alarms.length,
+      page: 1,
+      pageSize: alarms.length,
       source: META_SOURCE,
       generatedAt: new Date().toISOString(),
     },
