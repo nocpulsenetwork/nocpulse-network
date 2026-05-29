@@ -25,27 +25,24 @@
 
 import { Router } from "express";
 import type { Request, Response } from "express";
-import { MOCK_ALARMS, MOCK_OLTS, MOCK_ONUS } from "../mock/mock-data";
+import { MOCK_ALARMS } from "../mock/mock-data";
 import type { ApiListResponse, ApiDetailResponse, ApiError } from "../types/universal.types";
-import type { DetectedAlarm } from "../services/alarm-detector";
-import { detectAllAlarms } from "../services/alarm-detector";
 
 export const alarmRouter = Router();
 
 const META_SOURCE = "mock" as const;
 
-// GET /api/alarms — alarms detected from all OLTs and ONUs
-// Supports ?severity=critical|warning|info  ?oltId=  ?onuId=
+// GET /api/alarms  — supports ?status=&severity=&deviceId=
 alarmRouter.get("/", (req: Request, res: Response) => {
-  const { severity, oltId, onuId } = req.query as Record<string, string | undefined>;
+  const { status, severity, deviceId } = req.query as Record<string, string | undefined>;
 
-  let results: DetectedAlarm[] = detectAllAlarms(MOCK_OLTS, MOCK_ONUS);
+  let results = [...MOCK_ALARMS];
 
+  if (status)   results = results.filter((a) => a.status === status);
   if (severity) results = results.filter((a) => a.severity === severity);
-  if (oltId)    results = results.filter((a) => a.oltId === oltId);
-  if (onuId)    results = results.filter((a) => a.onuId === onuId);
+  if (deviceId) results = results.filter((a) => a.deviceId === deviceId);
 
-  const body: ApiListResponse<DetectedAlarm> = {
+  const body: ApiListResponse<typeof results[number]> = {
     data: results,
     meta: {
       total: results.length,
