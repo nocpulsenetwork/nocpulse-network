@@ -8,6 +8,7 @@ import { pollingRouter } from "../backend/api/polling.routes";
 import { snmpTestRouter } from "../backend/api/snmp-test.routes";
 import { cacheRouter } from "../backend/api/cache.routes";
 import { exportRouter } from "../backend/api/export.routes";
+import { actionsRouter } from "../backend/api/actions.routes";
 
 const router: IRouter = Router();
 
@@ -37,5 +38,9 @@ router.use("/cache", cacheRouter);
 // CSV export — read-only downloads, no background process, no device calls
 // GET /api/export/olts.csv, /api/export/onus.csv, /api/export/alarms.csv
 router.use("/export", exportRouter);
+
+// ONU action framework — simulation only, no real SNMP writes
+// POST /api/actions/reboot, /api/actions/disable, /api/actions/enable
+router.use("/actions", actionsRouter);
 
 export default router;
