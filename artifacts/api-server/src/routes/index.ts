@@ -7,6 +7,7 @@ import { alarmRouter } from "../backend/api/alarm.routes";
 import { pollingRouter } from "../backend/api/polling.routes";
 import { snmpTestRouter } from "../backend/api/snmp-test.routes";
 import { cacheRouter } from "../backend/api/cache.routes";
+import { exportRouter } from "../backend/api/export.routes";
 
 const router: IRouter = Router();
 
@@ -32,5 +33,9 @@ router.use("/snmp", snmpTestRouter);
 // Snapshot cache — frontend-safe read-only data with staleness metadata
 // GET /api/cache/olts, /api/cache/olts/:id, /api/cache/onus, /api/cache/alarms
 router.use("/cache", cacheRouter);
+
+// CSV export — read-only downloads, no background process, no device calls
+// GET /api/export/olts.csv, /api/export/onus.csv, /api/export/alarms.csv
+router.use("/export", exportRouter);
 
 export default router;
