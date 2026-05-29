@@ -6,6 +6,7 @@ import { onuRouter } from "../backend/api/onu.routes";
 import { alarmRouter } from "../backend/api/alarm.routes";
 import { pollingRouter } from "../backend/api/polling.routes";
 import { snmpTestRouter } from "../backend/api/snmp-test.routes";
+import { cacheRouter } from "../backend/api/cache.routes";
 
 const router: IRouter = Router();
 
@@ -27,5 +28,9 @@ router.use("/polling", pollingRouter);
 // POST /api/snmp/test  — quick connectivity probe
 // POST /api/snmp/probe — full read-only system info collection
 router.use("/snmp", snmpTestRouter);
+
+// Snapshot cache — frontend-safe read-only data with staleness metadata
+// GET /api/cache/olts, /api/cache/olts/:id, /api/cache/onus, /api/cache/alarms
+router.use("/cache", cacheRouter);
 
 export default router;

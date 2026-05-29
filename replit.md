@@ -26,7 +26,10 @@ _Populate as you build — short repo map plus pointers to the source-of-truth f
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- **Frontend reads cache, never devices directly.** Frontend should read cached API data from `/api/cache/*`. Never call OLT directly from frontend. The `stale` flag tells the UI whether data is from a recent poll or a mock fallback.
+- **Two-layer cache.** `TtlCache` (in `core/cache.ts`) stores raw SNMP-polled data for the polling engine. `SnapshotStore` (in `core/snapshot-store.ts`) wraps data with metadata (`lastUpdated`, `source`, `stale`) for the frontend cache API.
+- **Alarm detection is pure/read-only.** `alarm-detector.ts` derives alarms from OLT/ONU data on every request — no SNMP, no DB, no background process.
+- **No auto-polling.** The polling engine is manual-only (`POST /api/polling/start`). Max 1 concurrent OLT, minimum 30 s interval, auto-suspends after 3 consecutive failures.
 
 ## Product
 
