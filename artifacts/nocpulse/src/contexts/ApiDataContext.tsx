@@ -35,7 +35,7 @@ export interface ApiMetrics {
   offlineOlts: number;
   activeAlarms: number;
   criticalAlarms: number;
-  networkUptime: number;
+  networkUptime: number | null;
   bandwidthUsage: string;
 }
 
@@ -54,8 +54,14 @@ function buildMetrics(
   onus: OnuDevice[],
   alarms: Alarm[]
 ): ApiMetrics {
+  const totalOlts = olts.length;
+  const onlineOlts = olts.filter((o) => o.status === "Online").length;
+  const networkUptime =
+    totalOlts > 0
+      ? Math.round((onlineOlts / totalOlts) * 1000) / 10
+      : null;
   return {
-    totalOlts: olts.length,
+    totalOlts,
     totalOnus: onus.length,
     onlineOnus: onus.filter((o) => o.status === "Online").length,
     offlineOnus: onus.filter((o) => o.status === "Offline").length,
@@ -64,7 +70,7 @@ function buildMetrics(
     criticalAlarms: alarms.filter(
       (a) => a.severity === "Critical" && !a.acknowledged
     ).length,
-    networkUptime: 99.98,
+    networkUptime,
     bandwidthUsage: "42.5 Tbps",
   };
 }

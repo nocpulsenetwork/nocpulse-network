@@ -551,7 +551,7 @@ export default function Dashboard() {
         <MetricCard title="Offline OLTs"  value={offlineOlts}  icon={ServerCrash}   accentColor={offlineOlts  > 0 ? 'red' : 'green'} alert={offlineOlts  > 0} description={offlineOlts  > 0 ? 'Require immediate action' : 'All OLTs online'}  href="/olts"   />
         <MetricCard title="Offline ONUs"  value={offlineOnus}  icon={WifiOff}       accentColor={offlineOnus  > 0 ? 'red' : 'green'} alert={offlineOnus  > 0} description={offlineOnus  > 0 ? 'Disconnected premises'   : 'All ONUs online'}   href="/onus"   />
         <MetricCard title="Active Alarms" value={activeAlarms} icon={AlertTriangle} accentColor={criticalAlarms > 0 ? 'red' : 'amber'} alert={activeAlarms > 0} pulse={criticalAlarms > 0} description={`${criticalAlarms} critical · ${majorAlarms} major`} href="/alarms" />
-        <MetricCard title="Uptime"        value={`${networkUptime}%`} icon={Shield} accentColor="green" description="Network SLA target" />
+        <MetricCard title="Uptime" value={networkUptime !== null ? `${networkUptime}%` : 'N/A'} icon={Shield} accentColor={networkUptime !== null && networkUptime >= 90 ? 'green' : networkUptime !== null ? 'amber' : 'cyan'} description={networkUptime !== null ? 'OLT availability (online / total)' : 'No OLT status data yet'} />
       </div>
 
       {/* 3 ── Network Map + Fiber Overview + Device Health ─────────────── */}
@@ -632,7 +632,7 @@ export default function Dashboard() {
           <CardContent className="p-4 space-y-2">
             {[
               { label: 'Platform',        value: 'NOCpulse v1.0',                color: '' },
-              { label: 'Network SLA',     value: `${networkUptime}%`,            color: 'text-green-400' },
+              { label: 'OLT Availability', value: networkUptime !== null ? `${networkUptime}%` : 'N/A', color: networkUptime !== null ? (networkUptime >= 90 ? 'text-green-400' : 'text-amber-400') : 'text-muted-foreground' },
               { label: 'OLT Online',      value: `${onlineOlts} / ${totalOlts}`, color: onlineOlts === totalOlts ? 'text-green-400' : 'text-amber-400' },
               { label: 'OLT Degraded',    value: String(degradedOlts),           color: degradedOlts > 0 ? 'text-amber-400' : 'text-green-400' },
               { label: 'OLT Offline',     value: String(offlineOlts),            color: offlineOlts  > 0 ? 'text-red-400'   : 'text-green-400' },

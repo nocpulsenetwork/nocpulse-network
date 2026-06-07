@@ -167,6 +167,6 @@ export const metrics = {
   offlineOlts: olts.filter(o => o.status === 'Offline').length,
   activeAlarms: alarms.filter(a => !a.acknowledged).length,
   criticalAlarms: alarms.filter(a => a.severity === 'Critical' && !a.acknowledged).length,
-  networkUptime: 99.98,
+  networkUptime: olts.length > 0 ? Math.round((olts.filter(o => o.status === 'Online').length / olts.length) * 1000) / 10 : null,
   bandwidthUsage: '42.5 Tbps',
 };
