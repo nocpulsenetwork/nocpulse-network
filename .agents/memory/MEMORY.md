@@ -1,0 +1,1 @@
+- [OLT test-connection API shape](olt-test-connection.md) — endpoint accepts `{ip, community, port}` (NOT snmpCommunity/snmpPort), returns `{data:{success,vendor,model,sysName,latencyMs,message}}`.

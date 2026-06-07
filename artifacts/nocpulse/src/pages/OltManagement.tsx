@@ -5,6 +5,7 @@ import { useApiData } from "@/contexts/ApiDataContext";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PermissionBanner } from "@/components/PermissionBanner";
 import { usePermissions } from "@/lib/permissions";
+import { useRole } from "@/contexts/RoleContext";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,11 +38,18 @@ import {
 interface ManagedOlt extends OltDevice {
   snmpVersion: "v1" | "v2c" | "v3";
   community: string;
+  snmpPort: number;
+  sshPort: number;
+  telnetPort: number;
+  username: string;
+  password: string;
   description: string;
   addedDate: string;
   isEnabled: boolean;
   isCustom: boolean;
   safePollingMode: boolean;
+  verified: boolean;
+  lastTestTime: string | null;
 }
 
 interface OltFormData {
@@ -51,6 +59,11 @@ interface OltFormData {
   type: "GPON" | "EPON";
   snmpVersion: "v1" | "v2c" | "v3";
   community: string;
+  snmpPort: string;
+  sshPort: string;
+  telnetPort: string;
+  username: string;
+  password: string;
   location: string;
   description: string;
   safePollingMode: boolean;
@@ -83,6 +96,11 @@ const DEFAULT_FORM: OltFormData = {
   type: "GPON",
   snmpVersion: "v2c",
   community: "public",
+  snmpPort: "161",
+  sshPort: "22",
+  telnetPort: "23",
+  username: "",
+  password: "",
   location: "",
   description: "",
   safePollingMode: false,
@@ -118,11 +136,18 @@ function seedFromApi(apiOlts: OltDevice[]): ManagedOlt[] {
     ...olt,
     snmpVersion: "v2c" as const,
     community: "public",
+    snmpPort: 161,
+    sshPort: 22,
+    telnetPort: 23,
+    username: "",
+    password: "",
     description: "",
     addedDate: olt.lastSync,
     isEnabled: true,
     isCustom: false,
     safePollingMode: false,
+    verified: false,
+    lastTestTime: null,
   }));
 }
 
@@ -169,6 +194,12 @@ function storeOlts(olts: ManagedOlt[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(olts));
 }
 
+function isValidPort(val: string): boolean {
+  if (!val.trim()) return false;
+  const n = parseInt(val, 10);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 && String(n) === val.trim();
+}
+
 function validateForm(
   form: OltFormData,
   olts: ManagedOlt[],
@@ -176,18 +207,32 @@ function validateForm(
 ): FormErrors {
   const errors: FormErrors = {};
   if (!form.name.trim()) errors.name = "OLT name is required";
-  if (!form.ip.trim()) {
+  const ipRaw = form.ip.trim();
+  if (!ipRaw) {
     errors.ip = "IP address is required";
-  } else if (!isValidIp(form.ip)) {
-    errors.ip = "Enter a valid IPv4 address (e.g. 10.0.1.1)";
-  } else if (olts.some((o) => o.ip === form.ip.trim() && o.id !== editId)) {
+  } else if (ipRaw.startsWith("http") || ipRaw.includes("://")) {
+    errors.ip = "Enter only the IPv4 address — no URL prefix";
+  } else if (ipRaw.includes(":")) {
+    errors.ip = "Enter only the IPv4 address — no port suffix";
+  } else if (!isValidIp(ipRaw)) {
+    errors.ip = "Enter a valid IPv4 address (e.g. 192.168.1.1)";
+  } else if (olts.some((o) => o.ip === ipRaw && o.id !== editId)) {
     errors.ip = "An OLT with this IP already exists";
   }
   if (!form.community.trim()) errors.community = "Community string is required";
+  if (!form.snmpPort.trim()) {
+    errors.snmpPort = "SNMP Port is required";
+  } else if (!isValidPort(form.snmpPort)) {
+    errors.snmpPort = "SNMP Port must be 1–65535";
+  }
+  if (form.sshPort.trim() && !isValidPort(form.sshPort))
+    errors.sshPort = "SSH Port must be 1–65535";
+  if (form.telnetPort.trim() && !isValidPort(form.telnetPort))
+    errors.telnetPort = "Telnet Port must be 1–65535";
   return errors;
 }
 
-function createFromForm(form: OltFormData): ManagedOlt {
+function createFromForm(form: OltFormData, verified: boolean): ManagedOlt {
   const now = new Date().toISOString();
   return {
     id: generateId(),
@@ -211,15 +256,23 @@ function createFromForm(form: OltFormData): ManagedOlt {
     ponPortCount: 0,
     snmpVersion: form.snmpVersion,
     community: form.community.trim() || "public",
+    snmpPort: parseInt(form.snmpPort, 10) || 161,
+    sshPort: form.sshPort.trim() ? (parseInt(form.sshPort, 10) || 22) : 22,
+    telnetPort: form.telnetPort.trim() ? (parseInt(form.telnetPort, 10) || 23) : 23,
+    username: form.username.trim(),
+    password: form.password,
     description: form.description.trim(),
     addedDate: now,
     isEnabled: true,
     isCustom: true,
     safePollingMode: form.safePollingMode,
+    verified,
+    lastTestTime: verified ? now : null,
   };
 }
 
-function applyFormToOlt(existing: ManagedOlt, form: OltFormData): ManagedOlt {
+function applyFormToOlt(existing: ManagedOlt, form: OltFormData, verified: boolean): ManagedOlt {
+  const now = new Date().toISOString();
   return {
     ...existing,
     name: form.name.trim(),
@@ -230,8 +283,15 @@ function applyFormToOlt(existing: ManagedOlt, form: OltFormData): ManagedOlt {
     location: form.location.trim(),
     snmpVersion: form.snmpVersion,
     community: form.community.trim() || "public",
+    snmpPort: parseInt(form.snmpPort, 10) || 161,
+    sshPort: form.sshPort.trim() ? (parseInt(form.sshPort, 10) || existing.sshPort) : existing.sshPort,
+    telnetPort: form.telnetPort.trim() ? (parseInt(form.telnetPort, 10) || existing.telnetPort) : existing.telnetPort,
+    username: form.username.trim(),
+    password: form.password,
     description: form.description.trim(),
     safePollingMode: form.safePollingMode,
+    verified: verified || existing.verified,
+    lastTestTime: verified ? now : existing.lastTestTime,
   };
 }
 
@@ -243,6 +303,11 @@ function oltToForm(olt: ManagedOlt): OltFormData {
     type: olt.type,
     snmpVersion: olt.snmpVersion,
     community: olt.community,
+    snmpPort: String(olt.snmpPort ?? 161),
+    sshPort: String(olt.sshPort ?? 22),
+    telnetPort: String(olt.telnetPort ?? 23),
+    username: olt.username ?? "",
+    password: olt.password ?? "",
     location: olt.location,
     description: olt.description,
     safePollingMode: olt.safePollingMode ?? false,
@@ -467,42 +532,111 @@ interface OltFormModalProps {
   editId?: string;
   allOlts: ManagedOlt[];
   onClose: () => void;
-  onSave: (data: OltFormData) => void;
+  onSave: (data: OltFormData, verified: boolean) => void;
 }
 
 function OltFormModal({
   open, mode, initial, editId, allOlts, onClose, onSave,
 }: OltFormModalProps) {
+  const { role } = useRole();
+  const isSuperAdmin = role === "super_admin";
+
   const [form, setForm] = useState<OltFormData>(initial ?? DEFAULT_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
+  const [testState, setTestState] = useState<TestState>("idle");
+  const [testResult, setTestResult] = useState<{
+    vendor: string; model: string; systemName: string; latencyMs: number;
+  } | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setForm(initial ?? DEFAULT_FORM);
       setErrors({});
+      setTestState("idle");
+      setTestResult(null);
+      setTestError(null);
     }
   }, [open, initial]);
 
-  const setField = (field: keyof OltFormData, value: string) => {
+  const setField = (field: keyof OltFormData, value: string | boolean) => {
     setForm((f) => ({ ...f, [field]: value }));
-    if (errors[field]) setErrors((e) => ({ ...e, [field]: undefined }));
+    if (errors[field as keyof FormErrors]) setErrors((e) => ({ ...e, [field]: undefined }));
+    if (typeof value === "string" && ["ip", "community", "snmpPort", "snmpVersion"].includes(field as string)) {
+      setTestState("idle");
+      setTestResult(null);
+      setTestError(null);
+    }
   };
 
-  const handleSubmit = () => {
-    const errs = validateForm(form, allOlts, editId);
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
+  const handleTest = async () => {
+    const ipRaw = form.ip.trim();
+    if (!ipRaw || !isValidIp(ipRaw)) {
+      setErrors((e) => ({ ...e, ip: "Enter a valid IPv4 address before testing." }));
       return;
     }
-    onSave(form);
+    if (!form.community.trim()) {
+      setErrors((e) => ({ ...e, community: "Community string is required." }));
+      return;
+    }
+    const portNum = parseInt(form.snmpPort, 10);
+    if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+      setErrors((e) => ({ ...e, snmpPort: "SNMP Port must be 1–65535." }));
+      return;
+    }
+    setTestState("testing");
+    setTestResult(null);
+    setTestError(null);
+    try {
+      const resp = await fetch("/api/olts/test-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ip: ipRaw,
+          community: form.community.trim(),
+          port: portNum,
+          snmpVersion: form.snmpVersion,
+        }),
+        signal: AbortSignal.timeout(12_000),
+      });
+      const json = await resp.json() as {
+        data?: { success: boolean; vendor?: string; model?: string; sysName?: string; latencyMs?: number; message?: string };
+      };
+      const data = json.data;
+      if (data?.success) {
+        setTestState("pass");
+        setTestResult({
+          vendor: data.vendor ?? "Unknown",
+          model: data.model ?? "Unknown",
+          systemName: data.sysName ?? "",
+          latencyMs: data.latencyMs ?? 0,
+        });
+      } else {
+        setTestState("fail");
+        setTestError(data?.message ?? "Connection failed. Check IP, community and port.");
+      }
+    } catch {
+      setTestState("fail");
+      setTestError("Request timed out. Check IP and network connectivity.");
+    }
+  };
+
+  const handleSubmit = (forceSave = false) => {
+    const errs = validateForm(form, allOlts, editId);
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    const verified = testState === "pass";
+    if (!verified && !isSuperAdmin && !forceSave) return;
+    onSave(form, verified);
   };
 
   const labelCls = "text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block";
   const inputCls = "h-9 bg-background/50 text-sm";
+  const canSaveNow = isSuperAdmin || testState === "pass";
+  const showForceSave = isSuperAdmin && testState !== "pass";
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Server className="h-4 w-4 text-primary" />
@@ -510,7 +644,7 @@ function OltFormModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-1 max-h-[62vh] overflow-y-auto pr-0.5">
+        <div className="space-y-4 py-1 max-h-[60vh] overflow-y-auto pr-1">
           {/* Name + Vendor */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -521,23 +655,14 @@ function OltFormModal({
                 value={form.name}
                 onChange={(e) => setField("name", e.target.value)}
               />
-              {errors.name && (
-                <p className="text-[11px] text-red-400 mt-1">{errors.name}</p>
-              )}
+              {errors.name && <p className="text-[11px] text-red-400 mt-1">{errors.name}</p>}
             </div>
             <div>
               <label className={labelCls}>Vendor *</label>
-              <Select
-                value={form.brand}
-                onValueChange={(v) => setField("brand", v)}
-              >
-                <SelectTrigger className={inputCls}>
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={form.brand} onValueChange={(v) => setField("brand", v)}>
+                <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {VENDORS.map((v) => (
-                    <SelectItem key={v} value={v}>{v}</SelectItem>
-                  ))}
+                  {VENDORS.map((v) => <SelectItem key={v} value={v}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -549,23 +674,16 @@ function OltFormModal({
               <label className={labelCls}>IP Address *</label>
               <Input
                 className={`${inputCls} font-mono`}
-                placeholder="10.0.1.10"
+                placeholder="192.168.1.1"
                 value={form.ip}
                 onChange={(e) => setField("ip", e.target.value)}
               />
-              {errors.ip && (
-                <p className="text-[11px] text-red-400 mt-1">{errors.ip}</p>
-              )}
+              {errors.ip && <p className="text-[11px] text-red-400 mt-1">{errors.ip}</p>}
             </div>
             <div>
               <label className={labelCls}>PON Type *</label>
-              <Select
-                value={form.type}
-                onValueChange={(v) => setField("type", v)}
-              >
-                <SelectTrigger className={inputCls}>
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={form.type} onValueChange={(v) => setField("type", v)}>
+                <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="GPON">GPON</SelectItem>
                   <SelectItem value="EPON">EPON</SelectItem>
@@ -578,13 +696,8 @@ function OltFormModal({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>SNMP Version *</label>
-              <Select
-                value={form.snmpVersion}
-                onValueChange={(v) => setField("snmpVersion", v)}
-              >
-                <SelectTrigger className={inputCls}>
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={form.snmpVersion} onValueChange={(v) => setField("snmpVersion", v)}>
+                <SelectTrigger className={inputCls}><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="v1">SNMPv1</SelectItem>
                   <SelectItem value="v2c">SNMPv2c</SelectItem>
@@ -600,10 +713,119 @@ function OltFormModal({
                 value={form.community}
                 onChange={(e) => setField("community", e.target.value)}
               />
-              {errors.community && (
-                <p className="text-[11px] text-red-400 mt-1">{errors.community}</p>
-              )}
+              {errors.community && <p className="text-[11px] text-red-400 mt-1">{errors.community}</p>}
             </div>
+          </div>
+
+          {/* Ports — 3 columns */}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className={labelCls}>SNMP Port *</label>
+              <Input
+                className={`${inputCls} font-mono`}
+                placeholder="161"
+                value={form.snmpPort}
+                onChange={(e) => setField("snmpPort", e.target.value)}
+              />
+              {errors.snmpPort && <p className="text-[11px] text-red-400 mt-1">{errors.snmpPort}</p>}
+            </div>
+            <div>
+              <label className={labelCls}>SSH Port</label>
+              <Input
+                className={`${inputCls} font-mono`}
+                placeholder="22"
+                value={form.sshPort}
+                onChange={(e) => setField("sshPort", e.target.value)}
+              />
+              {errors.sshPort && <p className="text-[11px] text-red-400 mt-1">{errors.sshPort}</p>}
+            </div>
+            <div>
+              <label className={labelCls}>Telnet Port</label>
+              <Input
+                className={`${inputCls} font-mono`}
+                placeholder="23"
+                value={form.telnetPort}
+                onChange={(e) => setField("telnetPort", e.target.value)}
+              />
+              {errors.telnetPort && <p className="text-[11px] text-red-400 mt-1">{errors.telnetPort}</p>}
+            </div>
+          </div>
+
+          {/* Username + Password */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Username</label>
+              <Input
+                className={inputCls}
+                placeholder="admin"
+                value={form.username}
+                onChange={(e) => setField("username", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Password</label>
+              <Input
+                className={inputCls}
+                type="password"
+                placeholder="••••••••"
+                value={form.password}
+                onChange={(e) => setField("password", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Test Connection panel */}
+          <div className="rounded-lg border border-border/50 bg-background/30 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium leading-none">Test Connection</p>
+                <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
+                  {isSuperAdmin
+                    ? "Recommended. Super Admin may force-save without testing."
+                    : "Required before saving. Read-only SNMP check."}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0 h-8 gap-1.5"
+                disabled={testState === "testing"}
+                onClick={handleTest}
+              >
+                {testState === "testing" ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" />Testing…</>
+                ) : (
+                  <><Signal className="h-3.5 w-3.5" />Test</>
+                )}
+              </Button>
+            </div>
+
+            {testState === "pass" && testResult && (
+              <div className="flex items-start gap-2 p-2 rounded bg-green-500/10 border border-green-500/20 text-green-400">
+                <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                <div className="text-[11px] leading-snug min-w-0">
+                  <span className="font-semibold">Connected · {testResult.latencyMs} ms</span>
+                  {testResult.systemName && (
+                    <span className="text-green-300/70"> · {testResult.systemName}</span>
+                  )}
+                  {(testResult.vendor !== "Unknown" || testResult.model !== "Unknown") && (
+                    <div className="text-green-300/60 mt-0.5">
+                      {testResult.vendor} {testResult.model}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {testState === "fail" && (
+              <div className="flex items-start gap-2 p-2 rounded bg-red-500/10 border border-red-500/20 text-red-400">
+                <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <p className="text-[11px] leading-snug">
+                  {testError ?? "Connection failed. Check IP, community and port."}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Safe Polling Mode */}
@@ -625,17 +847,17 @@ function OltFormModal({
             <label className={labelCls}>Location</label>
             <Input
               className={inputCls}
-              placeholder="Data Center Alpha"
+              placeholder="Data Center Alpha — Rack A2"
               value={form.location}
               onChange={(e) => setField("location", e.target.value)}
             />
           </div>
 
-          {/* Description */}
+          {/* Notes */}
           <div>
-            <label className={labelCls}>Description</label>
+            <label className={labelCls}>Notes</label>
             <Textarea
-              className="bg-background/50 text-sm resize-none min-h-[72px]"
+              className="bg-background/50 text-sm resize-none min-h-[64px]"
               placeholder="Optional notes about this OLT…"
               value={form.description}
               onChange={(e) => setField("description", e.target.value)}
@@ -643,12 +865,27 @@ function OltFormModal({
           </div>
         </div>
 
-        <DialogFooter className="gap-2 pt-2">
+        <DialogFooter className="gap-2 pt-2 flex-wrap">
           <Button variant="outline" onClick={onClose} className="flex-1 sm:flex-none h-9">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} className="flex-1 sm:flex-none h-9">
-            {mode === "add" ? "Add OLT" : "Save Changes"}
+          {showForceSave && (
+            <Button
+              variant="outline"
+              onClick={() => handleSubmit(true)}
+              className="flex-1 sm:flex-none h-9 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 hover:text-amber-300"
+              title="Save without SNMP verification — OLT will be marked Unverified"
+            >
+              Force Save (Unverified)
+            </Button>
+          )}
+          <Button
+            onClick={() => handleSubmit(false)}
+            disabled={!canSaveNow}
+            className="flex-1 sm:flex-none h-9"
+            title={!canSaveNow ? "Run Test Connection first to verify the OLT" : undefined}
+          >
+            {mode === "add" ? "Save OLT" : "Save Changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -736,18 +973,20 @@ export default function OltManagement() {
 
   // ── Action handlers ──────────────────────────────────────────────────────
 
-  const handleSave = (form: OltFormData) => {
+  const handleSave = (form: OltFormData, verified: boolean) => {
     if (modal?.mode === "add") {
-      const newOlt = createFromForm(form);
+      const newOlt = createFromForm(form, verified);
       setManagedOlts((prev) => (prev ? [...prev, newOlt] : [newOlt]));
       syncOltToInventory(newOlt);
       toast.success(`${newOlt.name} added`, {
-        description: `${newOlt.brand} ${newOlt.type} · ${newOlt.ip}`,
+        description: verified
+          ? `${newOlt.brand} ${newOlt.type} · ${newOlt.ip} · Verified`
+          : `${newOlt.brand} ${newOlt.type} · ${newOlt.ip} · Unverified`,
       });
     } else if (modal?.mode === "edit" && modal.oltId) {
       const editId = modal.oltId;
       setManagedOlts((prev) =>
-        prev ? prev.map((o) => (o.id === editId ? applyFormToOlt(o, form) : o)) : prev
+        prev ? prev.map((o) => (o.id === editId ? applyFormToOlt(o, form, verified) : o)) : prev
       );
       toast.success("OLT updated successfully");
     }
@@ -770,18 +1009,38 @@ export default function OltManagement() {
   const handleTestConnection = useCallback(async (olt: ManagedOlt) => {
     setTestStates((prev) => ({ ...prev, [olt.id]: "testing" }));
     toast.info(`Testing SNMP connection to ${olt.name}…`);
-    await new Promise((resolve) =>
-      setTimeout(resolve, 1400 + Math.random() * 700)
-    );
-    const pass = Math.random() > 0.3;
-    setTestStates((prev) => ({ ...prev, [olt.id]: pass ? "pass" : "fail" }));
-    if (pass) {
-      toast.success(`${olt.name} — Reachable`, {
-        description: `SNMP ${olt.snmpVersion.toUpperCase()} responded at ${olt.ip}`,
+    try {
+      const resp = await fetch("/api/olts/test-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ip: olt.ip,
+          community: olt.community,
+          port: olt.snmpPort ?? 161,
+          snmpVersion: olt.snmpVersion,
+        }),
+        signal: AbortSignal.timeout(10_000),
       });
-    } else {
+      const json = await resp.json() as {
+        data?: { success: boolean; vendor?: string; model?: string; latencyMs?: number; message?: string };
+      };
+      const data = json.data;
+      if (data?.success) {
+        setTestStates((prev) => ({ ...prev, [olt.id]: "pass" }));
+        toast.success(`${olt.name} — Reachable`, {
+          description: [data.vendor, data.model, data.latencyMs != null ? `${data.latencyMs} ms` : undefined]
+            .filter(Boolean).join(" · ") || `${olt.ip} responded`,
+        });
+      } else {
+        setTestStates((prev) => ({ ...prev, [olt.id]: "fail" }));
+        toast.error(`${olt.name} — Unreachable`, {
+          description: data?.message ?? "OLT did not respond.",
+        });
+      }
+    } catch {
+      setTestStates((prev) => ({ ...prev, [olt.id]: "fail" }));
       toast.error(`${olt.name} — Unreachable`, {
-        description: `No response from ${olt.ip} · ${olt.snmpVersion.toUpperCase()} · community: ${olt.community}`,
+        description: "Request timed out or network error.",
       });
     }
     setTimeout(

@@ -1,0 +1,337 @@
+Fix OLT Add Form and Implement Real OLT Validation for Production SaaS Use.
+
+CRITICAL REQUIREMENT:
+
+This software is a multi-ISP SaaS platform.
+
+Different ISPs may use:
+
+- Different OLT vendors
+- Different firmware versions
+- Different SNMP ports
+- Different SSH ports
+- Different Telnet ports
+- Different management IPs
+- Different access methods (Public IP, Private IP, VPN, NAT, Port Forwarding)
+
+DO NOT hardcode:
+
+- IP addresses
+- SNMP community strings
+- Vendor names
+- Port numbers
+- Firmware information
+- OIDs specific to a single vendor
+
+Keep existing UI and design unchanged as much as possible.
+
+==================================================
+OLT ADD / EDIT FORM
+
+Fields:
+
+Required:
+
+- OLT Name
+- Vendor
+- IP Address
+- SNMP Version (v1 / v2c / v3)
+- SNMP Community
+- SNMP Port
+
+Optional:
+
+- Username
+- Password
+- SSH Port
+- Telnet Port
+- Notes
+
+Port Defaults:
+
+- Pre-fill SNMP Port = 161
+- Pre-fill SSH Port = 22
+- Pre-fill Telnet Port = 23
+
+IMPORTANT:
+
+These are only default values.
+
+Users must be allowed to change them.
+
+Never assume ports are always 161/22/23.
+
+==================================================
+IP VALIDATION
+
+IP Address field:
+
+Allowed:
+
+- IPv4 only
+
+Examples:
+
+Valid:
+192.168.1.1
+10.10.10.5
+103.111.225.76
+
+Invalid:
+192.168.1.1:161
+http://192.168.1.1
+https://192.168.1.1
+
+Ports must never be entered inside the IP field.
+
+Ports must use dedicated port fields.
+
+==================================================
+PORT VALIDATION
+
+SNMP Port:
+1–65535
+
+SSH Port:
+1–65535
+
+Telnet Port:
+1–65535
+
+Reject:
+
+0
+65536
+negative values
+text values
+
+==================================================
+FRONTEND VALIDATION
+
+Before Save:
+
+Validate:
+
+- OLT Name required
+- Vendor required
+- Valid IPv4 required
+- SNMP Version required
+- SNMP Community required
+- SNMP Port required
+- SNMP Port range 1–65535
+- SSH Port range 1–65535 (if entered)
+- Telnet Port range 1–65535 (if entered)
+
+Invalid configurations must NOT be saved.
+
+Examples:
+
+"Invalid IPv4 address."
+
+"SNMP Community is required."
+
+"SNMP Port must be between 1 and 65535."
+
+==================================================
+REAL OLT TEST CONNECTION
+
+Create:
+
+POST /api/olts/test-connection
+
+Input Example:
+
+{
+"ip": "103.111.225.76",
+"snmpVersion": "v2c",
+"snmpCommunity": "public",
+"snmpPort": 40109
+}
+
+Behavior:
+
+Perform SAFE READ-ONLY SNMP VALIDATION ONLY.
+
+Allowed OIDs:
+
+- sysName
+- sysDescr
+- sysUpTime
+
+Forbidden:
+
+- SNMP SET
+- ONU Reboot
+- ONU Disable
+- ONU Enable
+- Configuration Changes
+- Write Operations
+- Bulk SNMP Walk
+- Aggressive Queries
+
+Safety:
+
+- Timeout = 3 seconds
+- Retry = 1
+- CPU-safe
+- No background polling
+- No continuous retries
+
+Success Response:
+
+{
+"success": true,
+"vendor": "...",
+"model": "...",
+"firmware": "...",
+"systemName": "...",
+"latencyMs": 25
+}
+
+Failure Response:
+
+{
+"success": false,
+"message": "OLT connection failed. Check IP, SNMP version, community and port."
+}
+
+==================================================
+ADD OLT WORKFLOW
+
+User fills OLT form
+
+↓
+
+Click Test Connection
+
+↓
+
+Run real SNMP validation
+
+↓
+
+If failed:
+
+- Save button disabled
+- Show error
+
+↓
+
+If successful:
+
+- Show detected OLT details
+- Enable Save button
+
+↓
+
+User saves OLT
+
+==================================================
+ONLINE / OFFLINE STATUS
+
+Remove fake online status behavior.
+
+Rules:
+
+ONLINE:
+
+- Last successful SNMP validation
+  OR
+- Last successful poll
+
+OFFLINE:
+
+- Timeout
+- SNMP failure
+- Authentication failure
+- Network unreachable
+
+Fake IPs must NEVER show Online.
+
+Invalid OLTs must NEVER show Online.
+
+==================================================
+MULTI-VENDOR SUPPORT
+
+Must support:
+
+- CDATA
+- BDCOM
+- VSOL
+- Huawei
+- ZTE
+- ECOM
+- HSGQ
+- Future Vendors
+
+Implementation must be vendor-agnostic.
+
+Do not hardcode vendor-specific logic into OLT creation.
+
+==================================================
+ROLE BEHAVIOR
+
+Admin:
+
+- Must pass Test Connection before Save
+
+Super Admin:
+
+- Can use Force Save OLT option
+
+Force Save must:
+
+- Display warning
+- Mark OLT as Unverified
+
+==================================================
+DATABASE REQUIREMENTS
+
+Store:
+
+- OLT Name
+- Vendor
+- IP
+- SNMP Version
+- SNMP Community
+- SNMP Port
+- Username
+- Password
+- SSH Port
+- Telnet Port
+- Notes
+- Verified Status
+- Last Test Time
+- Last Success Time
+- Last Failure Time
+
+==================================================
+SAFETY REQUIREMENTS
+
+STRICTLY FORBIDDEN:
+
+- ONU Reboot
+- ONU Disable
+- ONU Enable
+- SNMP SET
+- Telnet Write
+- SSH Write
+- OLT Configuration Changes
+- Background Polling
+- High Frequency Requests
+- High CPU Operations
+
+This phase is validation-only.
+
+==================================================
+SUCCESS CRITERIA
+
+A fake IP address must never appear Online.
+
+An unreachable OLT must never appear Online.
+
+Only real reachable OLTs that successfully pass SNMP validation can be marked Verified and Online.
+
+Maintain low CPU usage on OLT devices.
+
+Do not break existing UI, authentication, dashboard, logo system, branding assets, or completed polling controller work.
