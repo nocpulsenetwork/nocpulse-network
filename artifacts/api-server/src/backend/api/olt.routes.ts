@@ -687,6 +687,12 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
   const start   = Date.now();
   const client  = new RealSnmpClient({ host: ip, community, port, timeoutMs: 3_000, retries: 1 });
 
+  // TEMP: capture CDATA OLT credentials to file for automated debug walk
+  try {
+    const { writeFileSync } = await import("fs");
+    writeFileSync("/tmp/olt-creds.json", JSON.stringify({ ip, community, port, oltId }));
+  } catch { /* non-fatal */ }
+
   // ── Step 1: Connectivity test + vendor auto-detection ────────────────────
   const connectivity = await client.testConnection();
   if (!connectivity.success) {
