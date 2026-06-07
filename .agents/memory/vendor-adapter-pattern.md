@@ -9,7 +9,7 @@ description: VendorAdapter interface shape and which adapters are implemented vs
 **Why:** Uniform interface lets the router call any vendor without branching. Unimplemented methods throw explicitly — never silently succeed with wrong data.
 
 **How to apply:**
-- CDATA: `discoverOnus()` detects PON type (EPON/GPON) from sysDescr first, then reads the correct MIB table. Do NOT assume GPON for all C-DATA devices.
+- CDATA: `discoverOnus()` uses a 3-layer fallback chain (see below).
 - Huawei, ZTE, BDCOM, VSOL: all methods throw "not yet implemented".
 - Generic: `discoverOnus()` throws with a specific message that ONU discovery requires vendor MIB.
 - ECOM, HSGQ: new placeholders, all methods throw "pending MIB validation".
@@ -30,4 +30,15 @@ The MIB tree splits at the second level:
 - Returns "unknown" if unrecognised → caller tries GPON first, EPON as fallback
 
 `VENDOR_ONU_MIBS` keys: `"CDATA"` (GPON compat alias), `"CDATA-GPON"`, `"CDATA-EPON"`.
-Both the CdataAdapter and `test-onu-list` route do this dispatch.
+
+## C-DATA EPON 3-layer discovery fallback chain
+
+The exact ONU table OID varies across C-DATA firmware versions. `discoverOnus()` in CdataAdapter chains 3 strategies:
+
+1. **Static table** — `readOnuTable("CDATA-EPON", 50)` using `cdataEponOnuTable` at `1.3.6.1.4.1.34592.1.1.3.1`. Quick, 2 PDUs.
+2. **Dynamic probe** — `readCdataEponOnusProbe(50)` on `RealSnmpClient` when layer 1 returns 0. Walks candidate subtrees (`1.3.6.1.4.1.34592.1.1.3`, then `.1.1`, then `.1`), finds 6-byte OctetStrings (ONU MACs), derives table root + adjacent status/type columns at runtime. Works regardless of firmware path.
+3. **Opposite PON type** — tries CDATA-GPON table as last resort (catches misconfigured sysDescr or unknown PON type).
+
+**Why the probe is needed:** C-DATA EPON table index column (col 1) is often `not-accessible` in the MIB, causing GETBULK on it to return 0 results even when ONUs exist. The probe uses GETBULK on broader subtrees and identifies ONU entries by their 6-byte MAC/LLID OctetStrings rather than index values.
+
+**How to apply:** Do NOT remove the probe layer without verifying that the static table OID is confirmed correct for the target firmware. The probe's `mibUsed` field in results includes the discovered table root — use it to update the static OID if needed.

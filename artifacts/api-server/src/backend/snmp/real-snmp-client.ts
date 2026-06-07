@@ -943,6 +943,183 @@ export class RealSnmpClient {
     };
   }
 
+  // ── readCdataEponOnusProbe ────────────────────────────────────────────────
+
+  /**
+   * Discover C-DATA EPON ONUs by probing the enterprise MIB subtree dynamically.
+   *
+   * Use this when the static `readOnuTable("CDATA-EPON", ...)` returns 0 ONUs —
+   * it works regardless of which C-DATA firmware path the ONU table lives on.
+   *
+   * Algorithm:
+   *   1. Issue a bounded GETBULK on several candidate sub-trees of the C-DATA
+   *      EPON enterprise branch (1.3.6.1.4.1.34592.1.*), trying the most
+   *      specific subtrees first to minimize returned varbinds.
+   *   2. Find all 6-byte OctetString varbinds → these are EPON ONU MAC/LLID
+   *      addresses, the primary ONU identifier in all EPON MIBs.
+   *   3. Derive the table root and MAC column number from the common OID prefix
+   *      shared by all MAC varbinds.
+   *   4. Issue one GET for status (MAC_COL+1) and type (MAC_COL+2) columns.
+   *   5. Return normalised SnmpOnu entries.
+   *
+   * Safety contract:
+   *   - Read-only: GETBULK + GET only, no SET
+   *   - Bounded: at most cappedLimit×3 varbinds in the probe, 1 GET
+   *   - One-shot: no background state, no persistent session
+   *
+   * @param limit  Max ONUs to return (clamped to 50).
+   */
+  async readCdataEponOnusProbe(limit: number): Promise<ReadOnuTableResult> {
+    const start       = Date.now();
+    const cappedLimit = Math.min(limit, 50);
+
+    // ── Candidate probe roots (most specific first to avoid scanning too much) ──
+    // Different C-DATA firmware versions place the ONU table at different paths
+    // within the enterprise EPON branch (1.3.6.1.4.1.34592.1).
+    const candidateRoots = [
+      "1.3.6.1.4.1.34592.1.1.3",   // fdEponOnuObjects — most likely ONU sub-branch
+      "1.3.6.1.4.1.34592.1.1",     // fdEponMibObjects — broader
+      "1.3.6.1.4.1.34592.1",       // fdEponMib root — broadest fallback
+    ];
+
+    let macVbs: snmp.Varbind[] = [];
+    let probedRoot = "";
+
+    for (const root of candidateRoots) {
+      let probeVbs: snmp.Varbind[];
+      try {
+        // cappedLimit×3: enough to cover multiple table columns for each ONU
+        probeVbs = await this.snmpGetBulk([root], Math.min(cappedLimit * 3, 100));
+      } catch {
+        continue; // network error on this root — try next
+      }
+
+      // 6-byte OctetStrings within the EPON subtree = ONU MAC/LLID addresses
+      const candidates = probeVbs.filter(
+        (vb) =>
+          vb.oid.startsWith(root + ".") &&
+          Buffer.isBuffer(vb.value) &&
+          vb.value.length === 6,
+      );
+
+      if (candidates.length > 0) {
+        macVbs     = candidates;
+        probedRoot = root;
+        break;
+      }
+    }
+
+    if (macVbs.length === 0) {
+      return {
+        success:    true,
+        vendor:     "CDATA-EPON",
+        totalFound: 0,
+        onus:       [],
+        message:
+          "CDATA EPON dynamic probe: no ONU MAC/LLID addresses (6-byte OctetStrings) found " +
+          "in C-DATA EPON enterprise subtree. " +
+          "The device may not expose ONU data via this community string, " +
+          "or the EPON MIB path differs from any known C-DATA firmware pattern.",
+        latencyMs: Date.now() - start,
+        mibUsed:   "cdataEponProbe",
+      };
+    }
+
+    // ── Derive table structure from the MAC OIDs ───────────────────────────
+    //
+    // Given MAC OIDs like:
+    //   1.3.6.1.4.1.34592.1.1.3.1.2.1.5   ← ponPort=1, onuId=5, macCol=2
+    //   1.3.6.1.4.1.34592.1.1.3.1.2.1.7
+    // The common prefix before the instance suffix is the "MAC column OID"
+    // (tableRoot + "." + macColNum).
+    //
+    // We try instance depths of 2 (ponPort.onuId) and 1 (onuId) and pick the
+    // depth that gives a consistent prefix across all MAC varbinds.
+
+    const firstOid   = macVbs[0]!.oid;
+    const firstParts = firstOid.split(".");
+
+    let macColPrefix  = "";
+    let instanceDepth = 2;
+
+    for (const depth of [2, 1, 3]) {
+      if (firstParts.length <= depth) continue;
+      const candidatePrefix = firstParts.slice(0, -depth).join(".");
+      const consistent      = macVbs.every((vb) => vb.oid.startsWith(candidatePrefix + "."));
+      if (consistent) {
+        macColPrefix  = candidatePrefix;
+        instanceDepth = depth;
+        break;
+      }
+    }
+
+    // Last resort: use depth 2 even if not fully consistent
+    if (!macColPrefix) {
+      macColPrefix  = firstParts.slice(0, -2).join(".");
+      instanceDepth = 2;
+    }
+
+    // Derive table root (strip the column number from the prefix)
+    const prefixParts  = macColPrefix.split(".");
+    const macColNum    = Number(prefixParts[prefixParts.length - 1]);
+    const tableRoot    = prefixParts.slice(0, -1).join(".");
+    const statusColNum = macColNum + 1;  // column immediately after MAC → status
+    const typeColNum   = macColNum + 2;  // two columns after MAC → type/model
+
+    // ── Extract instance OIDs (everything after the MAC column prefix) ─────
+    const instances = macVbs.slice(0, cappedLimit).map((vb) => ({
+      instance: vb.oid.slice(macColPrefix.length + 1), // e.g. "1.5"
+      mac:      parseMacAddress(vb.value),
+    }));
+
+    // ── GET status + type from adjacent columns ────────────────────────────
+    const statusOids = instances.map((inst) => `${tableRoot}.${statusColNum}.${inst.instance}`);
+    const typeOids   = instances.map((inst) => `${tableRoot}.${typeColNum}.${inst.instance}`);
+
+    let attrMap: Record<string, snmp.Varbind> = {};
+    try {
+      attrMap = indexVarbinds(await this.snmpGet([...statusOids, ...typeOids]));
+    } catch {
+      // Non-fatal: proceed with unknown status / null type
+    }
+
+    // ── Build normalised ONU list ──────────────────────────────────────────
+    const onus: SnmpOnu[] = instances.map((inst) => {
+      const statusVb  = attrMap[`${tableRoot}.${statusColNum}.${inst.instance}`];
+      const typeVb    = attrMap[`${tableRoot}.${typeColNum}.${inst.instance}`];
+      const rawStatus = statusVb !== undefined ? intVal(statusVb) : undefined;
+      const instParts = inst.instance.split(".");
+
+      return {
+        onuId:          instParts[instParts.length - 1] ?? inst.instance,
+        ponPort:        instParts.length > 1 ? instParts.slice(0, -1).join(".") : "0",
+        serial:         null,
+        mac:            inst.mac,
+        status:         rawStatus === 1 ? "online" : rawStatus === 2 ? "offline" : "unknown",
+        type:           typeVb !== undefined ? (stringVal(typeVb) ?? null) : null,
+        rawInstanceOid: inst.instance,
+      };
+    });
+
+    const onlineCount = onus.filter((o) => o.status === "online").length;
+    const mibPath     = `${probedRoot} → ${tableRoot} col${macColNum}`;
+
+    return {
+      success:    true,
+      vendor:     "CDATA-EPON",
+      totalFound: onus.length,
+      onus,
+      message:
+        `Found ${onus.length} EPON ONU${onus.length !== 1 ? "s" : ""}` +
+        (onus.length > 0
+          ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown)` +
+            ` via dynamic MIB probe. Table: ${tableRoot}, MAC col: ${macColNum}`
+          : ""),
+      latencyMs: Date.now() - start,
+      mibUsed:   `cdataEponProbe(${mibPath})`,
+    };
+  }
+
   // ── readOnuDetails ────────────────────────────────────────────────────────
 
   /**

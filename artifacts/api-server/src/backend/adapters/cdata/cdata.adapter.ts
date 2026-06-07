@@ -94,11 +94,23 @@ export class CdataAdapter implements VendorAdapter {
 
     let snmpResult: ReadOnuTableResult = await client.readOnuTable(primaryKey, 50);
 
-    // ── Step 3: Fallback — try opposite table if primary returned 0 ──────
+    // ── Step 3: Dynamic probe fallback (EPON only) ───────────────────────
+    // When the static CDATA-EPON table returns 0 ONUs, the table OID path
+    // may differ from what the firmware exposes. The probe walks the C-DATA
+    // EPON enterprise subtree (1.3.6.1.4.1.34592.1.*), finds all 6-byte
+    // OctetStrings (ONU MAC/LLID addresses), and derives the table structure
+    // at runtime — so it works regardless of firmware version.
+    if (snmpResult.totalFound === 0 && (ponType === "EPON" || primaryKey === "CDATA-EPON")) {
+      const probeResult = await client.readCdataEponOnusProbe(50);
+      if (probeResult.totalFound > 0) {
+        snmpResult = probeResult;
+      }
+    }
+
+    // ── Step 4: Fallback — try opposite PON-type table if still 0 ────────
     // Only fall back when:
     //   a) PON type was unknown (we guessed GPON first), OR
-    //   b) PON type was detected but the table still returned 0 ONUs
-    //      (device firmware may use a non-standard MIB path)
+    //   b) PON type was detected but both static table and probe returned 0
     if (snmpResult.totalFound === 0) {
       const altResult = await client.readOnuTable(
         useFallback ? fallbackKey : (ponType === "EPON" ? "CDATA-GPON" : "CDATA-EPON"),
