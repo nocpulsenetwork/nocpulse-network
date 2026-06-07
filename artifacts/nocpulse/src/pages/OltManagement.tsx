@@ -24,6 +24,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Tooltip, TooltipContent, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -290,7 +293,7 @@ function applyFormToOlt(existing: ManagedOlt, form: OltFormData, verified: boole
     password: form.password,
     description: form.description.trim(),
     safePollingMode: form.safePollingMode,
-    verified: verified || existing.verified,
+    verified: verified,
     lastTestTime: verified ? now : existing.lastTestTime,
   };
 }
@@ -624,15 +627,19 @@ function OltFormModal({
   const handleSubmit = (forceSave = false) => {
     const errs = validateForm(form, allOlts, editId);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
-    const verified = testState === "pass";
+    // Force Save always stores verified=false regardless of test state.
+    // Regular Save requires testState === "pass" for both Admin and Super Admin.
+    const verified = !forceSave && testState === "pass";
     if (!verified && !isSuperAdmin && !forceSave) return;
     onSave(form, verified);
   };
 
   const labelCls = "text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block";
   const inputCls = "h-9 bg-background/50 text-sm";
-  const canSaveNow = isSuperAdmin || testState === "pass";
-  const showForceSave = isSuperAdmin && testState !== "pass";
+  // Both Admin and Super Admin must pass Test Connection for regular Save.
+  const canSaveNow = testState === "pass";
+  // Force Save is always visible for Super Admin (lets them bypass test).
+  const showForceSave = isSuperAdmin;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -879,14 +886,25 @@ function OltFormModal({
               Force Save (Unverified)
             </Button>
           )}
-          <Button
-            onClick={() => handleSubmit(false)}
-            disabled={!canSaveNow}
-            className="flex-1 sm:flex-none h-9"
-            title={!canSaveNow ? "Run Test Connection first to verify the OLT" : undefined}
-          >
-            {mode === "add" ? "Save OLT" : "Save Changes"}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* span keeps hover events when button is disabled */}
+              <span className="flex-1 sm:flex-none inline-flex">
+                <Button
+                  onClick={() => handleSubmit(false)}
+                  disabled={!canSaveNow}
+                  className="h-9 w-full"
+                >
+                  {mode === "add" ? "Save OLT" : "Save Changes"}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!canSaveNow && (
+              <TooltipContent side="top">
+                Run a successful Test Connection before saving.
+              </TooltipContent>
+            )}
+          </Tooltip>
         </DialogFooter>
       </DialogContent>
     </Dialog>

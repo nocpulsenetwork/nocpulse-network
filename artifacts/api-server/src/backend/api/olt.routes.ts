@@ -609,8 +609,21 @@ oltRouter.post("/test-onu-traffic", async (req: Request, res: Response) => {
 });
 
 // POST /api/olts  — provision new OLT
-oltRouter.post("/", (_req: Request, res: Response) => {
-  // TODO: validate body with Zod, oltService.create(dto), register in pollingEngine
+oltRouter.post("/", (req: Request, res: Response) => {
+  // ── Backend protection ───────────────────────────────────────────────────
+  // Reject any save where verified !== true.
+  // Super Admin "Force Save" (verified=false) is only permitted via an explicit
+  // bypassVerification flag — which will be guarded by auth middleware once
+  // role-aware sessions are implemented.
+  const body = req.body as { verified?: unknown; bypassVerification?: unknown };
+  if (body.verified !== true && body.bypassVerification !== true) {
+    res.status(400).json({
+      error: "Successful OLT validation required before save.",
+      code: "VERIFICATION_REQUIRED",
+    });
+    return;
+  }
+  // TODO: validate remaining body with Zod, oltService.create(dto), register in pollingEngine
   res.status(501).json({ error: "Not implemented", code: "NOT_IMPLEMENTED" });
 });
 
