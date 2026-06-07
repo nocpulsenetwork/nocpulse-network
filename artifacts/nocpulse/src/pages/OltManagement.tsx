@@ -52,7 +52,9 @@ interface ManagedOlt extends OltDevice {
   isCustom: boolean;
   safePollingMode: boolean;
   verified: boolean;
+  verificationStatus: "verified" | "unverified" | "pending";
   lastTestTime: string | null;
+  lastSuccessTime: string | null;
 }
 
 interface OltFormData {
@@ -150,7 +152,9 @@ function seedFromApi(apiOlts: OltDevice[]): ManagedOlt[] {
     isCustom: false,
     safePollingMode: false,
     verified: false,
+    verificationStatus: "unverified" as const,
     lastTestTime: null,
+    lastSuccessTime: null,
   }));
 }
 
@@ -187,7 +191,14 @@ function syncOltToInventory(olt: ManagedOlt): void {
 function loadOlts(): ManagedOlt[] | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as ManagedOlt[]) : null;
+    if (!raw) return null;
+    // Normalize entries from older storage versions that lack new fields.
+    const parsed = JSON.parse(raw) as ManagedOlt[];
+    return parsed.map((o) => ({
+      ...o,
+      verificationStatus: o.verificationStatus ?? (o.verified ? "verified" : "unverified"),
+      lastSuccessTime: o.lastSuccessTime ?? null,
+    }));
   } catch {
     return null;
   }
@@ -245,16 +256,17 @@ function createFromForm(form: OltFormData, verified: boolean): ManagedOlt {
     type: form.type,
     mode: form.type,
     location: form.location.trim(),
-    status: "Offline",
-    uptime: "0d 0h",
-    lastSeen: "Never",
+    // A successful Test Connection means the device is reachable — mark Online.
+    status: verified ? "Online" : "Offline",
+    uptime: verified ? "0d 0h" : "0d 0h",
+    lastSeen: verified ? now : "Never",
     portCount: 0,
     activeOnus: 0,
     cpu: 0,
     memory: 0,
     temperature: 0,
     lastSync: now,
-    uplinkStatus: "Down",
+    uplinkStatus: verified ? "Active" : "Down",
     uplinkPort: "",
     ponPortCount: 0,
     snmpVersion: form.snmpVersion,
@@ -270,7 +282,9 @@ function createFromForm(form: OltFormData, verified: boolean): ManagedOlt {
     isCustom: true,
     safePollingMode: form.safePollingMode,
     verified,
+    verificationStatus: verified ? "verified" : "unverified",
     lastTestTime: verified ? now : null,
+    lastSuccessTime: verified ? now : null,
   };
 }
 
@@ -293,8 +307,14 @@ function applyFormToOlt(existing: ManagedOlt, form: OltFormData, verified: boole
     password: form.password,
     description: form.description.trim(),
     safePollingMode: form.safePollingMode,
-    verified: verified,
+    // A verified edit re-confirms the device is reachable; Force Save marks Offline.
+    status: verified ? "Online" : "Offline",
+    uplinkStatus: verified ? "Active" : "Down",
+    lastSeen: verified ? now : existing.lastSeen,
+    verified,
+    verificationStatus: verified ? "verified" : "unverified",
     lastTestTime: verified ? now : existing.lastTestTime,
+    lastSuccessTime: verified ? now : (existing.lastSuccessTime ?? null),
   };
 }
 
@@ -614,13 +634,25 @@ function OltFormModal({
           systemName: data.sysName ?? "",
           latencyMs: data.latencyMs ?? 0,
         });
+        console.debug("[NOCpulse] Validation Success", {
+          ip: ipRaw,
+          latencyMs: data.latencyMs,
+          vendor: data.vendor,
+          model: data.model,
+          sysName: data.sysName,
+        });
       } else {
         setTestState("fail");
         setTestError(data?.message ?? "Connection failed. Check IP, community and port.");
+        console.debug("[NOCpulse] Validation Failed", {
+          ip: ipRaw,
+          reason: data?.message ?? "Connection failed",
+        });
       }
     } catch {
       setTestState("fail");
       setTestError("Request timed out. Check IP and network connectivity.");
+      console.debug("[NOCpulse] Validation Failed", { ip: ipRaw, reason: "timeout" });
     }
   };
 
@@ -994,19 +1026,40 @@ export default function OltManagement() {
   const handleSave = (form: OltFormData, verified: boolean) => {
     if (modal?.mode === "add") {
       const newOlt = createFromForm(form, verified);
+      console.debug("[NOCpulse] Status Changed Online", {
+        id: newOlt.id,
+        ip: newOlt.ip,
+        verified,
+        status: newOlt.status,
+        verificationStatus: newOlt.verificationStatus,
+      });
       setManagedOlts((prev) => (prev ? [...prev, newOlt] : [newOlt]));
       syncOltToInventory(newOlt);
       toast.success(`${newOlt.name} added`, {
         description: verified
-          ? `${newOlt.brand} ${newOlt.type} · ${newOlt.ip} · Verified`
-          : `${newOlt.brand} ${newOlt.type} · ${newOlt.ip} · Unverified`,
+          ? `${newOlt.brand} ${newOlt.type} · ${newOlt.ip} · Online · Verified`
+          : `${newOlt.brand} ${newOlt.type} · ${newOlt.ip} · Offline · Unverified`,
       });
     } else if (modal?.mode === "edit" && modal.oltId) {
       const editId = modal.oltId;
-      setManagedOlts((prev) =>
-        prev ? prev.map((o) => (o.id === editId ? applyFormToOlt(o, form, verified) : o)) : prev
-      );
-      toast.success("OLT updated successfully");
+      setManagedOlts((prev) => {
+        if (!prev) return prev;
+        return prev.map((o) => {
+          if (o.id !== editId) return o;
+          const updated = applyFormToOlt(o, form, verified);
+          console.debug("[NOCpulse] Status Changed" + (verified ? " Online" : " Offline"), {
+            id: updated.id,
+            ip: updated.ip,
+            verified,
+            status: updated.status,
+            verificationStatus: updated.verificationStatus,
+          });
+          return updated;
+        });
+      });
+      toast.success("OLT updated successfully", {
+        description: verified ? "Status: Online · Verified" : "Status: Offline · Unverified",
+      });
     }
     setModal(null);
   };
