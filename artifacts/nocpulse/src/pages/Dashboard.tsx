@@ -541,12 +541,13 @@ export default function Dashboard() {
       </div>
 
       {/* 2 ── KPI cards — all equal height via h-full grid ────────────── */}
-      {/* Order: Total OLTs · Total ONUs · Total Clients ·
+      {/* Order: Total OLTs · Total ONUs · Total Clients · Online ONUs ·
                  Offline OLTs · Offline ONUs · Active Alarms · Uptime     */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 items-stretch">
+      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 items-stretch">
         <MetricCard title="Total OLTs"    value={totalOlts}    icon={Server}        accentColor="cyan"  description={`${onlineOlts} online · ${degradedOlts} degraded`}   href="/olts"   />
         <MetricCard title="Total ONUs"    value={totalOnus}    icon={Cpu}           accentColor="cyan"  description={`${onlineOnus} active connections`}                   href="/onus"   />
         <MetricCard title="Total Clients" value={totalOnus}    icon={Users}         accentColor="cyan"  description="Subscriber premises"                                  href="/onus"   />
+        <MetricCard title="Online ONUs"   value={onlineOnus}   icon={Signal}        accentColor="green" description={`${Math.round((onlineOnus / Math.max(totalOnus, 1)) * 100)}% of total ONUs active`} href="/onus?status=Online" />
         <MetricCard title="Offline OLTs"  value={offlineOlts}  icon={ServerCrash}   accentColor={offlineOlts  > 0 ? 'red' : 'green'} alert={offlineOlts  > 0} description={offlineOlts  > 0 ? 'Require immediate action' : 'All OLTs online'}  href="/olts"   />
         <MetricCard title="Offline ONUs"  value={offlineOnus}  icon={WifiOff}       accentColor={offlineOnus  > 0 ? 'red' : 'green'} alert={offlineOnus  > 0} description={offlineOnus  > 0 ? 'Disconnected premises'   : 'All ONUs online'}   href="/onus"   />
         <MetricCard title="Active Alarms" value={activeAlarms} icon={AlertTriangle} accentColor={criticalAlarms > 0 ? 'red' : 'amber'} alert={activeAlarms > 0} pulse={criticalAlarms > 0} description={`${criticalAlarms} critical · ${majorAlarms} major`} href="/alarms" />

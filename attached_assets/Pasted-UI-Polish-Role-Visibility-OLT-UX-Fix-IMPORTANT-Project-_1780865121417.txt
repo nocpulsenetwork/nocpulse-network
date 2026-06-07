@@ -1,0 +1,154 @@
+UI Polish + Role Visibility + OLT UX Fix
+
+IMPORTANT:
+
+Project is already running on VPS and PM2.
+
+DO NOT:
+
+* Change backend APIs
+* Change SNMP logic
+* Change polling logic
+* Change database schema
+* Change authentication flow
+* Change OLT integration code
+* Change existing routes
+* Change working business logic
+* Add new dependencies/packages
+* Refactor unrelated files
+
+Only modify existing frontend UI, permissions, and navigation.
+
+====================================
+TASK 1 — ADD ONLINE ONU DASHBOARD CARD
+======================================
+
+Using existing ONU status data:
+
+Add one dashboard card:
+
+Online ONUs
+
+Requirements:
+
+* Same design as existing dashboard cards
+* Same size and spacing
+* Dark/light mode support
+* Show online ONU count
+* Click opens ONU Management filtered to Online only
+* Reuse existing filtering logic
+
+Do not create new API.
+
+====================================
+TASK 2 — OLT MANAGEMENT UX IMPROVEMENT
+======================================
+
+Improve only visual appearance.
+
+Keep current layout.
+
+Add:
+
+* Better card shadow
+* Better spacing
+* Hover effect
+* Status badge polish
+* Vendor badge polish
+* Port count display polish
+* Online/offline indicator polish
+* Pointer cursor
+
+Do not redesign page.
+
+====================================
+TASK 3 — CLICKABLE OLT ROWS/CARDS
+=================================
+
+Current problem:
+User must open 3-dot menu and click View.
+
+Fix:
+
+Clicking entire OLT row/card should open OLT Details page.
+
+Requirements:
+
+* Keep existing View/Edit/Delete actions
+* Keep 3-dot menu working
+* Prevent event propagation from action buttons
+* Show pointer cursor
+
+Reuse existing OLT details route.
+
+====================================
+TASK 4 — ROLE VISIBILITY FIX
+============================
+
+Reuse existing role system.
+
+Super Admin:
+
+* Can see everything
+
+Admin:
+Hide:
+
+* Subscriptions
+* Billing
+* Subscriber Management
+* Platform Settings
+
+NOC Engineer:
+Only show:
+
+* Dashboard
+* Assigned OLTs
+* ONU Management
+* Alarms
+* Logs
+
+Reuse existing route guards if available.
+
+Do not create a new auth system.
+
+If unauthorized:
+
+* Redirect to dashboard
+  OR
+* Show existing access denied page
+
+====================================
+TASK 5 — WINDOWS 7 CONTRAST FIX
+===============================
+
+Only fix readability.
+
+For blue backgrounds:
+
+* White text
+* Strong font weight
+
+For blue icons:
+
+* Increase contrast
+
+For secondary text:
+
+* Minimum font-weight 500
+
+Do not redesign theme.
+
+====================================
+OUTPUT
+======
+
+After implementation provide:
+
+1. Files changed
+2. What was fixed
+3. How Online ONU card works
+4. How OLT click works
+5. How role visibility works
+
+Do not modify anything outside these tasks.

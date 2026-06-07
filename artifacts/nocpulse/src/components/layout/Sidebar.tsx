@@ -72,9 +72,9 @@ export function Sidebar({
   ];
 
   const networkItems: NavItem[] = [
-    { href: "/olts", label: "OLT Management", icon: Server, minRole: "admin" },
+    { href: "/olts", label: "OLT Management", icon: Server, minRole: "noc_engineer" },
     { href: "/onus", label: "ONU Management", icon: Cpu },
-    { href: "/inventory", label: "Device Inventory", icon: HardDrive },
+    { href: "/inventory", label: "Device Inventory", icon: HardDrive, minRole: "admin" },
     {
       href: "/diagram",
       label: "Device Diagram",
@@ -86,8 +86,8 @@ export function Sidebar({
 
   const operationsItems: NavItem[] = [
     { href: "/activity-logs", label: "Activity Logs", icon: ClipboardList },
-    { href: "/notifications", label: "Notifications", icon: BellRing },
-    { href: "/diagnostics", label: "Smart Diagnostics", icon: Stethoscope },
+    { href: "/notifications", label: "Notifications", icon: BellRing, minRole: "admin" },
+    { href: "/diagnostics", label: "Smart Diagnostics", icon: Stethoscope, minRole: "admin" },
   ];
 
   const systemItems: NavItem[] = [
@@ -95,7 +95,7 @@ export function Sidebar({
       href: "/subscribers",
       label: "Subscribers",
       icon: Building2,
-      minRole: "admin",
+      minRole: "super_admin",
     },
     {
       href: "/staff",

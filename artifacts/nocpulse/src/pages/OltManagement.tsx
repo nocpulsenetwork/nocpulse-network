@@ -318,23 +318,23 @@ function oltToForm(olt: ManagedOlt): OltFormData {
 
 function BrandBadge({ brand }: { brand: string }) {
   const colors: Record<string, string> = {
-    Huawei:    "bg-red-500/10 text-red-400 border-red-500/20",
-    ZTE:       "bg-blue-500/10 text-blue-400 border-blue-500/20",
-    BDCOM:     "bg-teal-500/10 text-teal-400 border-teal-500/20",
-    VSOL:      "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
-    CDATA:     "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
-    HSGQ:      "bg-pink-500/10 text-pink-400 border-pink-500/20",
-    Syrotech:  "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
-    Corelink:  "bg-sky-500/10 text-sky-400 border-sky-500/20",
-    Zibix:     "bg-violet-500/10 text-violet-400 border-violet-500/20",
-    Nokia:     "bg-purple-500/10 text-purple-400 border-purple-500/20",
-    Fiberhome: "bg-orange-500/10 text-orange-400 border-orange-500/20",
-    Calix:     "bg-cyan-500/10 text-cyan-400 border-cyan-500/20",
-    Generic:   "bg-slate-500/10 text-slate-400 border-slate-500/20",
+    Huawei:    "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/25",
+    ZTE:       "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/25",
+    BDCOM:     "bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/25",
+    VSOL:      "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/25",
+    CDATA:     "bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/25",
+    HSGQ:      "bg-pink-500/10 text-pink-700 dark:text-pink-400 border-pink-500/25",
+    Syrotech:  "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/25",
+    Corelink:  "bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/25",
+    Zibix:     "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/25",
+    Nokia:     "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/25",
+    Fiberhome: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/25",
+    Calix:     "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/25",
+    Generic:   "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20",
   };
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shadow-sm ${
         colors[brand] ?? "bg-muted text-muted-foreground border-border"
       }`}
     >
@@ -346,10 +346,10 @@ function BrandBadge({ brand }: { brand: string }) {
 function TypeBadge({ type }: { type: "GPON" | "EPON" }) {
   return (
     <span
-      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+      className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border shadow-sm ${
         type === "GPON"
-          ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-          : "bg-violet-500/10 text-violet-400 border-violet-500/20"
+          ? "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/25"
+          : "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/25"
       }`}
     >
       {type}
@@ -1165,7 +1165,8 @@ export default function OltManagement() {
               return (
                 <div
                   key={olt.id}
-                  className={`rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-lg hover:border-primary/40 hover:shadow-primary/10 transition-all duration-200 group p-4 space-y-3 ${
+                  onClick={() => navigate(`/olts/${olt.id}`)}
+                  className={`rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-md cursor-pointer hover:border-primary/50 hover:shadow-xl hover:shadow-primary/10 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 group p-4 space-y-3 ${
                     !olt.isEnabled ? "opacity-60" : ""
                   }`}
                 >
@@ -1348,7 +1349,8 @@ export default function OltManagement() {
                   return (
                     <TableRow
                       key={olt.id}
-                      className={`hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 ${
+                      onClick={() => navigate(`/olts/${olt.id}`)}
+                      className={`hover:bg-primary/5 transition-colors duration-150 border-b border-border/40 cursor-pointer ${
                         !olt.isEnabled ? "opacity-60" : ""
                       }`}
                     >

@@ -14,21 +14,21 @@ export function StatusBadge({ status, severity, className = '' }: StatusBadgePro
     switch (status) {
       case 'Online':
         return (
-          <Badge variant="outline" className={`bg-green-500/10 text-green-600 border-green-500/20 gap-1.5 ${className}`}>
+          <Badge variant="outline" className={`bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/25 font-semibold gap-1.5 ${className}`}>
             <CheckCircle2 className="w-3.5 h-3.5" />
             Online
           </Badge>
         );
       case 'Offline':
         return (
-          <Badge variant="outline" className={`bg-red-500/10 text-red-600 border-red-500/20 gap-1.5 ${className}`}>
+          <Badge variant="outline" className={`bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/25 font-semibold gap-1.5 ${className}`}>
             <XCircle className="w-3.5 h-3.5" />
             Offline
           </Badge>
         );
       case 'Degraded':
         return (
-          <Badge variant="outline" className={`bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1.5 ${className}`}>
+          <Badge variant="outline" className={`bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25 font-semibold gap-1.5 ${className}`}>
             <AlertTriangle className="w-3.5 h-3.5" />
             Degraded
           </Badge>
@@ -40,28 +40,28 @@ export function StatusBadge({ status, severity, className = '' }: StatusBadgePro
     switch (severity) {
       case 'Critical':
         return (
-          <Badge variant="outline" className={`bg-red-500/10 text-red-600 border-red-500/20 gap-1.5 ${className}`}>
+          <Badge variant="outline" className={`bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/25 font-semibold gap-1.5 ${className}`}>
             <XCircle className="w-3.5 h-3.5" />
             Critical
           </Badge>
         );
       case 'Major':
         return (
-          <Badge variant="outline" className={`bg-amber-500/10 text-amber-600 border-amber-500/20 gap-1.5 ${className}`}>
+          <Badge variant="outline" className={`bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25 font-semibold gap-1.5 ${className}`}>
             <AlertTriangle className="w-3.5 h-3.5" />
             Major
           </Badge>
         );
       case 'Minor':
         return (
-          <Badge variant="outline" className={`bg-blue-500/10 text-blue-600 border-blue-500/20 gap-1.5 ${className}`}>
+          <Badge variant="outline" className={`bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/25 font-semibold gap-1.5 ${className}`}>
             <AlertCircle className="w-3.5 h-3.5" />
             Minor
           </Badge>
         );
       case 'Info':
         return (
-          <Badge variant="outline" className={`bg-slate-500/10 text-slate-500 dark:text-slate-400 border-slate-500/20 gap-1.5 ${className}`}>
+          <Badge variant="outline" className={`bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 font-semibold gap-1.5 ${className}`}>
             <Info className="w-3.5 h-3.5" />
             Info
           </Badge>
