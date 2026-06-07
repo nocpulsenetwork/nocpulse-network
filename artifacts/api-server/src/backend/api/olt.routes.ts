@@ -818,6 +818,89 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
   });
 });
 
+// POST /api/olts/debug-snmp-walk — temporary debug tool: walk a vendor SNMP
+// subtree and return every OID the device responds with, grouped by prefix.
+//
+// Use this to identify which OID path an OLT actually exposes data on when the
+// vendor's published MIB OIDs don't match the real firmware. Read-only.
+//
+// Body: { ip, community, port?, rootOid?, maxOids? }
+// rootOid defaults to the C-DATA enterprise OID (1.3.6.1.4.1.34592).
+// maxOids defaults to 1000 (hard cap in RealSnmpClient.debugWalkSubtree).
+oltRouter.post("/debug-snmp-walk", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+
+  if (typeof body["ip"] !== "string" || !body["ip"].trim()) {
+    res.status(400).json({ error: "Missing required field: ip", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["community"] !== "string" || !body["community"].trim()) {
+    res.status(400).json({ error: "Missing required field: community", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const ip        = body["ip"].trim();
+  const community = body["community"].trim();
+  const port      = body["port"] !== undefined ? Number(body["port"]) : 161;
+  const rootOid   = typeof body["rootOid"] === "string" && body["rootOid"].trim()
+    ? body["rootOid"].trim()
+    : "1.3.6.1.4.1.34592";
+  const maxOids   = typeof body["maxOids"] === "number" ? Math.min(body["maxOids"], 2_000) : 1_000;
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    res.status(400).json({ error: "Invalid port: must be 1–65535", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const client = new RealSnmpClient({ host: ip, community, port, timeoutMs: 5_000, retries: 1 });
+
+  // Verify connectivity first so we get sysDescr / vendor info
+  const connectivity = await client.testConnection();
+  if (!connectivity.success) {
+    res.status(502).json({
+      error: "OLT unreachable — check IP, community string, and SNMP access",
+      code:  "SNMP_UNREACHABLE",
+      meta:  { host: ip, port },
+    });
+    return;
+  }
+
+  const vendor   = detectVendorFromSysInfo(connectivity.sysDescr ?? "", connectivity.sysObjectID ?? "");
+  const model    = extractModelFromDescr(connectivity.sysDescr ?? "");
+  const ponType  = vendor === "CDATA"
+    ? detectCdataPonType(connectivity.sysDescr ?? "")
+    : "N/A";
+
+  const walkResult = await client.debugWalkSubtree(rootOid, maxOids);
+
+  res.json({
+    data: {
+      device: {
+        vendor,
+        model,
+        ponType,
+        sysDescr:  connectivity.sysDescr  ?? null,
+        sysName:   connectivity.sysName   ?? null,
+        sysObjId:  connectivity.sysObjectID ?? null,
+      },
+      walk: {
+        rootOid,
+        totalOids:  walkResult.totalOids,
+        walkMs:     walkResult.walkMs,
+        batches:    walkResult.batches,
+        subtrees:   walkResult.subtrees,
+        rows:       walkResult.rows,
+      },
+    },
+    meta: {
+      host:        ip,
+      port,
+      generatedAt: new Date().toISOString(),
+      note:        "Debug tool — read-only SNMP walk. Remove before production deploy.",
+    },
+  });
+});
+
 // GET /api/olts/:id/onus/real — return cached ONU discovery result for an OLT
 //
 // Returns the result of the last successful POST /discover-onus call for this

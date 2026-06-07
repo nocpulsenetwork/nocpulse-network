@@ -943,6 +943,131 @@ export class RealSnmpClient {
     };
   }
 
+  // ── debugWalkSubtree ─────────────────────────────────────────────────────
+
+  /**
+   * Temporary debug helper — iterative GETBULK walk of any SNMP subtree.
+   *
+   * Read-only (GETBULK only). Returns every varbind the device responds with,
+   * grouped by common OID prefix, with type names and sample values.
+   * Intended for identifying an unknown vendor's ONU table OID.
+   *
+   * @param rootOid   OID to walk (e.g. "1.3.6.1.4.1.34592")
+   * @param maxOids   Safety cap on total OIDs collected (default 1 000)
+   * @param batchSize GETBULK maxRepetitions per PDU (default 20)
+   */
+  async debugWalkSubtree(
+    rootOid:   string,
+    maxOids:   number = 1_000,
+    batchSize: number = 20,
+  ): Promise<{
+    totalOids:    number;
+    walkMs:       number;
+    batches:      number;
+    rows: Array<{
+      oid:      string;
+      typeName: string;
+      typeNum:  number;
+      hex:      string | null;   // binary values as hex
+      text:     string | null;   // printable string (if applicable)
+      num:      number | null;   // numeric value (if applicable)
+      isMac:    boolean;         // 6-byte OctetString = likely ONU MAC/LLID
+    }>;
+    subtrees: Array<{
+      prefix:      string;        // depth-11 OID prefix
+      rowCount:    number;
+      hasMac:      boolean;
+      typeNames:   string;        // comma-separated distinct type names
+      samples:     string[];      // up to 3 sample value strings
+    }>;
+  }> {
+    const start = Date.now();
+
+    // SNMP ObjectType name map (net-snmp numeric codes → human names)
+    const TYPE_NAMES: Record<number, string> = {
+      2:   "INTEGER",
+      4:   "OctetString",
+      5:   "Null",
+      6:   "OID",
+      64:  "IpAddress",
+      65:  "Counter32",
+      66:  "Gauge32",
+      67:  "TimeTicks",
+      68:  "Opaque",
+      70:  "Counter64",
+      128: "NoSuchObject",
+      129: "NoSuchInstance",
+      130: "EndOfMibView",
+    };
+
+    const allVbs: snmp.Varbind[] = [];
+    let   cursor  = rootOid;
+    let   batches = 0;
+
+    while (allVbs.length < maxOids) {
+      let batch: snmp.Varbind[];
+      try {
+        batch = await this.snmpGetBulk([cursor], batchSize);
+      } catch {
+        break;
+      }
+      batches++;
+      const inTree = batch.filter((vb) => vb.oid.startsWith(rootOid + "."));
+      allVbs.push(...inTree);
+      if (inTree.length === 0) break;
+      const last = batch[batch.length - 1];
+      if (!last || batch.length < batchSize) break;
+      cursor = last.oid;
+    }
+
+    // ── Format each varbind ────────────────────────────────────────────────
+    const rows = allVbs.map((vb) => {
+      const typeNum  = (vb as unknown as { type?: number }).type ?? -1;
+      const typeName = TYPE_NAMES[typeNum] ?? `type(${typeNum})`;
+
+      let hex:  string | null = null;
+      let text: string | null = null;
+      let num:  number | null = null;
+      let isMac = false;
+
+      if (Buffer.isBuffer(vb.value)) {
+        const buf = vb.value as Buffer;
+        isMac = buf.length === 6;
+        hex   = Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join(":");
+        const str = buf.toString("utf8");
+        if (/^[\x20-\x7e]+$/.test(str)) text = str;
+      } else if (typeof vb.value === "number" || typeof vb.value === "bigint") {
+        num = Number(vb.value);
+      } else if (typeof vb.value === "string") {
+        text = vb.value;
+      }
+
+      return { oid: vb.oid, typeName, typeNum, hex, text, num, isMac };
+    });
+
+    // ── Group by depth-11 OID prefix ──────────────────────────────────────
+    const groupMap = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const key   = row.oid.split(".").slice(0, 11).join(".");
+      const group = groupMap.get(key) ?? [];
+      group.push(row);
+      groupMap.set(key, group);
+    }
+
+    const subtrees = [...groupMap.entries()]
+      .map(([prefix, items]) => {
+        const hasMac    = items.some((r) => r.isMac);
+        const typeNames = [...new Set(items.map((r) => r.typeName))].join(", ");
+        const samples   = items
+          .slice(0, 3)
+          .map((r) => r.text ?? (r.isMac ? `MAC:${r.hex}` : r.hex ?? String(r.num ?? "?")));
+        return { prefix, rowCount: items.length, hasMac, typeNames, samples };
+      })
+      .sort((a, b) => b.rowCount - a.rowCount);
+
+    return { totalOids: allVbs.length, walkMs: Date.now() - start, batches, rows, subtrees };
+  }
+
   // ── readCdataEponOnusProbe ────────────────────────────────────────────────
 
   /**
