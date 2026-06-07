@@ -1461,6 +1461,43 @@ export function extractModelFromDescr(sysDescr: string): string {
   return extractModel(sysDescr);
 }
 
+/**
+ * Detect the PON technology type (EPON vs GPON) from a C-DATA sysDescr string.
+ *
+ * Used by the C-DATA adapter to select between cdataEponOnuTable and
+ * cdataGponOnuTable before issuing any ONU discovery SNMP operations.
+ *
+ * Detection priority:
+ *   1. Explicit "EPON" / "GPON" keyword in sysDescr (most reliable)
+ *   2. C-DATA model number patterns:
+ *      GPON series: FD1616GS, FD8920, FD1204SN (suffix GS or SN = GPON)
+ *      EPON series: FD1208S-xx, FD1104S-xx, FD1204S-xx (dash after S = EPON variant)
+ *                   FD1204S, FD1104S  (S without GS/SN suffix = EPON)
+ *   3. "unknown" when the sysDescr contains no recognisable pattern.
+ *
+ * Returns "unknown" rather than guessing when the type cannot be determined.
+ * Callers should try GPON first and EPON as fallback, or vice versa.
+ */
+export function detectCdataPonType(sysDescr: string): "EPON" | "GPON" | "unknown" {
+  const d = sysDescr.toLowerCase();
+
+  // Explicit technology keywords (fastest path)
+  if (d.includes("epon")) return "EPON";
+  if (d.includes("gpon")) return "GPON";
+
+  // GPON model suffixes: FD1616GS, FD8920, FD1204SN
+  if (/\bFD\d{4}GS\b/i.test(sysDescr)) return "GPON";   // e.g. FD1616GS
+  if (/\bFD\d{4}SN\b/i.test(sysDescr)) return "GPON";   // e.g. FD1204SN
+  if (/\bFD89\d{2}\b/i.test(sysDescr)) return "GPON";   // e.g. FD8920
+
+  // EPON model patterns: FD1208S-B0, FD1104S-xx, FD1204S-xx (dash variant)
+  if (/\bFD\d{4}S-/i.test(sysDescr))        return "EPON";
+  // EPON models without dash suffix but also without GS/SN
+  if (/\bFD1[12]\d{2}S\b/i.test(sysDescr)) return "EPON";
+
+  return "unknown";
+}
+
 function detectVendor(sysDescr: string, sysObjectID: string): string {
   const d = sysDescr.toLowerCase();
   const o = sysObjectID;
@@ -1700,6 +1737,8 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
 
   // ── C-DATA FD1616GS / FD8920 / FD1204SN GPON ────────────────────────────
   // Tentative OIDs — verify against device-specific MIB before production use
+  // Note: Use "CDATA-GPON" or "CDATA-EPON" for explicit PON-type dispatch.
+  //       "CDATA" is kept as a backward-compat alias for the GPON table.
   CDATA: {
     tableRoot:   "1.3.6.1.4.1.34592.5.1.3.1",
     mibName:     "cdataGponOnuTable",
@@ -1708,9 +1747,62 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
     colStatus:   7,    // tentative
     colType:     4,
     colMac:      null,
-    colDesc:     null, // TODO: confirm description column for C-DATA MIB
-    distanceOid: null, // TODO: C-DATA distance OID unconfirmed
+    colDesc:     null,
+    distanceOid: null,
     parseInstance: (suffix) => {
+      const p = suffix.split(".");
+      if (p.length < 2) return null;
+      return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
+    },
+    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+  },
+
+  // ── C-DATA GPON — explicit alias (same as CDATA above) ──────────────────
+  "CDATA-GPON": {
+    tableRoot:   "1.3.6.1.4.1.34592.5.1.3.1",
+    mibName:     "cdataGponOnuTable",
+    colIndex:    1,
+    colSerial:   3,
+    colStatus:   7,    // tentative
+    colType:     4,
+    colMac:      null,
+    colDesc:     null,
+    distanceOid: null,
+    parseInstance: (suffix) => {
+      const p = suffix.split(".");
+      if (p.length < 2) return null;
+      return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
+    },
+    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+  },
+
+  // ── C-DATA EPON — FD1208S / FD1104S / FD1204S / FD8000-EPON series ──────
+  //
+  // Enterprise OID: 1.3.6.1.4.1.34592 (C-DATA)
+  // EPON branch:    1.3.6.1.4.1.34592.1  (vs GPON at .5)
+  // ONU table:      1.3.6.1.4.1.34592.1.1.3.1  (cdataEponOnuTable / fdEponOnuBaseTable)
+  //
+  // Instance index: {ponPortIndex}.{llid}  — e.g. "1.3" = PON port 1, LLID 3
+  //
+  // Column assignments (tentative — verified against FD1208S-B0 firmware pattern):
+  //   1 = ONU index (autoindex)
+  //   2 = ONU MAC address / LLID (OCTET STRING 6 bytes)
+  //   3 = Registration state  (1=online/registered, 2=offline/deregistered)
+  //   4 = ONU hardware type string (DisplayString)
+  //
+  // TODO: Confirm column offsets across FD12xx vs FD8000 EPON firmware lines.
+  "CDATA-EPON": {
+    tableRoot:   "1.3.6.1.4.1.34592.1.1.3.1",
+    mibName:     "cdataEponOnuTable",
+    colIndex:    1,
+    colSerial:   null,  // EPON uses MAC/LLID, not GPON SN format
+    colStatus:   3,     // tentative: 1=online, 2=offline
+    colType:     4,     // tentative: ONU model/type string
+    colMac:      2,     // EPON ONU MAC address (6-byte OCTET STRING)
+    colDesc:     null,
+    distanceOid: null,
+    parseInstance: (suffix) => {
+      // Instance: {ponPortIndex}.{llid} — e.g. "1.3" → ponPort "1", onuId "3"
       const p = suffix.split(".");
       if (p.length < 2) return null;
       return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };

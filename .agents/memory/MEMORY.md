@@ -1,4 +1,4 @@
 - [OLT test-connection API shape](olt-test-connection.md) — endpoint accepts `{ip, community, port}` (NOT snmpCommunity/snmpPort), returns `{data:{success,vendor,model,sysName,latencyMs,message}}`.
 - [ONU discovery architecture](onu-discovery-arch.md) — POST /discover-onus → in-memory Map cache → GET /:id/onus/real; frontend reads cache, never polls directly.
-- [Vendor adapter pattern](vendor-adapter-pattern.md) — VendorAdapter interface includes discoverOnus(); CDATA has real SNMP impl; all others throw "not yet implemented"; ecom/hsgq are new placeholders.
+- [Vendor adapter pattern](vendor-adapter-pattern.md) — VendorAdapter interface + C-DATA EPON/GPON split: NEVER assume all C-DATA are GPON; use detectCdataPonType() first.
 - [OltDetail real vs demo split](oltdetail-real-demo.md) — `isRealOlt = managed !== null`; display* vars override summary card counts; mock ONU mini-cards gated on `!isRealOlt`.

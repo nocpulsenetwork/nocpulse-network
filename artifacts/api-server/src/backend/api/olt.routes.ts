@@ -30,6 +30,7 @@ import {
   RealSnmpClient,
   detectVendorFromSysInfo,
   extractModelFromDescr,
+  detectCdataPonType,
   buildOnuInstance,
   type ReadOnuTableResult,
   type ReadOnuDetailResult,
@@ -270,10 +271,27 @@ oltRouter.post("/test-onu-list", async (req: Request, res: Response) => {
     return;
   }
 
-  // ── Step 2: Read ONU table ───────────────────────────────────────────
+  // ── Step 2: Resolve MIB key (CDATA requires PON-type dispatch) ──────
+  // For C-DATA devices, the GPON and EPON ONU tables are at different OID
+  // paths. We detect the PON type from sysDescr and pick the correct key.
+  // If unknown, try GPON first and fall back to EPON on 0 results.
+  let mibKey = vendor;
+  if (vendor === "CDATA" && connectivity.sysDescr) {
+    const ponType = detectCdataPonType(connectivity.sysDescr);
+    mibKey = ponType === "EPON" ? "CDATA-EPON" : "CDATA-GPON";
+  }
+
+  // ── Step 3: Read ONU table ───────────────────────────────────────────
   // readOnuTable() does exactly 2 SNMP operations: 1 GETBULK + 1 GET.
   // Max 50 ONUs, all bounded, no walk loop, no background state.
-  const onuResult: ReadOnuTableResult = await client.readOnuTable(vendor, 50);
+  let onuResult: ReadOnuTableResult = await client.readOnuTable(mibKey, 50);
+
+  // CDATA fallback: if primary table (GPON or EPON) returned 0, try the other.
+  if (vendor === "CDATA" && onuResult.totalFound === 0) {
+    const altKey = mibKey === "CDATA-EPON" ? "CDATA-GPON" : "CDATA-EPON";
+    const altResult = await client.readOnuTable(altKey, 50);
+    if (altResult.totalFound > 0) onuResult = altResult;
+  }
 
   res.json({
     data: {

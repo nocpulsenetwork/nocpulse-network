@@ -3,23 +3,34 @@ import type { OltNormalized, OltPollRequest } from "../../types/olt.types";
 import type { OnuNormalized, OnuPollRequest } from "../../types/onu.types";
 import type { AlarmNormalized } from "../../types/alarm.types";
 import type { OnuDiscoveryResult, OnuDiscoverySummary, RealPonPort } from "../../types/onu-discovery.types";
-import { RealSnmpClient } from "../../snmp/real-snmp-client";
+import { RealSnmpClient, detectCdataPonType } from "../../snmp/real-snmp-client";
+import type { ReadOnuTableResult } from "../../snmp/real-snmp-client";
 
 /**
  * C-DATA OLT Adapter
  *
- * Supported models: FD1616GS, FD8920, FD1104S, FD1204S
+ * Supported models:
+ *   GPON — FD1616GS, FD8920, FD1204SN
+ *   EPON — FD1208S, FD1104S, FD1204S
+ *
  * Protocol: SNMP v2c
- * MIB: CDATA-GPON-MIB (cdataGponOnuTable — Enterprise OID 1.3.6.1.4.1.34592)
+ * MIBs:
+ *   CDATA-GPON-MIB: cdataGponOnuTable (1.3.6.1.4.1.34592.5.1.3.1)
+ *   CDATA-EPON-MIB: cdataEponOnuTable (1.3.6.1.4.1.34592.1.1.3.1)
  *
- * ─── Implemented ─────────────────────────────────────────────────────────────
- *  • discoverOnus() — reads cdataGponOnuTable via GETBULK + GET (read-only)
- *    Returns: total count, online/offline counts, per-PON breakdown, ONU list
+ * ─── PON type detection ───────────────────────────────────────────────────
+ *  discoverOnus() reads sysDescr first, then selects the correct MIB table:
+ *    • sysDescr contains "EPON" or matches FD12xxS- pattern → EPON table
+ *    • sysDescr contains "GPON" or matches FD16xxGS pattern → GPON table
+ *    • Unknown → tries GPON first, falls back to EPON if 0 results
  *
- * ─── TODO ────────────────────────────────────────────────────────────────────
- *  • pollOlt()    — SNMP walk CDATA-GPON-MIB system table
- *  • pollOnu()    — cdataGponOnuInfoEntry, cdataGponOnuOpticalEntry
- *  • pollAlarms() — cdataAlarmTable
+ * ─── Implemented ─────────────────────────────────────────────────────────
+ *  • discoverOnus() — auto-selects EPON or GPON MIB, read-only SNMP
+ *
+ * ─── TODO ────────────────────────────────────────────────────────────────
+ *  • pollOlt()    — system table
+ *  • pollOnu()    — optical + stats tables
+ *  • pollAlarms() — alarm table
  */
 export class CdataAdapter implements VendorAdapter {
   readonly vendor = "cdata" as const;
@@ -49,10 +60,15 @@ export class CdataAdapter implements VendorAdapter {
   }
 
   /**
-   * Discover ONUs via read-only SNMP walk of cdataGponOnuTable.
+   * Discover ONUs via read-only SNMP.
+   *
+   * Automatically detects whether the device is EPON or GPON by reading
+   * sysDescr, then queries the correct MIB table. If the PON type cannot
+   * be determined from sysDescr alone, tries GPON first and falls back to
+   * EPON when the GPON table returns 0 entries.
    *
    * Safety contract:
-   *   • Read-only: GETBULK (index column) + GET (attribute columns)
+   *   • Read-only: getSysInfo() GET + GETBULK + GET (3 PDUs max)
    *   • At most 50 ONUs (bounded by RealSnmpClient.readOnuTable limit)
    *   • Timeout: 3 000 ms, retries: 1
    *   • No SNMP SET, no background polling, no persistent session
@@ -66,7 +82,32 @@ export class CdataAdapter implements VendorAdapter {
       retries:   1,
     });
 
-    const snmpResult = await client.readOnuTable("CDATA", 50);
+    // ── Step 1: Read sysDescr to detect PON type ────────────────────────
+    // One SNMP GET — reuses the same session pattern as testConnection().
+    const sysInfo  = await client.getSysInfo();
+    const ponType  = detectCdataPonType(sysInfo.sysDescr);
+
+    // ── Step 2: Select primary MIB table based on detected PON type ──────
+    const primaryKey   = ponType === "EPON" ? "CDATA-EPON" : "CDATA-GPON";
+    const fallbackKey  = ponType === "EPON" ? "CDATA-GPON" : "CDATA-EPON";
+    const useFallback  = ponType === "unknown"; // try both when type is ambiguous
+
+    let snmpResult: ReadOnuTableResult = await client.readOnuTable(primaryKey, 50);
+
+    // ── Step 3: Fallback — try opposite table if primary returned 0 ──────
+    // Only fall back when:
+    //   a) PON type was unknown (we guessed GPON first), OR
+    //   b) PON type was detected but the table still returned 0 ONUs
+    //      (device firmware may use a non-standard MIB path)
+    if (snmpResult.totalFound === 0) {
+      const altResult = await client.readOnuTable(
+        useFallback ? fallbackKey : (ponType === "EPON" ? "CDATA-GPON" : "CDATA-EPON"),
+        50,
+      );
+      if (altResult.totalFound > 0) {
+        snmpResult = altResult;
+      }
+    }
 
     // ── Derive counts ──────────────────────────────────────────────────────
     const onlineCount  = snmpResult.onus.filter(o => o.status === "online").length;
@@ -78,9 +119,9 @@ export class CdataAdapter implements VendorAdapter {
     for (const onu of snmpResult.onus) {
       const entry = portMap.get(onu.ponPort) ?? { total: 0, online: 0, offline: 0, unknown: 0 };
       entry.total++;
-      if (onu.status === "online")  entry.online++;
+      if (onu.status === "online")       entry.online++;
       else if (onu.status === "offline") entry.offline++;
-      else entry.unknown++;
+      else                               entry.unknown++;
       portMap.set(onu.ponPort, entry);
     }
 
@@ -93,6 +134,12 @@ export class CdataAdapter implements VendorAdapter {
       serial:  o.serial,
       type:    o.type,
     }));
+
+    // ── Build human-readable message including PON type ────────────────────
+    const ponLabel  = snmpResult.mibUsed.toLowerCase().includes("epon") ? "EPON" : "GPON";
+    const typeNote  = ponType === "unknown" ? ` (PON type auto-detected as ${ponLabel} via fallback)` : ` (${ponLabel})`;
+    const baseMsg   = snmpResult.message;
+    const message   = baseMsg + typeNote;
 
     return {
       hasData:       true,
@@ -109,7 +156,7 @@ export class CdataAdapter implements VendorAdapter {
       source:        "live-snmp",
       vendor:        "CDATA",
       mibUsed:       snmpResult.mibUsed,
-      message:       snmpResult.message,
+      message,
     };
   }
 }
