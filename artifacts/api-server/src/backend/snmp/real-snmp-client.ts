@@ -973,41 +973,71 @@ export class RealSnmpClient {
     const start       = Date.now();
     const cappedLimit = Math.min(limit, 50);
 
-    // ── Candidate probe roots (most specific first to avoid scanning too much) ──
-    // Different C-DATA firmware versions place the ONU table at different paths
-    // within the enterprise EPON branch (1.3.6.1.4.1.34592.1).
-    const candidateRoots = [
-      "1.3.6.1.4.1.34592.1.1.3",   // fdEponOnuObjects — most likely ONU sub-branch
-      "1.3.6.1.4.1.34592.1.1",     // fdEponMibObjects — broader
-      "1.3.6.1.4.1.34592.1",       // fdEponMib root — broadest fallback
-    ];
+    // ── Iterative GETBULK walk of the full C-DATA enterprise subtree ─────────
+    //
+    // No OID guessing. Walk 1.3.6.1.4.1.34592 in GETBULK batches of 20,
+    // collecting every varbind the device actually returns, until:
+    //   a) we find ≥3 six-byte OctetStrings (ONU MAC/LLID addresses), or
+    //   b) the next batch contains no OIDs inside the enterprise subtree, or
+    //   c) 500 total OIDs fetched (safety cap).
+    //
+    // Each subtree group is logged: OID prefix, row count, whether it has MACs.
+    // The MAC-containing group identifies the ONU table column.
 
-    let macVbs: snmp.Varbind[] = [];
-    let probedRoot = "";
+    const ENTERPRISE_ROOT = "1.3.6.1.4.1.34592";
+    const BATCH           = 20;
+    const MAX_OIDS        = 500;
+    const MAC_THRESHOLD   = 3;
 
-    for (const root of candidateRoots) {
-      let probeVbs: snmp.Varbind[];
+    const allVbs: snmp.Varbind[] = [];
+    const walkLog: string[]      = [];
+    let   cursor                 = ENTERPRISE_ROOT;
+
+    walkLoop: while (allVbs.length < MAX_OIDS) {
+      let batch: snmp.Varbind[];
       try {
-        // cappedLimit×3: enough to cover multiple table columns for each ONU
-        probeVbs = await this.snmpGetBulk([root], Math.min(cappedLimit * 3, 100));
-      } catch {
-        continue; // network error on this root — try next
-      }
-
-      // 6-byte OctetStrings within the EPON subtree = ONU MAC/LLID addresses
-      const candidates = probeVbs.filter(
-        (vb) =>
-          vb.oid.startsWith(root + ".") &&
-          Buffer.isBuffer(vb.value) &&
-          vb.value.length === 6,
-      );
-
-      if (candidates.length > 0) {
-        macVbs     = candidates;
-        probedRoot = root;
+        batch = await this.snmpGetBulk([cursor], BATCH);
+      } catch (err) {
+        walkLog.push(`ERR cursor=${cursor}: ${err instanceof Error ? err.message : String(err)}`);
         break;
       }
+
+      const inSubtree = batch.filter((vb) => vb.oid.startsWith(ENTERPRISE_ROOT + "."));
+      allVbs.push(...inSubtree);
+
+      if (inSubtree.length === 0) break; // walked past enterprise branch
+
+      // Stop early once we have confirmed MAC/LLID addresses
+      const macsSoFar = allVbs.filter(
+        (vb) => Buffer.isBuffer(vb.value) && vb.value.length === 6,
+      ).length;
+      if (macsSoFar >= MAC_THRESHOLD) break walkLoop;
+
+      // Advance cursor (GETNEXT semantics: start from last returned OID)
+      const lastOid = batch[batch.length - 1]?.oid;
+      if (!lastOid || batch.length < BATCH) break;
+      cursor = lastOid;
     }
+
+    // ── Group by depth-11 OID prefix and build walk log ───────────────────
+    // 1.3.6.1.4.1.34592 = 7 components; depth 11 adds 4 sub-levels —
+    // enough to distinguish individual table columns.
+    const groupMap = new Map<string, snmp.Varbind[]>();
+    for (const vb of allVbs) {
+      const key   = vb.oid.split(".").slice(0, 11).join(".");
+      const group = groupMap.get(key) ?? [];
+      group.push(vb);
+      groupMap.set(key, group);
+    }
+    for (const [subtree, vbs] of groupMap) {
+      const hasMacs = vbs.some((vb) => Buffer.isBuffer(vb.value) && vb.value.length === 6);
+      walkLog.push(`oid=${subtree} rows=${vbs.length}${hasMacs ? " [MAC]" : ""}`);
+    }
+
+    // ── Find MAC varbinds ─────────────────────────────────────────────────
+    const macVbs = allVbs.filter(
+      (vb) => Buffer.isBuffer(vb.value) && vb.value.length === 6,
+    );
 
     if (macVbs.length === 0) {
       return {
@@ -1016,14 +1046,16 @@ export class RealSnmpClient {
         totalFound: 0,
         onus:       [],
         message:
-          "CDATA EPON dynamic probe: no ONU MAC/LLID addresses (6-byte OctetStrings) found " +
-          "in C-DATA EPON enterprise subtree. " +
-          "The device may not expose ONU data via this community string, " +
-          "or the EPON MIB path differs from any known C-DATA firmware pattern.",
+          `CDATA enterprise walk (root=${ENTERPRISE_ROOT}, walked=${allVbs.length} OIDs): ` +
+          "no 6-byte OctetStrings (ONU MAC/LLID) found. " +
+          "Walk log: " + (walkLog.join(" | ") || "(empty — no OIDs in subtree)"),
         latencyMs: Date.now() - start,
-        mibUsed:   "cdataEponProbe",
+        mibUsed:   `cdataWalk(walked=${allVbs.length})`,
       };
     }
+
+    // Remove unused variable — probedRoot was only used in the old guessed-OID path
+    void 0;
 
     // ── Derive table structure from the MAC OIDs ───────────────────────────
     //
@@ -1102,7 +1134,6 @@ export class RealSnmpClient {
     });
 
     const onlineCount = onus.filter((o) => o.status === "online").length;
-    const mibPath     = `${probedRoot} → ${tableRoot} col${macColNum}`;
 
     return {
       success:    true,
@@ -1112,11 +1143,13 @@ export class RealSnmpClient {
       message:
         `Found ${onus.length} EPON ONU${onus.length !== 1 ? "s" : ""}` +
         (onus.length > 0
-          ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown)` +
-            ` via dynamic MIB probe. Table: ${tableRoot}, MAC col: ${macColNum}`
+          ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown).` +
+            ` Discovered via enterprise walk (${allVbs.length} OIDs).` +
+            ` Table: ${tableRoot}, MAC col: ${macColNum}.` +
+            ` Walk log: ${walkLog.join(" | ")}`
           : ""),
       latencyMs: Date.now() - start,
-      mibUsed:   `cdataEponProbe(${mibPath})`,
+      mibUsed:   `cdataWalk(table=${tableRoot} macCol=${macColNum} walked=${allVbs.length})`,
     };
   }
 
