@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { useRoute, useLocation, Link } from 'wouter';
 import { useApiData } from '@/contexts/ApiDataContext';
+import { type OltDevice } from '@/data/mockData';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
@@ -10,10 +12,34 @@ import {
   ArrowLeft, RefreshCw, Settings, Server, Cpu, MemoryStick, Thermometer,
   Wifi, WifiOff, Activity, ChevronRight, AlertTriangle, Signal, Clock,
   Zap, XCircle, Info, ArrowUp, ArrowDown, Network, MapPin, Tag,
-  ExternalLink, LayoutList, Bell, Shield,
+  ExternalLink, LayoutList, Bell, Shield, CheckCircle2, ShieldCheck,
+  ShieldX, Timer, Gauge as GaugeIcon,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { AlarmRow } from '@/components/AlarmRow';
+
+// ─── Extended managed OLT record (OltDevice + verification fields) ───────────
+const MANAGED_OLT_KEY = 'nocpulse-managed-olts';
+interface ManagedOltRecord extends OltDevice {
+  snmpVersion: string;
+  snmpPort: number;
+  community: string;
+  verified: boolean;
+  verificationStatus: 'verified' | 'unverified' | 'pending';
+  lastTestTime: string | null;
+  lastSuccessTime: string | null;
+  systemName: string;
+  latencyMs: number | null;
+  isCustom: boolean;
+}
+function loadManagedOlt(id: string): ManagedOltRecord | null {
+  try {
+    const raw = localStorage.getItem(MANAGED_OLT_KEY);
+    if (!raw) return null;
+    const all = JSON.parse(raw) as ManagedOltRecord[];
+    return all.find((o) => o.id === id) ?? null;
+  } catch { return null; }
+}
 
 // ─── Circular SVG gauge ───────────────────────────────────────────────────────
 function Gauge({ value, max = 100, label, unit = '%', colorClass }: {
@@ -65,7 +91,16 @@ export default function OltDetail() {
   const { olts, onus, alarms } = useApiData();
   const [, params]   = useRoute('/olts/:id');
   const [, navigate] = useLocation();
-  const olt = olts.find(o => o.id === params?.id);
+
+  // Load managed (localStorage) OLT data — contains verification fields not in API OLTs
+  const [managed, setManaged] = useState<ManagedOltRecord | null>(null);
+  useEffect(() => {
+    if (params?.id) setManaged(loadManagedOlt(params.id));
+  }, [params?.id]);
+
+  // Managed OLT is the source of truth; API OLT is the fallback
+  const apiOlt = olts.find(o => o.id === params?.id);
+  const olt: OltDevice | undefined = managed ?? apiOlt;
 
   if (!olt) return (
     <div className="flex flex-col items-center justify-center h-64 gap-3 text-muted-foreground">
@@ -234,6 +269,99 @@ export default function OltDetail() {
           </span>
         </div>
       </div>
+
+      {/* ── SNMP Verification Card — shown for managed (real) OLTs ─────────── */}
+      {managed && (() => {
+        const isVerified = managed.verificationStatus === 'verified';
+        const verBorder  = isVerified ? 'border-green-500/30' : 'border-amber-500/30';
+        const verBg      = isVerified ? 'from-green-500/5'   : 'from-amber-500/5';
+
+        function fmtTime(iso: string | null) {
+          if (!iso) return '—';
+          try { return format(new Date(iso), 'dd MMM yyyy · HH:mm:ss'); } catch { return '—'; }
+        }
+
+        const rows: { icon: React.ReactNode; label: string; value: React.ReactNode }[] = [
+          {
+            icon: <Shield className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'Verification Status',
+            value: isVerified
+              ? <span className="inline-flex items-center gap-1.5 text-green-400 font-semibold"><CheckCircle2 className="h-3.5 w-3.5" /> Verified</span>
+              : <span className="inline-flex items-center gap-1.5 text-amber-400 font-semibold"><ShieldX className="h-3.5 w-3.5" /> Unverified</span>,
+          },
+          {
+            icon: <Signal className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'SNMP Version',
+            value: <span className="font-mono">{managed.snmpVersion ?? '—'}</span>,
+          },
+          {
+            icon: <Network className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'SNMP Port',
+            value: <span className="font-mono">{managed.snmpPort ?? '—'}</span>,
+          },
+          {
+            icon: <Timer className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'Last Test Time',
+            value: fmtTime(managed.lastTestTime),
+          },
+          {
+            icon: <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'Last Success Time',
+            value: fmtTime(managed.lastSuccessTime),
+          },
+          {
+            icon: <GaugeIcon className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'Latency',
+            value: managed.latencyMs !== null ? <span className="font-mono">{managed.latencyMs} ms</span> : '—',
+          },
+          {
+            icon: <Server className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'System Name',
+            value: managed.systemName ? <span className="font-mono">{managed.systemName}</span> : '—',
+          },
+          {
+            icon: <Tag className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'Vendor',
+            value: olt.brand ?? '—',
+          },
+          {
+            icon: <Info className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'Model',
+            value: olt.type ? `${olt.brand} ${olt.type}` : '—',
+          },
+          {
+            icon: <Zap className="h-3.5 w-3.5 text-muted-foreground" />,
+            label: 'Firmware',
+            value: '—',
+          },
+        ];
+
+        return (
+          <div className={`rounded-xl border ${verBorder} bg-gradient-to-br ${verBg} to-transparent bg-card/80 shadow-sm`}>
+            <div className="px-4 py-3 border-b border-border/30 flex items-center gap-2">
+              {isVerified
+                ? <ShieldCheck className="h-4 w-4 text-green-400" />
+                : <ShieldX className="h-4 w-4 text-amber-400" />
+              }
+              <span className="text-sm font-semibold">SNMP Verification</span>
+              <span className={`ml-auto text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${isVerified ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                {managed.verificationStatus}
+              </span>
+            </div>
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-x-6 gap-y-3">
+              {rows.map(row => (
+                <div key={String(row.label)} className="flex items-start gap-2 min-w-0">
+                  <span className="mt-0.5 shrink-0">{row.icon}</span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider leading-none mb-1">{row.label}</p>
+                    <p className="text-xs text-foreground/90 truncate">{row.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Summary Cards ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">

@@ -55,6 +55,8 @@ interface ManagedOlt extends OltDevice {
   verificationStatus: "verified" | "unverified" | "pending";
   lastTestTime: string | null;
   lastSuccessTime: string | null;
+  systemName: string;
+  latencyMs: number | null;
 }
 
 interface OltFormData {
@@ -155,6 +157,8 @@ function seedFromApi(apiOlts: OltDevice[]): ManagedOlt[] {
     verificationStatus: "unverified" as const,
     lastTestTime: null,
     lastSuccessTime: null,
+    systemName: "",
+    latencyMs: null,
   }));
 }
 
@@ -198,6 +202,8 @@ function loadOlts(): ManagedOlt[] | null {
       ...o,
       verificationStatus: o.verificationStatus ?? (o.verified ? "verified" : "unverified"),
       lastSuccessTime: o.lastSuccessTime ?? null,
+      systemName: o.systemName ?? "",
+      latencyMs: o.latencyMs ?? null,
     }));
   } catch {
     return null;
@@ -246,7 +252,9 @@ function validateForm(
   return errors;
 }
 
-function createFromForm(form: OltFormData, verified: boolean): ManagedOlt {
+type TestResultData = { vendor: string; model: string; systemName: string; latencyMs: number } | null;
+
+function createFromForm(form: OltFormData, verified: boolean, testResult: TestResultData): ManagedOlt {
   const now = new Date().toISOString();
   return {
     id: generateId(),
@@ -285,10 +293,12 @@ function createFromForm(form: OltFormData, verified: boolean): ManagedOlt {
     verificationStatus: verified ? "verified" : "unverified",
     lastTestTime: verified ? now : null,
     lastSuccessTime: verified ? now : null,
+    systemName: testResult?.systemName ?? "",
+    latencyMs: testResult?.latencyMs ?? null,
   };
 }
 
-function applyFormToOlt(existing: ManagedOlt, form: OltFormData, verified: boolean): ManagedOlt {
+function applyFormToOlt(existing: ManagedOlt, form: OltFormData, verified: boolean, testResult: TestResultData): ManagedOlt {
   const now = new Date().toISOString();
   return {
     ...existing,
@@ -315,6 +325,8 @@ function applyFormToOlt(existing: ManagedOlt, form: OltFormData, verified: boole
     verificationStatus: verified ? "verified" : "unverified",
     lastTestTime: verified ? now : existing.lastTestTime,
     lastSuccessTime: verified ? now : (existing.lastSuccessTime ?? null),
+    systemName: verified ? (testResult?.systemName ?? existing.systemName) : existing.systemName,
+    latencyMs: verified ? (testResult?.latencyMs ?? existing.latencyMs) : existing.latencyMs,
   };
 }
 
@@ -555,12 +567,13 @@ interface OltFormModalProps {
   editId?: string;
   allOlts: ManagedOlt[];
   onClose: () => void;
-  onSave: (data: OltFormData, verified: boolean) => void;
+  onSave: (data: OltFormData, verified: boolean, testResult: TestResultData) => void;
 }
 
 function OltFormModal({
   open, mode, initial, editId, allOlts, onClose, onSave,
 }: OltFormModalProps) {
+
   const { role } = useRole();
   const isSuperAdmin = role === "super_admin";
 
@@ -663,7 +676,8 @@ function OltFormModal({
     // Regular Save requires testState === "pass" for both Admin and Super Admin.
     const verified = !forceSave && testState === "pass";
     if (!verified && !isSuperAdmin && !forceSave) return;
-    onSave(form, verified);
+    // Pass testResult only when this is a verified save; Force Save gets null.
+    onSave(form, verified, verified ? testResult : null);
   };
 
   const labelCls = "text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5 block";
@@ -1023,9 +1037,9 @@ export default function OltManagement() {
 
   // ── Action handlers ──────────────────────────────────────────────────────
 
-  const handleSave = (form: OltFormData, verified: boolean) => {
+  const handleSave = (form: OltFormData, verified: boolean, testResult: TestResultData) => {
     if (modal?.mode === "add") {
-      const newOlt = createFromForm(form, verified);
+      const newOlt = createFromForm(form, verified, testResult);
       console.debug("[NOCpulse] Status Changed Online", {
         id: newOlt.id,
         ip: newOlt.ip,
@@ -1046,7 +1060,7 @@ export default function OltManagement() {
         if (!prev) return prev;
         return prev.map((o) => {
           if (o.id !== editId) return o;
-          const updated = applyFormToOlt(o, form, verified);
+          const updated = applyFormToOlt(o, form, verified, testResult);
           console.debug("[NOCpulse] Status Changed" + (verified ? " Online" : " Offline"), {
             id: updated.id,
             ip: updated.ip,
