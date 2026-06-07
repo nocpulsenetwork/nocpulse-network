@@ -1,0 +1,200 @@
+Task: Phase 1 - Vendor Adapter Architecture + Real ONU Discovery (Production Safe)
+
+IMPORTANT CONTEXT:
+
+Real CDATA OLT validation is already working.
+
+Verified:
+
+* Real OLT Connection
+* Real SNMP Validation
+* Online Status
+* Vendor Detection
+* Model Detection
+* Latency Detection
+
+Do NOT break any existing working functionality.
+
+==================================================
+CRITICAL SAFETY RULES
+
+1. Read-only SNMP only.
+2. No SNMP SET.
+3. No ONU Reboot.
+4. No ONU Disable.
+5. No ONU Enable.
+6. No SSH Write.
+7. No Telnet Write.
+8. No OLT Configuration Changes.
+9. No High Frequency Polling.
+10. Timeout = 3 seconds.
+11. Retry = 1.
+12. Keep CPU-safe for OLT.
+13. Keep VPS/PM2 compatibility.
+14. Do not modify login/auth.
+15. Do not redesign UI.
+16. Do not modify existing Real OLT Validation logic.
+
+==================================================
+MULTI-VENDOR REQUIREMENT
+
+CDATA is only the first test device.
+
+Do NOT build CDATA-only architecture.
+
+Future vendors:
+
+* CDATA
+* Huawei
+* ZTE
+* BDCOM
+* VSOL
+* ECOM
+* HSGQ
+* Future Vendors
+
+must be supported without redesigning the platform.
+
+Create vendor adapter architecture.
+
+Structure example:
+
+vendorAdapters/
+
+* index
+* cdata
+* huawei
+* zte
+* bdcom
+* vsol
+* ecom
+* hsgq
+
+Current implementation:
+CDATA adapter only.
+
+Other vendors:
+Placeholder adapters only.
+
+==================================================
+DO NOT HARDCODE
+
+Do NOT hardcode:
+
+* CDATA-only OIDs into dashboard
+* Fixed PON count
+* Fixed ONU count
+* Fixed ONU numbering
+* Fixed port count
+* Fixed vendor assumptions
+
+The system must detect actual device information.
+
+==================================================
+CURRENT PHASE
+
+Implement:
+
+REAL ONU DISCOVERY ONLY
+
+Goal:
+
+Discover ONUs from the validated CDATA OLT.
+
+Read-only.
+
+==================================================
+READ ONLY DATA
+
+Attempt to discover:
+
+1. Total ONU Count
+2. Online ONU Count
+3. Offline ONU Count
+4. PON Port Count
+
+If safely available:
+
+5. ONU Index
+6. ONU Status
+7. PON Port Mapping
+
+==================================================
+DO NOT IMPLEMENT YET
+
+Do NOT implement:
+
+* RX Power
+* TX Power
+* Distance
+* Traffic Usage
+* Temperature
+* VLAN
+* PPPoE
+* Reboot
+* Disable/Enable
+* Description Sync
+* ONU Actions
+* ONU Write Operations
+
+Those will be future phases.
+
+==================================================
+REAL DATA ONLY REQUIREMENT
+
+Strict Rules:
+
+1. Never show fake ONU data.
+2. Never show mock ONU list.
+3. Never show demo customer names.
+4. Never generate placeholder ONU rows.
+5. Never fabricate ONU counts.
+6. Never fabricate ONU online/offline status.
+
+If real ONU discovery fails:
+
+Show:
+
+"No real ONU data available yet."
+
+instead of fake rows.
+
+==================================================
+DATA SOURCE REQUIREMENT
+
+OLT Details and ONU Management must clearly indicate source:
+
+* Live SNMP
+* Cached Real Data
+* No Real Data
+
+Real OLTs must never display mock ONU data.
+
+==================================================
+UI REQUIREMENT
+
+Keep current UI.
+
+OLT Details page should display:
+
+* Total ONU
+* Online ONU
+* Offline ONU
+* PON Port Count
+
+Only when obtained from real device data.
+
+==================================================
+SUCCESS CRITERIA
+
+1. Existing CDATA OLT remains Online.
+2. Existing validation logic remains unchanged.
+3. Real ONU count is shown if discovered.
+4. Real Online ONU count is shown if discovered.
+5. Real Offline ONU count is shown if discovered.
+6. Real PON count is shown if discovered.
+7. No fake ONU records appear.
+8. No mock customer data appears.
+9. If ONU mapping is incomplete, system shows:
+   "No real ONU data available yet."
+10. Architecture is ready for future Huawei, ZTE, BDCOM, VSOL, ECOM and HSGQ adapters without redesign.

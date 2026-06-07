@@ -2,6 +2,7 @@ import type { VendorAdapter, AdapterCapabilities } from "../../core/adapter-regi
 import type { OltNormalized, OltPollRequest } from "../../types/olt.types";
 import type { OnuNormalized, OnuPollRequest } from "../../types/onu.types";
 import type { AlarmNormalized } from "../../types/alarm.types";
+import type { OnuDiscoveryResult } from "../../types/onu-discovery.types";
 
 /**
  * Huawei OLT Adapter
@@ -21,28 +22,30 @@ export class HuaweiAdapter implements VendorAdapter {
 
   capabilities(): AdapterCapabilities {
     return {
-      oltInfo: true,
+      oltInfo:      true,
       onuDiscovery: true,
       opticalPower: true,
       trafficStats: true,
       alarmPolling: true,
-      configRead: false,  // SSH CLI not yet implemented
-      configWrite: false,
+      configRead:   false,
+      configWrite:  false,
     };
   }
 
   async pollOlt(_request: OltPollRequest): Promise<OltNormalized> {
-    // TODO: SNMP walk hwGponOltTable / hwMPUInfoTable
     throw new Error("HuaweiAdapter.pollOlt — not yet implemented");
   }
 
   async pollOnu(_request: OnuPollRequest): Promise<OnuNormalized> {
-    // TODO: SNMP walk hwGponDeviceONUTable, hwGponONUOpticalInfoTable
     throw new Error("HuaweiAdapter.pollOnu — not yet implemented");
   }
 
   async pollAlarms(_oltRequest: OltPollRequest): Promise<AlarmNormalized[]> {
-    // TODO: SNMP walk hwGponAlarmTable, trap listener
     throw new Error("HuaweiAdapter.pollAlarms — not yet implemented");
+  }
+
+  async discoverOnus(_request: OltPollRequest): Promise<OnuDiscoveryResult> {
+    // TODO: walk hwGponDeviceONUTable (1.3.6.1.4.1.2011.6.128.1.1.2.43.1)
+    throw new Error("HuaweiAdapter.discoverOnus — not yet implemented");
   }
 }

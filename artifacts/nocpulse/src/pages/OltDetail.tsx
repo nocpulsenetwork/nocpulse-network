@@ -13,7 +13,7 @@ import {
   Wifi, WifiOff, Activity, ChevronRight, AlertTriangle, Signal, Clock,
   Zap, XCircle, Info, ArrowUp, ArrowDown, Network, MapPin, Tag,
   ExternalLink, LayoutList, Bell, Shield, CheckCircle2, ShieldCheck,
-  ShieldX, Timer, Gauge as GaugeIcon,
+  ShieldX, Timer, Gauge as GaugeIcon, Loader2, ScanLine, Database,
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { AlarmRow } from '@/components/AlarmRow';
@@ -39,6 +39,25 @@ function loadManagedOlt(id: string): ManagedOltRecord | null {
     const all = JSON.parse(raw) as ManagedOltRecord[];
     return all.find((o) => o.id === id) ?? null;
   } catch { return null; }
+}
+
+// ─── Real ONU discovery result (mirrors backend OnuDiscoveryResult) ───────────
+interface RealOnuData {
+  hasData: true;
+  oltId: string;
+  totalOnus: number;
+  onlineOnus: number;
+  offlineOnus: number;
+  unknownOnus: number;
+  ponPortCount: number;
+  ponPorts: Array<{ id: string; total: number; online: number; offline: number; unknown: number }>;
+  onus: Array<{ onuId: string; ponPort: string; status: 'online' | 'offline' | 'unknown'; serial: string | null; type: string | null }>;
+  discoveredAt: string;
+  latencyMs: number;
+  source: 'live-snmp';
+  vendor: string;
+  mibUsed: string;
+  message: string;
 }
 
 // ─── Circular SVG gauge ───────────────────────────────────────────────────────
@@ -94,9 +113,50 @@ export default function OltDetail() {
 
   // Load managed (localStorage) OLT data — contains verification fields not in API OLTs
   const [managed, setManaged] = useState<ManagedOltRecord | null>(null);
+
+  // Real ONU discovery state — populated by POST /api/olts/discover-onus
+  const [realOnus, setRealOnus]           = useState<RealOnuData | null>(null);
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (params?.id) setManaged(loadManagedOlt(params.id));
+    if (!params?.id) return;
+    setManaged(loadManagedOlt(params.id));
+    // Load any previously cached real ONU discovery result for this OLT
+    fetch(`/api/olts/${encodeURIComponent(params.id)}/onus/real`)
+      .then(r => r.json() as Promise<{ data?: { hasData?: boolean } }>)
+      .then(j => { if (j.data?.hasData) setRealOnus(j.data as RealOnuData); })
+      .catch(() => null);
   }, [params?.id]);
+
+  async function handleDiscoverOnus() {
+    if (!managed) return;
+    setDiscoverLoading(true);
+    setDiscoverError(null);
+    try {
+      const resp = await fetch('/api/olts/discover-onus', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          id:        managed.id,
+          ip:        managed.ip,
+          community: managed.community,
+          port:      managed.snmpPort,
+          vendor:    managed.brand,
+        }),
+      });
+      const j = await resp.json() as { data?: RealOnuData; error?: string };
+      if (!resp.ok || !j.data?.hasData) {
+        setDiscoverError(j.error ?? 'Discovery failed — check OLT connectivity and SNMP credentials.');
+      } else {
+        setRealOnus(j.data);
+      }
+    } catch (e) {
+      setDiscoverError(e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setDiscoverLoading(false);
+    }
+  }
 
   // Managed OLT is the source of truth; API OLT is the fallback
   const apiOlt = olts.find(o => o.id === params?.id);
@@ -127,6 +187,31 @@ export default function OltDetail() {
   const onlinePct = connectedOnus.length > 0
     ? Math.round((onlineOnus.length / connectedOnus.length) * 100)
     : 0;
+
+  // ── Real OLT display overrides ───────────────────────────────────────────
+  // For managed (real) OLTs, display counts from live SNMP discovery when
+  // available, or 0 when no discovery has been performed. Never show mock data.
+  const isRealOlt        = managed !== null;
+  const displayTotal     = isRealOlt ? (realOnus?.totalOnus   ?? 0) : connectedOnus.length;
+  const displayOnline    = isRealOlt ? (realOnus?.onlineOnus  ?? 0) : onlineOnus.length;
+  const displayOffline   = isRealOlt ? (realOnus?.offlineOnus ?? 0) : offlineOnus.length;
+  const displayDegraded  = isRealOlt ? 0                            : degradedOnus.length;
+  const displayOnlinePct = displayTotal > 0 ? Math.round((displayOnline / displayTotal) * 100) : 0;
+
+  // PON port data: for real OLTs with discovery, use real port breakdown.
+  // For demo OLTs, use the mock-derived ponPorts computed below.
+  const realPonPortsDisplay = isRealOlt && realOnus && realOnus.ponPorts.length > 0
+    ? realOnus.ponPorts.map((p, idx) => ({
+        id:      idx + 1,
+        name:    `PON-${p.id}`,
+        total:   p.total,
+        online:  p.online,
+        offline: p.offline + p.unknown,
+        degraded: 0,
+        status:  (p.online > 0 ? 'Active' : 'Idle') as 'Active' | 'Degraded' | 'Idle',
+        avgRx:   '--',
+      }))
+    : null;
 
   const ponPorts = Array.from({ length: olt.ponPortCount }, (_, i) => {
     const portOnus     = connectedOnus.filter(o => o.ponPort === `PON-${i + 1}`);
@@ -159,6 +244,16 @@ export default function OltDetail() {
       Degraded: p.degraded,
       Offline:  p.offline,
     }));
+
+  // For real OLTs: override ponPorts and chartData with real SNMP discovery data
+  const displayPonPorts  = realPonPortsDisplay ?? ponPorts;
+  const displayChartData = realPonPortsDisplay
+    ? realPonPortsDisplay
+        .filter(p => p.total > 0 || realPonPortsDisplay.length <= 8)
+        .map(p => ({ name: p.name, Online: p.online, Degraded: 0, Offline: p.offline }))
+    : chartData;
+  // Show chart only when there's real data for real OLTs (or any mock data for demo OLTs)
+  const hasDisplayData = isRealOlt ? (realOnus !== null && realPonPortsDisplay !== null) : connectedOnus.length > 0;
 
   // Resource colour helpers
   const getResColor = (val: number, isTemp: boolean) => {
@@ -359,6 +454,39 @@ export default function OltDetail() {
                 </div>
               ))}
             </div>
+
+            {/* ONU Discovery — manual trigger, read-only SNMP */}
+            <div className="px-4 pb-4 border-t border-border/20 pt-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <ScanLine className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">ONU Discovery</span>
+                  {realOnus && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
+                      <Database className="h-2.5 w-2.5" /> Live SNMP · {realOnus.totalOnus} ONUs · {format(new Date(realOnus.discoveredAt), 'HH:mm:ss')}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => void handleDiscoverOnus()}
+                  disabled={discoverLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-primary/10 border-primary/30 text-primary hover:bg-primary/20"
+                >
+                  {discoverLoading
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Discovering…</>
+                    : <><ScanLine className="h-3.5 w-3.5" /> {realOnus ? 'Re-scan ONUs' : 'Discover ONUs'}</>
+                  }
+                </button>
+              </div>
+              {discoverError && (
+                <p className="text-[11px] text-red-400 flex items-center gap-1.5">
+                  <XCircle className="h-3.5 w-3.5 shrink-0" /> {discoverError}
+                </p>
+              )}
+              {realOnus && (
+                <p className="text-[11px] text-muted-foreground">{realOnus.message}</p>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -377,12 +505,12 @@ export default function OltDetail() {
               <Activity className="h-3 w-3 text-primary" />
             </div>
           </div>
-          <p className="text-2xl font-bold tracking-tight">{connectedOnus.length}</p>
+          <p className="text-2xl font-bold tracking-tight">{displayTotal}</p>
           <div className="space-y-1">
             <div className="h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full" style={{ width: `${onlinePct}%` }} />
+              <div className="h-full bg-primary rounded-full" style={{ width: `${displayOnlinePct}%` }} />
             </div>
-            <p className="text-[10px] text-muted-foreground">{onlinePct}% online · view all</p>
+            <p className="text-[10px] text-muted-foreground">{displayOnlinePct}% online · {isRealOlt ? (realOnus ? 'live SNMP' : 'no data yet') : 'view all'}</p>
           </div>
         </button>
 
@@ -397,10 +525,10 @@ export default function OltDetail() {
               <Wifi className="h-3 w-3 text-green-400" />
             </div>
           </div>
-          <p className="text-2xl font-bold tracking-tight text-green-400">{onlineOnus.length}</p>
+          <p className="text-2xl font-bold tracking-tight text-green-400">{displayOnline}</p>
           <div className="space-y-1">
             <div className="h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-green-500 rounded-full" style={{ width: connectedOnus.length > 0 ? `${Math.round((onlineOnus.length / connectedOnus.length) * 100)}%` : '0%' }} />
+              <div className="h-full bg-green-500 rounded-full" style={{ width: displayTotal > 0 ? `${Math.round((displayOnline / displayTotal) * 100)}%` : '0%' }} />
             </div>
             <p className="text-[10px] text-muted-foreground group-hover:text-green-400/70 transition-colors">Active · filter</p>
           </div>
@@ -409,40 +537,40 @@ export default function OltDetail() {
         {/* Offline */}
         <button
           onClick={() => navigate(`/onus?olt=${olt.id}&status=Offline`)}
-          className={`rounded-xl border border-border/60 bg-card/80 p-3.5 text-left transition-colors group space-y-2.5 shadow-sm ${offlineOnus.length > 0 ? 'hover:border-red-500/40 hover:bg-red-500/[0.04]' : 'hover:border-muted/50'}`}
+          className={`rounded-xl border border-border/60 bg-card/80 p-3.5 text-left transition-colors group space-y-2.5 shadow-sm ${displayOffline > 0 ? 'hover:border-red-500/40 hover:bg-red-500/[0.04]' : 'hover:border-muted/50'}`}
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Offline</span>
-            <div className={`p-1.5 rounded-lg transition-colors ${offlineOnus.length > 0 ? 'bg-red-500/10 group-hover:bg-red-500/20' : 'bg-muted/30'}`}>
-              <WifiOff className={`h-3 w-3 ${offlineOnus.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`} />
+            <div className={`p-1.5 rounded-lg transition-colors ${displayOffline > 0 ? 'bg-red-500/10 group-hover:bg-red-500/20' : 'bg-muted/30'}`}>
+              <WifiOff className={`h-3 w-3 ${displayOffline > 0 ? 'text-red-400' : 'text-muted-foreground'}`} />
             </div>
           </div>
-          <p className={`text-2xl font-bold tracking-tight ${offlineOnus.length > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{offlineOnus.length}</p>
+          <p className={`text-2xl font-bold tracking-tight ${displayOffline > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{displayOffline}</p>
           <div className="space-y-1">
             <div className="h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-red-500 rounded-full" style={{ width: connectedOnus.length > 0 ? `${Math.round((offlineOnus.length / connectedOnus.length) * 100)}%` : '0%' }} />
+              <div className="h-full bg-red-500 rounded-full" style={{ width: displayTotal > 0 ? `${Math.round((displayOffline / displayTotal) * 100)}%` : '0%' }} />
             </div>
-            <p className="text-[10px] text-muted-foreground">{offlineOnus.length > 0 ? 'Needs attention' : 'All nominal'}</p>
+            <p className="text-[10px] text-muted-foreground">{displayOffline > 0 ? 'Needs attention' : 'All nominal'}</p>
           </div>
         </button>
 
         {/* Degraded */}
         <button
           onClick={() => navigate(`/onus?olt=${olt.id}&status=Degraded`)}
-          className={`rounded-xl border border-border/60 bg-card/80 p-3.5 text-left transition-colors group space-y-2.5 shadow-sm ${degradedOnus.length > 0 ? 'hover:border-amber-500/40 hover:bg-amber-500/[0.04]' : 'hover:border-muted/50'}`}
+          className={`rounded-xl border border-border/60 bg-card/80 p-3.5 text-left transition-colors group space-y-2.5 shadow-sm ${displayDegraded > 0 ? 'hover:border-amber-500/40 hover:bg-amber-500/[0.04]' : 'hover:border-muted/50'}`}
         >
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Degraded</span>
-            <div className={`p-1.5 rounded-lg transition-colors ${degradedOnus.length > 0 ? 'bg-amber-500/10 group-hover:bg-amber-500/20' : 'bg-muted/30'}`}>
-              <AlertTriangle className={`h-3 w-3 ${degradedOnus.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`} />
+            <div className={`p-1.5 rounded-lg transition-colors ${displayDegraded > 0 ? 'bg-amber-500/10 group-hover:bg-amber-500/20' : 'bg-muted/30'}`}>
+              <AlertTriangle className={`h-3 w-3 ${displayDegraded > 0 ? 'text-amber-400' : 'text-muted-foreground'}`} />
             </div>
           </div>
-          <p className={`text-2xl font-bold tracking-tight ${degradedOnus.length > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>{degradedOnus.length}</p>
+          <p className={`text-2xl font-bold tracking-tight ${displayDegraded > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>{displayDegraded}</p>
           <div className="space-y-1">
             <div className="h-1 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-amber-500 rounded-full" style={{ width: connectedOnus.length > 0 ? `${Math.round((degradedOnus.length / connectedOnus.length) * 100)}%` : '0%' }} />
+              <div className="h-full bg-amber-500 rounded-full" style={{ width: displayTotal > 0 ? `${Math.round((displayDegraded / displayTotal) * 100)}%` : '0%' }} />
             </div>
-            <p className="text-[10px] text-muted-foreground">{degradedOnus.length > 0 ? 'Signal issues' : 'All clean'}</p>
+            <p className="text-[10px] text-muted-foreground">{displayDegraded > 0 ? 'Signal issues' : 'All clean'}</p>
           </div>
         </button>
 
@@ -649,18 +777,18 @@ export default function OltDetail() {
                 <span className="text-sm font-semibold">ONU Distribution by PON</span>
               </div>
               <span className="text-[11px] text-muted-foreground px-2 py-0.5 rounded bg-muted/40 border border-border/40">
-                {connectedOnus.length} total
+                {displayTotal} total
               </span>
             </div>
             <div className="p-4">
-              {connectedOnus.length === 0 ? (
+              {!hasDisplayData ? (
                 <div className="flex flex-col items-center justify-center h-32 gap-2 text-muted-foreground">
                   <Server className="h-8 w-8 opacity-20" />
-                  <p className="text-xs">No ONUs connected to this OLT</p>
+                  <p className="text-xs">{isRealOlt ? 'Run ONU discovery to see port distribution' : 'No ONUs connected to this OLT'}</p>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barSize={28} barGap={2}>
+                  <BarChart data={displayChartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }} barSize={28} barGap={2}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
                     <XAxis
                       dataKey="name"
@@ -704,7 +832,7 @@ export default function OltDetail() {
             <div className="p-4 border-b border-border/40 bg-muted/10">
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2.5">Port Map</p>
               <div className="flex flex-wrap gap-2">
-                {ponPorts.map(port => (
+                {displayPonPorts.map(port => (
                   <button
                     key={port.id}
                     onClick={() => navigate(`/onus?olt=${olt.id}&pon=PON-${port.id}`)}
@@ -752,7 +880,7 @@ export default function OltDetail() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ponPorts.map(port => (
+                  {displayPonPorts.map(port => (
                     <TableRow key={port.id} className="hover:bg-muted/20 border-b border-border/30 transition-colors">
                       <TableCell className="font-mono text-xs py-2.5 px-4 font-bold">{port.name}</TableCell>
                       <TableCell className="py-2.5 px-4">
@@ -791,20 +919,79 @@ export default function OltDetail() {
           {/* Connected ONU mini-cards */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">
-                Connected ONUs <span className="text-muted-foreground font-normal">({connectedOnus.length})</span>
-              </span>
-              <Button variant="ghost" size="sm" className="text-xs h-7 text-primary hover:text-primary gap-1"
-                onClick={() => navigate(`/onus?olt=${olt.id}`)}>
-                View All <ChevronRight className="h-3 w-3" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold">
+                  {isRealOlt ? 'Discovered ONUs' : 'Connected ONUs'}{' '}
+                  <span className="text-muted-foreground font-normal">({displayTotal})</span>
+                </span>
+                {isRealOlt && realOnus && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
+                    <Database className="h-2.5 w-2.5" /> Live SNMP
+                  </span>
+                )}
+                {isRealOlt && !realOnus && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-muted/30 text-muted-foreground border-border/40">
+                    No real data
+                  </span>
+                )}
+              </div>
+              {!isRealOlt && (
+                <Button variant="ghost" size="sm" className="text-xs h-7 text-primary hover:text-primary gap-1"
+                  onClick={() => navigate(`/onus?olt=${olt.id}`)}>
+                  View All <ChevronRight className="h-3 w-3" />
+                </Button>
+              )}
             </div>
-            {connectedOnus.length === 0 ? (
+
+            {/* Real OLT — no discovery yet */}
+            {isRealOlt && !realOnus && (
+              <div className="rounded-xl border border-border/60 bg-card/50 p-8 flex flex-col items-center gap-3 text-muted-foreground">
+                <ScanLine className="h-8 w-8 opacity-20" />
+                <p className="text-sm text-center">No real ONU data available yet</p>
+                <p className="text-[11px] text-center opacity-70">Click "Discover ONUs" in the SNMP Verification card above to run a read-only SNMP scan of this OLT.</p>
+              </div>
+            )}
+
+            {/* Real OLT — show discovered ONUs */}
+            {isRealOlt && realOnus && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                {realOnus.onus.slice(0, 8).map((o, idx) => (
+                  <div
+                    key={`${o.ponPort}-${o.onuId}-${idx}`}
+                    className="rounded-lg border border-border/60 bg-card/50 p-3 transition-colors text-left space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-mono font-bold text-sm">ONU-{o.onuId}</div>
+                      <span className={`h-2 w-2 rounded-full ${o.status === 'online' ? 'bg-green-400' : o.status === 'offline' ? 'bg-red-400' : 'bg-slate-500'}`} />
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">PON {o.ponPort}</div>
+                    {o.serial && <div className="text-[10px] font-mono text-muted-foreground truncate">{o.serial}</div>}
+                    <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${o.status === 'online' ? 'text-green-400' : o.status === 'offline' ? 'text-red-400' : 'text-slate-400'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${o.status === 'online' ? 'bg-green-400' : o.status === 'offline' ? 'bg-red-400' : 'bg-slate-500'}`} />
+                        {o.status}
+                      </span>
+                      {o.type && <span className="text-[10px] text-muted-foreground truncate max-w-[60px]">{o.type}</span>}
+                    </div>
+                  </div>
+                ))}
+                {realOnus.onus.length > 8 && (
+                  <div className="rounded-lg border border-dashed border-border/40 bg-muted/20 p-3 flex flex-col items-center justify-center gap-1 text-muted-foreground">
+                    <span className="text-xs font-semibold">+{realOnus.onus.length - 8} more</span>
+                    <span className="text-[10px]">from SNMP scan</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Demo OLT — show mock ONUs */}
+            {!isRealOlt && connectedOnus.length === 0 && (
               <div className="rounded-xl border border-border/60 bg-card/50 p-8 flex flex-col items-center gap-2 text-muted-foreground">
                 <Wifi className="h-8 w-8 opacity-20" />
                 <p className="text-sm">No ONUs connected to this OLT yet</p>
               </div>
-            ) : (
+            )}
+            {!isRealOlt && connectedOnus.length > 0 && (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
                 {connectedOnus.slice(0, 8).map(o => (
                   <button

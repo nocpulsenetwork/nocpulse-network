@@ -1,4 +1,4 @@
-export type OltVendor = "huawei" | "zte" | "bdcom" | "vsol" | "cdata" | "generic";
+export type OltVendor = "huawei" | "zte" | "bdcom" | "vsol" | "cdata" | "ecom" | "hsgq" | "generic";
 
 export type OltStatus = "online" | "offline" | "degraded" | "unreachable";
 

@@ -2,6 +2,7 @@ import type { VendorAdapter, AdapterCapabilities } from "../../core/adapter-regi
 import type { OltNormalized, OltPollRequest } from "../../types/olt.types";
 import type { OnuNormalized, OnuPollRequest } from "../../types/onu.types";
 import type { AlarmNormalized } from "../../types/alarm.types";
+import type { OnuDiscoveryResult } from "../../types/onu-discovery.types";
 
 /**
  * ZTE OLT Adapter
@@ -21,28 +22,30 @@ export class ZteAdapter implements VendorAdapter {
 
   capabilities(): AdapterCapabilities {
     return {
-      oltInfo: true,
+      oltInfo:      true,
       onuDiscovery: true,
       opticalPower: true,
       trafficStats: true,
       alarmPolling: true,
-      configRead: false,
-      configWrite: false,
+      configRead:   false,
+      configWrite:  false,
     };
   }
 
   async pollOlt(_request: OltPollRequest): Promise<OltNormalized> {
-    // TODO: SNMP walk zxAnGponOltEntry
     throw new Error("ZteAdapter.pollOlt — not yet implemented");
   }
 
   async pollOnu(_request: OnuPollRequest): Promise<OnuNormalized> {
-    // TODO: SNMP walk zxAnGponOnuInfoEntry, zxAnGponOnuOpticalEntry
     throw new Error("ZteAdapter.pollOnu — not yet implemented");
   }
 
   async pollAlarms(_oltRequest: OltPollRequest): Promise<AlarmNormalized[]> {
-    // TODO: SNMP walk zxAnAlarmTable
     throw new Error("ZteAdapter.pollAlarms — not yet implemented");
+  }
+
+  async discoverOnus(_request: OltPollRequest): Promise<OnuDiscoveryResult> {
+    // TODO: walk zxAnGponOnuInfoEntry (1.3.6.1.4.1.3902.1082.500.10.2.2.1)
+    throw new Error("ZteAdapter.discoverOnus — not yet implemented");
   }
 }

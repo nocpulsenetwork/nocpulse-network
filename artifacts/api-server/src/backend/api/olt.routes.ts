@@ -36,6 +36,12 @@ import {
   type ReadOnuOpticalResult,
   type ReadOnuTrafficResult,
 } from "../snmp/real-snmp-client";
+import type {
+  OnuDiscoveryResult,
+  OnuDiscoveryEmpty,
+  OnuDiscoverySummary,
+  RealPonPort,
+} from "../types/onu-discovery.types";
 
 export const oltRouter = Router();
 
@@ -605,6 +611,174 @@ oltRouter.post("/test-onu-traffic", async (req: Request, res: Response) => {
       warning:     "Manual test only. Byte counters are cumulative since last reset. " +
                    "Rates (if present) are device-reported averages, not instantaneous.",
     },
+  });
+});
+
+// ─── In-memory ONU discovery cache ───────────────────────────────────────────
+//
+// Key:   OLT ID string (the ID stored in localStorage by the frontend)
+// Value: result of the last successful ONU discovery on that OLT
+//
+// Intentionally simple — no TTL, no disk persistence, no auto-eviction.
+// One result per OLT; replaced on every successful discover-onus call.
+// The cache is lost on server restart, which is acceptable for manual-trigger
+// discovery (the user just clicks "Discover" again).
+const onuDiscoveryCache = new Map<string, OnuDiscoveryResult>();
+
+// POST /api/olts/discover-onus — manual read-only ONU discovery
+//
+// Connects to an OLT, auto-detects its vendor via sysDescr/sysObjectID, walks
+// the vendor-specific ONU management table, and returns counts + a simplified
+// list (at most 50 ONUs). Result is cached in memory under the provided OLT ID.
+//
+// Safety contract:
+//   • Read-only: GETBULK (index column) + GET (attribute columns)  — no SET
+//   • Bounded: at most 50 ONUs regardless of actual device capacity
+//   • One-shot: no interval, no background worker, no persistent session
+//   • Timeout: max 3 000 ms (clamped), retries: 1
+//   • Stores result only in memory — no database write
+oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+
+  // ── Input validation ──────────────────────────────────────────────────────
+  if (typeof body["id"] !== "string" || !body["id"].trim()) {
+    res.status(400).json({ error: "Missing required field: id (OLT ID for cache key)", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["ip"] !== "string" || !body["ip"].trim()) {
+    res.status(400).json({ error: "Missing required field: ip", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["community"] !== "string" || !body["community"].trim()) {
+    res.status(400).json({ error: "Missing required field: community", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const oltId     = body["id"].trim();
+  const ip        = body["ip"].trim();
+  const community = body["community"].trim();
+  const port      = body["port"]      !== undefined ? Number(body["port"])      : 161;
+  const vendorHint = typeof body["vendor"] === "string" ? body["vendor"].trim() : undefined;
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    res.status(400).json({ error: "Invalid port: must be 1–65535", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const probeAt = new Date().toISOString();
+  const start   = Date.now();
+  const client  = new RealSnmpClient({ host: ip, community, port, timeoutMs: 3_000, retries: 1 });
+
+  // ── Step 1: Connectivity test + vendor auto-detection ────────────────────
+  const connectivity = await client.testConnection();
+  if (!connectivity.success) {
+    res.status(502).json({
+      data:  { success: false, message: connectivity.error ?? "OLT did not respond" },
+      error: "OLT unreachable — check IP, community string, and SNMP access",
+      code:  "SNMP_UNREACHABLE",
+      meta:  { host: ip, port, generatedAt: probeAt },
+    });
+    return;
+  }
+
+  const detectedVendor = (connectivity.sysDescr || connectivity.sysObjectID)
+    ? detectVendorFromSysInfo(connectivity.sysDescr ?? "", connectivity.sysObjectID ?? "")
+    : "Unknown";
+  const vendor = detectedVendor !== "Unknown" ? detectedVendor : (vendorHint ?? "Unknown");
+
+  if (vendor === "Unknown") {
+    res.status(422).json({
+      data: {
+        success: false,
+        vendor:  "Unknown",
+        message: "Vendor could not be detected from sysDescr/sysObjectID. " +
+                 "Pass a vendor hint in the 'vendor' field (CDATA, Huawei, ZTE, BDCOM, VSOL).",
+      },
+      meta: { host: ip, port, generatedAt: probeAt },
+    });
+    return;
+  }
+
+  // ── Step 2: Read ONU management table ────────────────────────────────────
+  // GETBULK (index column, max 50) + GET (attribute columns for found ONUs).
+  // Bounded by design — exactly 2 SNMP PDUs, no walk loop.
+  const onuResult: ReadOnuTableResult = await client.readOnuTable(vendor, 50);
+
+  // ── Derive counts ─────────────────────────────────────────────────────────
+  const onlineCount  = onuResult.onus.filter(o => o.status === "online").length;
+  const offlineCount = onuResult.onus.filter(o => o.status === "offline").length;
+  const unknownCount = onuResult.onus.filter(o => o.status === "unknown").length;
+
+  // ── Per-PON-port breakdown ─────────────────────────────────────────────────
+  const portMap = new Map<string, { total: number; online: number; offline: number; unknown: number }>();
+  for (const onu of onuResult.onus) {
+    const e = portMap.get(onu.ponPort) ?? { total: 0, online: 0, offline: 0, unknown: 0 };
+    e.total++;
+    if (onu.status === "online")       e.online++;
+    else if (onu.status === "offline") e.offline++;
+    else                               e.unknown++;
+    portMap.set(onu.ponPort, e);
+  }
+
+  const ponPorts: RealPonPort[] = [...portMap.entries()].map(([id, counts]) => ({ id, ...counts }));
+  const onus: OnuDiscoverySummary[] = onuResult.onus.map(o => ({
+    onuId:   o.onuId,
+    ponPort: o.ponPort,
+    status:  o.status,
+    serial:  o.serial,
+    type:    o.type,
+  }));
+
+  const result: OnuDiscoveryResult = {
+    hasData:      true,
+    oltId,
+    totalOnus:    onuResult.totalFound,
+    onlineOnus:   onlineCount,
+    offlineOnus:  offlineCount,
+    unknownOnus:  unknownCount,
+    ponPortCount: portMap.size,
+    ponPorts,
+    onus,
+    discoveredAt: probeAt,
+    latencyMs:    Date.now() - start,
+    source:       "live-snmp",
+    vendor,
+    mibUsed:      onuResult.mibUsed,
+    message:      onuResult.message,
+  };
+
+  // ── Cache result by OLT ID ───────────────────────────────────────────────
+  onuDiscoveryCache.set(oltId, result);
+
+  res.json({
+    data: result,
+    meta: {
+      host:        ip,
+      port,
+      vendor,
+      generatedAt: probeAt,
+      cached:      true,
+    },
+  });
+});
+
+// GET /api/olts/:id/onus/real — return cached ONU discovery result for an OLT
+//
+// Returns the result of the last successful POST /discover-onus call for this
+// OLT ID, or { hasData: false } if no discovery has been performed yet.
+oltRouter.get("/:id/onus/real", (req: Request, res: Response) => {
+  const oltId = req.params["id"] as string;
+  const cached = onuDiscoveryCache.get(oltId);
+
+  if (!cached) {
+    const empty: OnuDiscoveryEmpty = { hasData: false, oltId };
+    res.json({ data: empty, meta: { generatedAt: new Date().toISOString() } });
+    return;
+  }
+
+  res.json({
+    data: cached,
+    meta: { generatedAt: new Date().toISOString(), cachedAt: cached.discoveredAt },
   });
 });
 

@@ -2,6 +2,7 @@ import type { VendorAdapter, AdapterCapabilities } from "../../core/adapter-regi
 import type { OltNormalized, OltPollRequest } from "../../types/olt.types";
 import type { OnuNormalized, OnuPollRequest } from "../../types/onu.types";
 import type { AlarmNormalized } from "../../types/alarm.types";
+import type { OnuDiscoveryResult } from "../../types/onu-discovery.types";
 
 /**
  * Generic OLT Adapter — RFC-compliant SNMP fallback
@@ -17,6 +18,7 @@ import type { AlarmNormalized } from "../../types/alarm.types";
  *  - No ONU-specific optical data (vendor MIB required)
  *  - No ONU registration/auth info (vendor MIB required)
  *  - Alarm detection limited to link-down traps
+ *  - ONU discovery not possible without vendor MIB
  *
  * TODO:
  *  - Implement IF-MIB walk for port stats
@@ -28,18 +30,17 @@ export class GenericAdapter implements VendorAdapter {
 
   capabilities(): AdapterCapabilities {
     return {
-      oltInfo: true,
-      onuDiscovery: false, // requires vendor MIB
+      oltInfo:      true,
+      onuDiscovery: false,
       opticalPower: false,
-      trafficStats: true,  // IF-MIB counters
-      alarmPolling: false, // trap-based link-down only
-      configRead: false,
-      configWrite: false,
+      trafficStats: true,
+      alarmPolling: false,
+      configRead:   false,
+      configWrite:  false,
     };
   }
 
   async pollOlt(_request: OltPollRequest): Promise<OltNormalized> {
-    // TODO: SNMP walk IF-MIB + ENTITY-MIB for basic system info
     throw new Error("GenericAdapter.pollOlt — not yet implemented");
   }
 
@@ -48,7 +49,16 @@ export class GenericAdapter implements VendorAdapter {
   }
 
   async pollAlarms(_oltRequest: OltPollRequest): Promise<AlarmNormalized[]> {
-    // TODO: link-down trap listener via IF-MIB
     throw new Error("GenericAdapter.pollAlarms — not yet implemented");
+  }
+
+  async discoverOnus(_request: OltPollRequest): Promise<OnuDiscoveryResult> {
+    // ONU discovery requires a vendor-specific GPON/EPON MIB.
+    // The generic adapter only uses standard RFC MIBs and cannot discover ONUs.
+    throw new Error(
+      "GenericAdapter.discoverOnus — not supported. " +
+      "ONU discovery requires a vendor-specific GPON/EPON MIB. " +
+      "Use a vendor-specific adapter (CDATA, Huawei, ZTE, BDCOM, VSOL)."
+    );
   }
 }

@@ -2,6 +2,7 @@ import type { OltVendor } from "../types/olt.types";
 import type { OltNormalized, OltPollRequest } from "../types/olt.types";
 import type { OnuNormalized, OnuPollRequest } from "../types/onu.types";
 import type { AlarmNormalized } from "../types/alarm.types";
+import type { OnuDiscoveryResult } from "../types/onu-discovery.types";
 
 export interface AdapterCapabilities {
   oltInfo: boolean;
@@ -19,6 +20,17 @@ export interface VendorAdapter {
   pollOlt(request: OltPollRequest): Promise<OltNormalized>;
   pollOnu(request: OnuPollRequest): Promise<OnuNormalized>;
   pollAlarms(oltRequest: OltPollRequest): Promise<AlarmNormalized[]>;
+
+  /**
+   * Discover all ONUs on this OLT using read-only SNMP.
+   *
+   * Returns counts (total, online, offline), per-PON-port breakdown, and a
+   * simplified ONU list (at most 50 entries). Never issues an SNMP SET.
+   *
+   * Implementations that do not yet have confirmed MIB OIDs should throw
+   * with a clear "not yet implemented" message so the API returns a useful error.
+   */
+  discoverOnus(request: OltPollRequest): Promise<OnuDiscoveryResult>;
 }
 
 /**

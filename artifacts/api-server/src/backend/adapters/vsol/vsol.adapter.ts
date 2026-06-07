@@ -2,6 +2,7 @@ import type { VendorAdapter, AdapterCapabilities } from "../../core/adapter-regi
 import type { OltNormalized, OltPollRequest } from "../../types/olt.types";
 import type { OnuNormalized, OnuPollRequest } from "../../types/onu.types";
 import type { AlarmNormalized } from "../../types/alarm.types";
+import type { OnuDiscoveryResult } from "../../types/onu-discovery.types";
 
 /**
  * VSOL OLT Adapter
@@ -24,28 +25,30 @@ export class VsolAdapter implements VendorAdapter {
 
   capabilities(): AdapterCapabilities {
     return {
-      oltInfo: true,
+      oltInfo:      true,
       onuDiscovery: true,
       opticalPower: true,
       trafficStats: false,
-      alarmPolling: false, // trap-based only; REST planned
-      configRead: false,
-      configWrite: false,
+      alarmPolling: false,
+      configRead:   false,
+      configWrite:  false,
     };
   }
 
   async pollOlt(_request: OltPollRequest): Promise<OltNormalized> {
-    // TODO: SNMP walk VSOL-GPON-MIB system table
     throw new Error("VsolAdapter.pollOlt — not yet implemented");
   }
 
   async pollOnu(_request: OnuPollRequest): Promise<OnuNormalized> {
-    // TODO: SNMP walk vsolGponOnuTable + optical table
     throw new Error("VsolAdapter.pollOnu — not yet implemented");
   }
 
   async pollAlarms(_oltRequest: OltPollRequest): Promise<AlarmNormalized[]> {
-    // TODO: SNMP trap listener (vsolGponOnuLOSAlarm, etc.)
     throw new Error("VsolAdapter.pollAlarms — not yet implemented");
+  }
+
+  async discoverOnus(_request: OltPollRequest): Promise<OnuDiscoveryResult> {
+    // TODO: walk vsolGponOnuTable once OIDs validated across firmware versions
+    throw new Error("VsolAdapter.discoverOnus — not yet implemented");
   }
 }

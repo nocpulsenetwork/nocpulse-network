@@ -2,6 +2,7 @@ import type { VendorAdapter, AdapterCapabilities } from "../../core/adapter-regi
 import type { OltNormalized, OltPollRequest } from "../../types/olt.types";
 import type { OnuNormalized, OnuPollRequest } from "../../types/onu.types";
 import type { AlarmNormalized } from "../../types/alarm.types";
+import type { OnuDiscoveryResult } from "../../types/onu-discovery.types";
 
 /**
  * BDCOM OLT Adapter
@@ -21,28 +22,30 @@ export class BdcomAdapter implements VendorAdapter {
 
   capabilities(): AdapterCapabilities {
     return {
-      oltInfo: true,
+      oltInfo:      true,
       onuDiscovery: true,
       opticalPower: true,
-      trafficStats: false, // limited on most BDCOM models via SNMP
+      trafficStats: false,
       alarmPolling: true,
-      configRead: false,
-      configWrite: false,
+      configRead:   false,
+      configWrite:  false,
     };
   }
 
   async pollOlt(_request: OltPollRequest): Promise<OltNormalized> {
-    // TODO: SNMP walk BDCOM-GPON-MIB OLT info tables
     throw new Error("BdcomAdapter.pollOlt — not yet implemented");
   }
 
   async pollOnu(_request: OnuPollRequest): Promise<OnuNormalized> {
-    // TODO: SNMP walk bdcomGponOnuInfoTable, bdcomGponOnuOptical
     throw new Error("BdcomAdapter.pollOnu — not yet implemented");
   }
 
   async pollAlarms(_oltRequest: OltPollRequest): Promise<AlarmNormalized[]> {
-    // TODO: SNMP trap receiver + event table walk
     throw new Error("BdcomAdapter.pollAlarms — not yet implemented");
+  }
+
+  async discoverOnus(_request: OltPollRequest): Promise<OnuDiscoveryResult> {
+    // TODO: walk bdcomGponOnuTable once OIDs are confirmed on target hardware
+    throw new Error("BdcomAdapter.discoverOnus — not yet implemented");
   }
 }
