@@ -570,6 +570,7 @@ export class RealSnmpClient {
       const session = this.createSession();
       session.getBulk(
         startOids,
+        0,               // nonRepeaters: 0 — all OIDs are repeating
         maxRepetitions,
         (error: Error | null, varbinds: snmp.Varbind[]) => {
           session.close();
@@ -1015,9 +1016,14 @@ export class RealSnmpClient {
       const inTree = batch.filter((vb) => vb.oid.startsWith(rootOid + "."));
       allVbs.push(...inTree);
       if (inTree.length === 0) break;
-      const last = batch[batch.length - 1];
-      if (!last || batch.length < batchSize) break;
-      cursor = last.oid;
+      // Advance cursor to the last in-tree OID so the next GETBULK continues
+      // from inside the subtree. Using the last OID of the full batch would
+      // jump the cursor past the enterprise subtree when the batch straddles
+      // the subtree boundary.
+      cursor = inTree[inTree.length - 1].oid;
+      // Stop if the device signals end-of-MIB on the last varbind
+      const lastType = (batch[batch.length - 1] as unknown as { type?: number }).type;
+      if (lastType === 130) break; // EndOfMibView
     }
 
     // ── Format each varbind ────────────────────────────────────────────────
