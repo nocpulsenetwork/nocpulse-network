@@ -61,7 +61,9 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 
 // ─── Signal helpers ──────────────────────────────────────────────────────────
 
-const getRxStyle = (power: number) => {
+const getRxStyle = (power: number | null) => {
+  if (power === null)
+    return { text: "text-muted-foreground/50", bg: "bg-muted/30", border: "border-border/30" };
   if (power > -24)
     return { text: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/25" };
   if (power >= -27)
@@ -71,7 +73,9 @@ const getRxStyle = (power: number) => {
   return { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/25" };
 };
 
-const getTxStyle = (power: number) => {
+const getTxStyle = (power: number | null) => {
+  if (power === null)
+    return { text: "text-muted-foreground/50", bg: "bg-muted/30", border: "border-border/30" };
   if (power < -5 || power > 6)
     return { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/25" };
   if (power < -1 || power > 4)
@@ -100,8 +104,9 @@ const getStabilityStyle = (stability: SignalStability) => {
   }
 };
 
-const getAutoStability = (onu: { status: string; signalLevel: number }): SignalStability => {
+const getAutoStability = (onu: { status: string; signalLevel: number | null }): SignalStability | null => {
   if (onu.status === "Offline") return "Offline";
+  if (onu.signalLevel === null) return null;  // no optical data — do not label signal quality
   if (onu.signalLevel <= -29) return "High Loss";
   if (onu.signalLevel <= -27) return "Unstable";
   if (onu.signalLevel <= -25) return "Weak Signal";
@@ -535,7 +540,7 @@ export default function OnuManagement() {
                 paginatedOnus.map((onu) => {
                   const parentOlt = olts.find((o) => o.id === onu.oltId);
                   const ponNum    = onu.onuNo.split("/")[1] ?? "?";
-                  const delta     = onu.lastOfflineRxPower !== null
+                  const delta     = onu.signalLevel !== null && onu.lastOfflineRxPower !== null
                     ? parseFloat((onu.signalLevel - onu.lastOfflineRxPower).toFixed(1))
                     : null;
                   const improved  = delta !== null && delta > 0;
@@ -601,7 +606,7 @@ export default function OnuManagement() {
                       {/* RX Power */}
                       <TableCell className="px-3 py-2 whitespace-nowrap">
                         <span className={`inline-flex items-center px-1.5 py-px rounded text-[11px] font-bold font-mono border ${rxStyle.text} ${rxStyle.bg} ${rxStyle.border}`}>
-                          {onu.signalLevel} dBm
+                          {onu.signalLevel != null ? onu.signalLevel : "N/A"} dBm
                         </span>
                         {delta !== null ? (
                           <div className={`flex items-center gap-0.5 mt-0.5 text-[10px] font-medium ${improved ? "text-green-400" : worsened ? "text-red-400" : "text-muted-foreground"}`}>
@@ -616,13 +621,13 @@ export default function OnuManagement() {
                       {/* TX Power */}
                       <TableCell className="px-3 py-2 whitespace-nowrap">
                         <span className={`inline-flex items-center px-1.5 py-px rounded text-[11px] font-bold font-mono border ${txStyle.text} ${txStyle.bg} ${txStyle.border}`}>
-                          {onu.txPower} dBm
+                          {onu.txPower != null ? onu.txPower : "N/A"} dBm
                         </span>
                       </TableCell>
 
                       {/* Distance */}
                       <TableCell className="px-3 py-2 text-right whitespace-nowrap hidden md:table-cell">
-                        <span className="text-[11px] font-semibold font-mono text-cyan-300">{onu.distance}</span>
+                        <span className="text-[11px] font-semibold font-mono text-cyan-300">{onu.distance ?? "—"}</span>
                       </TableCell>
 
                       {/* Uptime / Reason */}
@@ -639,9 +644,13 @@ export default function OnuManagement() {
 
                       {/* Stability */}
                       <TableCell className="px-3 py-2 whitespace-nowrap hidden md:table-cell">
-                        <span className={`inline-flex items-center px-1.5 py-px rounded text-[9px] font-semibold border ${getStabilityStyle(stability)}`}>
-                          {stability}
-                        </span>
+                        {stability !== null ? (
+                          <span className={`inline-flex items-center px-1.5 py-px rounded text-[9px] font-semibold border ${getStabilityStyle(stability)}`}>
+                            {stability}
+                          </span>
+                        ) : (
+                          <span className="text-[9px] text-muted-foreground/30">—</span>
+                        )}
                       </TableCell>
 
                       {/* Status */}

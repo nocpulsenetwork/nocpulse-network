@@ -42,6 +42,23 @@ export interface OnuDiscoverySummary {
    * See SnmpOnu.offlineReasonCode for the C-DATA/EasyPath value mapping.
    */
   offlineReasonCode: number | null;
+
+  /**
+   * ONU receive optical power in dBm, or null when not available from this
+   * firmware/vendor.  Null for EasyPath FD1208S-B0 (no confirmed optical OIDs).
+   */
+  rxPowerDbm: number | null;
+
+  /**
+   * ONU transmit optical power in dBm, or null when unavailable.
+   */
+  txPowerDbm: number | null;
+
+  /**
+   * Physical fiber distance from OLT to ONU in metres, or null when unavailable.
+   * Convert to km for display: `(distanceMeters / 1000).toFixed(2) + " km"`.
+   */
+  distanceMeters: number | null;
 }
 
 /** Per-PON-port summary derived from the ONU discovery list. */

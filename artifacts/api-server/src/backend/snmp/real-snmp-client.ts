@@ -188,6 +188,22 @@ export interface SnmpOnu {
    */
   offlineReasonCode?: number | null;
 
+  /**
+   * ONU receive optical power in dBm, or null when unavailable.
+   * Populated by vendor-specific optical table reads after discovery.
+   */
+  rxPowerDbm?: number | null;
+
+  /**
+   * ONU transmit optical power in dBm, or null when unavailable.
+   */
+  txPowerDbm?: number | null;
+
+  /**
+   * Physical fiber distance from OLT to ONU in metres, or null when unavailable.
+   */
+  distanceMeters?: number | null;
+
   /** Raw OID instance suffix — useful for debugging MIB mapping. */
   rawInstanceOid: string;
 }
@@ -1504,6 +1520,12 @@ export class RealSnmpClient {
         status,
         type,
         offlineReasonCode,
+        // Optical power and distance are not available in the EasyPath ONU registration
+        // table (1.3.6.1.4.1.17409.2.2.11.2.1.1). No confirmed optical OIDs exist for
+        // FD1208S-B0 V1.6.0. Fields left null — will show N/A in the UI.
+        rxPowerDbm:        null,
+        txPowerDbm:        null,
+        distanceMeters:    null,
         rawInstanceOid:    instSuffix,
       });
     }

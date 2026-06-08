@@ -800,6 +800,9 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
     name:              o.name ?? null,
     mac:               o.mac,
     offlineReasonCode: o.offlineReasonCode ?? null,
+    rxPowerDbm:        o.rxPowerDbm    ?? null,
+    txPowerDbm:        o.txPowerDbm    ?? null,
+    distanceMeters:    o.distanceMeters ?? null,
   }));
 
   const result: OnuDiscoveryResult = {

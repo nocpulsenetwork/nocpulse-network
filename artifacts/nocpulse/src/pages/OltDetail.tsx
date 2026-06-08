@@ -208,9 +208,9 @@ export default function OltDetail() {
   const majorAlarms    = unackedAlarms.filter(a => a.severity === 'Major');
   const minorAlarms    = unackedAlarms.filter(a => a.severity === 'Minor');
 
-  const goodSignalOnus = connectedOnus.filter(o => o.status === 'Online' && o.signalLevel > -25);
-  const warnSignalOnus = connectedOnus.filter(o => o.status === 'Online' && o.signalLevel <= -25 && o.signalLevel > -28);
-  const poorSignalOnus = connectedOnus.filter(o => o.status === 'Online' && o.signalLevel <= -28);
+  const goodSignalOnus = connectedOnus.filter(o => o.status === 'Online' && o.signalLevel !== null && o.signalLevel > -25);
+  const warnSignalOnus = connectedOnus.filter(o => o.status === 'Online' && o.signalLevel !== null && o.signalLevel <= -25 && o.signalLevel > -28);
+  const poorSignalOnus = connectedOnus.filter(o => o.status === 'Online' && o.signalLevel !== null && o.signalLevel <= -28);
   const totalOnlineForHealth = onlineOnus.length || 1;
 
   const onlinePct = connectedOnus.length > 0
@@ -285,9 +285,12 @@ export default function OltDetail() {
       offline:  offlineCount,
       degraded: degradedCount,
       status:   portStatus as 'Active' | 'Degraded' | 'Idle',
-      avgRx:    portOnus.length > 0
-        ? (portOnus.reduce((s, o) => s + o.signalLevel, 0) / portOnus.length).toFixed(1)
-        : '--',
+      avgRx:    (() => {
+        const withRx = portOnus.filter(o => o.signalLevel !== null);
+        return withRx.length > 0
+          ? (withRx.reduce((s, o) => s + (o.signalLevel as number), 0) / withRx.length).toFixed(1)
+          : '--';
+      })(),
     };
   });
 
@@ -1118,8 +1121,8 @@ export default function OltDetail() {
                         <span className={`h-1.5 w-1.5 rounded-full ${o.status === 'Online' ? 'bg-green-400' : o.status === 'Offline' ? 'bg-red-400' : 'bg-amber-400 animate-pulse'}`} />
                         {o.status}
                       </span>
-                      <span className={`text-[10px] font-mono font-bold ${o.signalLevel < -27 ? 'text-red-400' : o.signalLevel < -24 ? 'text-amber-400' : 'text-green-400'}`}>
-                        {o.signalLevel} dBm
+                      <span className={`text-[10px] font-mono font-bold ${o.signalLevel === null ? 'text-muted-foreground/40' : o.signalLevel < -27 ? 'text-red-400' : o.signalLevel < -24 ? 'text-amber-400' : 'text-green-400'}`}>
+                        {o.signalLevel != null ? `${o.signalLevel} dBm` : "N/A"}
                       </span>
                     </div>
                   </button>

@@ -111,6 +111,9 @@ export class CdataAdapter implements VendorAdapter {
         name:              o.name ?? null,
         mac:               o.mac,
         offlineReasonCode: o.offlineReasonCode ?? null,
+        rxPowerDbm:        o.rxPowerDbm    ?? null,
+        txPowerDbm:        o.txPowerDbm    ?? null,
+        distanceMeters:    o.distanceMeters ?? null,
       }));
       // Query physical port count from ifTable — gives us empty ports too.
       const rawPortCount = await client.readEasyPathPhysicalPorts();
@@ -197,6 +200,9 @@ export class CdataAdapter implements VendorAdapter {
       name:              o.name ?? null,
       mac:               o.mac,
       offlineReasonCode: o.offlineReasonCode ?? null,
+      rxPowerDbm:        o.rxPowerDbm    ?? null,
+      txPowerDbm:        o.txPowerDbm    ?? null,
+      distanceMeters:    o.distanceMeters ?? null,
     }));
 
     // ── Build human-readable message including PON type ────────────────────

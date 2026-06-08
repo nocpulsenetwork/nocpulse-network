@@ -143,8 +143,8 @@ export default function OnuDetail() {
   const isRealOnu = Boolean(onu.isReal);
 
   const isUp = onu.status !== "Offline";
-  const isPoorSignal    = !isRealOnu && onu.signalLevel < -28;
-  const isWarningSignal = !isRealOnu && onu.signalLevel >= -28 && onu.signalLevel < -25;
+  const isPoorSignal    = !isRealOnu && onu.signalLevel !== null && onu.signalLevel < -28;
+  const isWarningSignal = !isRealOnu && onu.signalLevel !== null && onu.signalLevel >= -28 && onu.signalLevel < -25;
 
   const seed = onu.id.charCodeAt(onu.id.length - 1);
   const maxBwMbps =
@@ -152,22 +152,23 @@ export default function OnuDetail() {
   // Fake traffic/speed values — only used for demo ONUs
   const dlMbps = (!isRealOnu && isUp) ? Math.round(maxBwMbps * 0.62 + (seed % 25)) : 0;
   const ulMbps = (!isRealOnu && isUp) ? Math.round(maxBwMbps * 0.23 + (seed % 12)) : 0;
+  const signalLevelSafe = onu.signalLevel ?? -50;  // safe fallback for demo-only computations
   const pingMs = isRealOnu ? null : !isUp
     ? null
-    : onu.signalLevel > -25
+    : signalLevelSafe > -25
       ? 5 + (seed % 4)
-      : onu.signalLevel > -28
+      : signalLevelSafe > -28
         ? 12 + (seed % 8)
         : 28 + (seed % 12);
 
   const powerDelta =
-    onu.lastOfflineRxPower !== null
+    onu.lastOfflineRxPower !== null && onu.signalLevel !== null
       ? parseFloat((onu.signalLevel - onu.lastOfflineRxPower).toFixed(1))
       : null;
   const powerImproved = powerDelta !== null && powerDelta > 0;
   const powerWorsened = powerDelta !== null && powerDelta < 0;
 
-  const lossRate = isRealOnu ? null : !isUp ? null : onu.signalLevel > -25 ? 0.04 : onu.signalLevel > -28 ? 2.8 : 8.2;
+  const lossRate = isRealOnu ? null : !isUp ? null : signalLevelSafe > -25 ? 0.04 : signalLevelSafe > -28 ? 2.8 : 8.2;
 
   const disconnectDuration =
     onu.lastLogoutTime !== "N/A"
@@ -223,10 +224,10 @@ export default function OnuDetail() {
         : { display: "Low", pill: "Low", status: "good" as const };
 
   const filledBars =
-    onu.signalLevel > -20 ? 5
-      : onu.signalLevel > -25 ? 4
-        : onu.signalLevel > -28 ? 3
-          : onu.signalLevel > -32 ? 2 : 1;
+    signalLevelSafe > -20 ? 5
+      : signalLevelSafe > -25 ? 4
+        : signalLevelSafe > -28 ? 3
+          : signalLevelSafe > -32 ? 2 : 1;
   const barColor =
     filledBars >= 4 ? "bg-green-500" : filledBars === 3 ? "bg-amber-500" : "bg-red-500";
 
@@ -423,7 +424,7 @@ export default function OnuDetail() {
         </Card>
 
         {/* TX Power */}
-        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : onu.txPower < -3 || onu.txPower > 5 ? "border-l-red-500" : "border-l-purple-500"}`}>
+        <Card className={`border-l-4 ${isRealOnu || onu.txPower == null ? "border-l-slate-500" : onu.txPower < -3 || onu.txPower > 5 ? "border-l-red-500" : "border-l-purple-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">TX Power</span>
@@ -436,9 +437,14 @@ export default function OnuDetail() {
               </>
             ) : (
               <>
-                <div className={`text-xl font-bold ${onu.txPower < -3 || onu.txPower > 5 ? "text-red-500" : onu.txPower < 0 ? "text-amber-500" : "text-green-500"}`}>
-                  {onu.txPower} <span className="text-xs font-normal text-muted-foreground">dBm</span>
-                </div>
+                {(() => {
+                  const tx = onu.txPower ?? 0;
+                  return (
+                    <div className={`text-xl font-bold ${tx < -3 || tx > 5 ? "text-red-500" : tx < 0 ? "text-amber-500" : "text-green-500"}`}>
+                      {onu.txPower != null ? onu.txPower : "N/A"} <span className="text-xs font-normal text-muted-foreground">dBm</span>
+                    </div>
+                  );
+                })()}
                 <div className="mt-1 text-[10px] text-muted-foreground">Range: −3 to +5 dBm</div>
               </>
             )}
@@ -460,7 +466,7 @@ export default function OnuDetail() {
             ) : (
               <>
                 <div className="text-xl font-bold">
-                  {onu.distance.replace(" km", "")} <span className="text-xs font-normal text-muted-foreground">km</span>
+                  {(onu.distance ?? "0").replace(" km", "")} <span className="text-xs font-normal text-muted-foreground">km</span>
                 </div>
                 <div className="mt-1 text-[10px] text-muted-foreground">Fiber length</div>
               </>
@@ -789,9 +795,9 @@ export default function OnuDetail() {
                 },
                 {
                   label: "Signal Quality",
-                  display: `${onu.signalLevel} dBm`,
-                  pill: filledBars >= 4 ? "Excellent" : filledBars === 3 ? "Good" : filledBars === 2 ? "Fair" : "Poor",
-                  status: (filledBars >= 4 ? "good" : filledBars === 3 ? "warn" : "bad") as "good" | "warn" | "bad" | "neutral",
+                  display: isRealOnu || onu.signalLevel === null ? "N/A" : `${onu.signalLevel} dBm`,
+                  pill: isRealOnu || onu.signalLevel === null ? "Unknown" : filledBars >= 4 ? "Excellent" : filledBars === 3 ? "Good" : filledBars === 2 ? "Fair" : "Poor",
+                  status: (isRealOnu || onu.signalLevel === null ? "neutral" : filledBars >= 4 ? "good" : filledBars === 3 ? "warn" : "bad") as "good" | "warn" | "bad" | "neutral",
                 },
                 {
                   label: "Stability",

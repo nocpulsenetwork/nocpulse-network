@@ -517,7 +517,7 @@ export default function Dashboard() {
 
   const topClients = [...onus]
     .filter(o => o.status === 'Online')
-    .sort((a, b) => b.signalLevel - a.signalLevel)
+    .sort((a, b) => (b.signalLevel ?? -999) - (a.signalLevel ?? -999))
     .slice(0, 7);
 
   /* ── Render ───────────────────────────────────────────────────────── */
@@ -724,11 +724,11 @@ export default function Dashboard() {
           <CardContent className="p-0">
             <div className="divide-y divide-border/40">
               {topClients.map((o, idx) => {
-                const good  = o.signalLevel > -22;
-                const warn  = !good && o.signalLevel > -25;
-                const sigC  = good ? 'text-green-400' : warn ? 'text-cyan-400' : 'text-amber-400';
+                const good  = o.signalLevel !== null && o.signalLevel > -22;
+                const warn  = o.signalLevel !== null && !good && o.signalLevel > -25;
+                const sigC  = o.signalLevel === null ? 'text-muted-foreground/40' : good ? 'text-green-400' : warn ? 'text-cyan-400' : 'text-amber-400';
                 const barC  = good ? 'bg-green-500'  : warn ? 'bg-cyan-500'  : 'bg-amber-500';
-                const barW  = Math.max(15, Math.min(100, ((o.signalLevel + 40) / 25) * 100));
+                const barW  = o.signalLevel !== null ? Math.max(15, Math.min(100, ((o.signalLevel + 40) / 25) * 100)) : 0;
                 return (
                   <Link key={o.id} href={`/onus/${o.id}`}>
                     <div className="px-3 py-2.5 flex items-center gap-2.5 hover:bg-muted/20 transition-colors cursor-pointer">
@@ -739,7 +739,7 @@ export default function Dashboard() {
                           <div className="h-1 w-14 bg-muted rounded-full overflow-hidden">
                             <div className={`h-full rounded-full ${barC}`} style={{ width: `${barW}%` }} />
                           </div>
-                          <span className={`text-[10px] font-mono ${sigC}`}>{o.signalLevel} dBm</span>
+                          <span className={`text-[10px] font-mono ${sigC}`}>{o.signalLevel != null ? `${o.signalLevel}` : "N/A"} dBm</span>
                         </div>
                       </div>
                       <div className="text-right shrink-0">

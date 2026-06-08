@@ -66,6 +66,12 @@ type RawDiscoveredOnu = {
   mac?: string | null;
   /** De-registration reason code (C-DATA/EasyPath INTEGER enum), or null/absent. */
   offlineReasonCode?: number | null;
+  /** ONU receive optical power in dBm, or null/absent when not available. */
+  rxPowerDbm?: number | null;
+  /** ONU transmit optical power in dBm, or null/absent when not available. */
+  txPowerDbm?: number | null;
+  /** Physical fiber distance in metres, or null/absent when not available. */
+  distanceMeters?: number | null;
 };
 
 // ── Offline reason decoder (C-DATA / EasyPath EPON) ──────────────────────────
@@ -97,9 +103,11 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
     oltId,
     onuNo:             `${ponPort}/${onu.onuId}`,
     description:       onu.name ?? "",  // real ONU name/alias from OLT
-    distance:          "N/A",
-    signalLevel:       -40.0,   // placeholder — real OIDs not yet polled
-    txPower:           -5.0,    // placeholder — real OIDs not yet polled
+    distance:          onu.distanceMeters != null
+                         ? `${(onu.distanceMeters / 1000).toFixed(2)} km`
+                         : null,   // real — show N/A in UI when null
+    signalLevel:       onu.rxPowerDbm ?? null,   // real RX power (null = N/A)
+    txPower:           onu.txPowerDbm ?? null,   // real TX power (null = N/A)
     status,
     macAddress:        onu.mac ?? onu.serial ?? "",  // real MAC preferred over serial
     clientMac:         "",

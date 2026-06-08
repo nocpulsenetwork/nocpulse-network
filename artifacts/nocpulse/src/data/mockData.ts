@@ -31,9 +31,9 @@ export interface OnuDevice {
   oltId: string;
   onuNo: string;           // e.g. "1/1/1" → slot/pon/onu
   description: string;
-  distance: string;
-  signalLevel: number;     // Current RX power dBm
-  txPower: number;         // Current TX power dBm
+  distance: string | null;       // Fiber distance string (e.g. "1.24 km"), null when unavailable
+  signalLevel: number | null;   // Current RX power dBm, null when unavailable
+  txPower: number | null;       // Current TX power dBm, null when unavailable
   status: Status;
   macAddress: string;      // ONU MAC
   clientMac: string;       // Router/client-side MAC
