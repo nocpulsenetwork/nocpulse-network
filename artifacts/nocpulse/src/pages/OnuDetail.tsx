@@ -113,16 +113,21 @@ export default function OnuDetail() {
   const displayDescription =
     customDescription || onu.description || onu.customerName || onu.onuNo || "Unknown ONU";
 
-  const isPoorSignal = onu.signalLevel < -28;
-  const isWarningSignal = onu.signalLevel >= -28 && onu.signalLevel < -25;
+  // Real ONUs (discovered via SNMP) have placeholder signalLevel/txPower values.
+  // Gate all signal-derived and mock-generated computations behind this flag.
+  const isRealOnu = Boolean(onu.isReal);
+
   const isUp = onu.status !== "Offline";
+  const isPoorSignal    = !isRealOnu && onu.signalLevel < -28;
+  const isWarningSignal = !isRealOnu && onu.signalLevel >= -28 && onu.signalLevel < -25;
 
   const seed = onu.id.charCodeAt(onu.id.length - 1);
   const maxBwMbps =
     parseInt(onu.bandwidth.split("/")[0].replace(/[^0-9]/g, "")) || 1000;
-  const dlMbps = isUp ? Math.round(maxBwMbps * 0.62 + (seed % 25)) : 0;
-  const ulMbps = isUp ? Math.round(maxBwMbps * 0.23 + (seed % 12)) : 0;
-  const pingMs = !isUp
+  // Fake traffic/speed values — only used for demo ONUs
+  const dlMbps = (!isRealOnu && isUp) ? Math.round(maxBwMbps * 0.62 + (seed % 25)) : 0;
+  const ulMbps = (!isRealOnu && isUp) ? Math.round(maxBwMbps * 0.23 + (seed % 12)) : 0;
+  const pingMs = isRealOnu ? null : !isUp
     ? null
     : onu.signalLevel > -25
       ? 5 + (seed % 4)
@@ -137,7 +142,7 @@ export default function OnuDetail() {
   const powerImproved = powerDelta !== null && powerDelta > 0;
   const powerWorsened = powerDelta !== null && powerDelta < 0;
 
-  const lossRate = !isUp ? null : onu.signalLevel > -25 ? 0.04 : onu.signalLevel > -28 ? 2.8 : 8.2;
+  const lossRate = isRealOnu ? null : !isUp ? null : onu.signalLevel > -25 ? 0.04 : onu.signalLevel > -28 ? 2.8 : 8.2;
 
   const disconnectDuration =
     onu.lastLogoutTime !== "N/A"
@@ -237,6 +242,56 @@ export default function OnuDetail() {
     [seed, dlMbps, ulMbps]
   );
 
+  // Typed row arrays extracted here to avoid JSX-incompatible inline `as` casts
+  const deviceInfoRows: { label: string; value: string; mono?: boolean; note?: string }[] = isRealOnu
+    ? [
+        { label: "OLT",          value: parentOlt?.name ?? onu.oltId },
+        { label: "OLT Port",     value: onu.oltPort, mono: true },
+        { label: "PON Port",     value: onu.ponPort },
+        { label: "ONU Index",    value: onu.onuNo, mono: true },
+        { label: "ONU Type",     value: onu.onuType },
+        { label: "Serial / MAC", value: onu.macAddress || "N/A", mono: true },
+        { label: "Status",       value: onu.status },
+        { label: "Last Seen",    value: onu.lastSync },
+      ]
+    : [
+        { label: "OLT",          value: parentOlt?.name ?? onu.oltId },
+        { label: "OLT Port",     value: onu.oltPort, mono: true },
+        { label: "PON Port",     value: onu.ponPort },
+        { label: "VLAN",         value: `${onu.vlanId}`, mono: true },
+        { label: "ONU Type",     value: onu.onuType },
+        { label: "ONU MAC",      value: onu.macAddress || "N/A", mono: true },
+        { label: "Client MAC",   value: hasClientMac ? onu.clientMac : "Auto Detect Pending", mono: hasClientMac, note: "Auto-detected from active session / line connection" },
+        { label: "Client IP",    value: clientIp, mono: true },
+        { label: "Serial No.",   value: onu.macAddress.replace(/:/g, "").slice(0, 12), mono: true },
+        { label: "Router Vendor", value: routerInfo.vendor },
+        { label: "Router Model", value: routerInfo.model },
+      ];
+
+  const networkRows: { label: string; value: string; mono?: boolean }[] = isRealOnu
+    ? [
+        { label: "PPPoE Username", value: "N/A" },
+        { label: "Gateway IP",     value: "N/A" },
+        { label: "DNS Primary",    value: "N/A" },
+        { label: "DNS Secondary",  value: "N/A" },
+        { label: "Connection Type", value: "Fiber PON" },
+        { label: "Bandwidth Plan", value: onu.bandwidth },
+        { label: "Status",         value: onu.status },
+        { label: "VLAN Tag",       value: "N/A" },
+        { label: "Last Sync",      value: onu.lastSync },
+      ]
+    : [
+        { label: "PPPoE Username", value: pppoeUser, mono: true },
+        { label: "Gateway IP",     value: gatewayIp, mono: true },
+        { label: "DNS Primary",    value: "8.8.8.8", mono: true },
+        { label: "DNS Secondary",  value: "1.1.1.1", mono: true },
+        { label: "Connection Type", value: "Fiber PON" },
+        { label: "Bandwidth Plan", value: onu.bandwidth },
+        { label: "Status",         value: onu.status },
+        { label: "VLAN Tag",       value: `${onu.vlanId}`, mono: true },
+        { label: "Last Sync",      value: onu.lastSync },
+      ];
+
   const timelineEvents = [
     { Icon: onu.status === "Offline" ? WifiOff : Wifi, color: onu.status === "Offline" ? "text-red-400 bg-red-500/10 border-red-500/20" : "text-green-400 bg-green-500/10 border-green-500/20", label: onu.status === "Offline" ? "ONU went offline" : "ONU came online", detail: onu.status === "Offline" ? "Lost keepalive — power interruption suspected" : `Registered on ${onu.oltPort} — link established`, time: "2 mins ago" },
     { Icon: TrendingUp, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20", label: "Signal normalized", detail: `RX recovered to ${onu.signalLevel} dBm after brief fluctuation`, time: "18 mins ago" },
@@ -262,9 +317,11 @@ export default function OnuDetail() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono font-bold text-lg tracking-tight">{onu.onuNo}</span>
               <StatusBadge status={onu.status} />
-              <Badge variant="outline" className={`text-[10px] ${stabilityConfig.badge}`}>
-                {stabilityConfig.label}
-              </Badge>
+              {!isRealOnu && (
+                <Badge variant="outline" className={`text-[10px] ${stabilityConfig.badge}`}>
+                  {stabilityConfig.label}
+                </Badge>
+              )}
               <Badge variant="outline" className={`text-[10px] font-bold ${onuTypeBadge}`}>
                 {onu.onuType}
               </Badge>
@@ -318,37 +375,55 @@ export default function OnuDetail() {
       {/* ── 5 Metric Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* RX Power */}
-        <Card className={`border-l-4 ${isPoorSignal ? "border-l-red-500" : isWarningSignal ? "border-l-amber-500" : "border-l-green-500"}`}>
+        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : isPoorSignal ? "border-l-red-500" : isWarningSignal ? "border-l-amber-500" : "border-l-green-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">RX Power</span>
               <Signal className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className={`text-xl font-bold ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}>
-              {onu.signalLevel} <span className="text-xs font-normal text-muted-foreground">dBm</span>
-            </div>
-            {powerDelta !== null ? (
-              <div className={`flex items-center gap-1 mt-1 text-[10px] font-medium ${powerImproved ? "text-green-500" : powerWorsened ? "text-red-400" : "text-muted-foreground"}`}>
-                {powerImproved ? <TrendingUp className="h-3 w-3" /> : powerWorsened ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
-                {powerImproved ? "+" : ""}{powerDelta} vs snapshot
-              </div>
+            {isRealOnu ? (
+              <>
+                <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">OID not yet polled</div>
+              </>
             ) : (
-              <div className="mt-1 text-[10px] text-muted-foreground">No prior snapshot</div>
+              <>
+                <div className={`text-xl font-bold ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}>
+                  {onu.signalLevel} <span className="text-xs font-normal text-muted-foreground">dBm</span>
+                </div>
+                {powerDelta !== null ? (
+                  <div className={`flex items-center gap-1 mt-1 text-[10px] font-medium ${powerImproved ? "text-green-500" : powerWorsened ? "text-red-400" : "text-muted-foreground"}`}>
+                    {powerImproved ? <TrendingUp className="h-3 w-3" /> : powerWorsened ? <TrendingDown className="h-3 w-3" /> : <Minus className="h-3 w-3" />}
+                    {powerImproved ? "+" : ""}{powerDelta} vs snapshot
+                  </div>
+                ) : (
+                  <div className="mt-1 text-[10px] text-muted-foreground">No prior snapshot</div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
 
         {/* TX Power */}
-        <Card className={`border-l-4 ${onu.txPower < -3 || onu.txPower > 5 ? "border-l-red-500" : "border-l-purple-500"}`}>
+        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : onu.txPower < -3 || onu.txPower > 5 ? "border-l-red-500" : "border-l-purple-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">TX Power</span>
               <Radio className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className={`text-xl font-bold ${onu.txPower < -3 || onu.txPower > 5 ? "text-red-500" : onu.txPower < 0 ? "text-amber-500" : "text-green-500"}`}>
-              {onu.txPower} <span className="text-xs font-normal text-muted-foreground">dBm</span>
-            </div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Range: −3 to +5 dBm</div>
+            {isRealOnu ? (
+              <>
+                <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">OID not yet polled</div>
+              </>
+            ) : (
+              <>
+                <div className={`text-xl font-bold ${onu.txPower < -3 || onu.txPower > 5 ? "text-red-500" : onu.txPower < 0 ? "text-amber-500" : "text-green-500"}`}>
+                  {onu.txPower} <span className="text-xs font-normal text-muted-foreground">dBm</span>
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">Range: −3 to +5 dBm</div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -404,19 +479,7 @@ export default function OnuDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-2">
-            {([
-              { label: "OLT", value: parentOlt?.name ?? onu.oltId },
-              { label: "OLT Port", value: onu.oltPort, mono: true },
-              { label: "PON Port", value: onu.ponPort },
-              { label: "VLAN", value: `${onu.vlanId}`, mono: true },
-              { label: "ONU Type", value: onu.onuType },
-              { label: "ONU MAC", value: onu.macAddress || "N/A", mono: true },
-              { label: "Client MAC", value: hasClientMac ? onu.clientMac : "Auto Detect Pending", mono: hasClientMac, note: "Auto-detected from active session / line connection" },
-              { label: "Client IP", value: clientIp, mono: true },
-              { label: "Serial No.", value: onu.macAddress.replace(/:/g, "").slice(0, 12), mono: true },
-              { label: "Router Vendor", value: routerInfo.vendor },
-              { label: "Router Model", value: routerInfo.model },
-            ] as { label: string; value: string; mono?: boolean; note?: string }[]).map(({ label, value, mono, note }) => (
+            {deviceInfoRows.map(({ label, value, mono, note }) => (
               <div key={label}>
                 <div className="flex items-start justify-between gap-2 text-xs">
                   <span className="text-muted-foreground shrink-0">{label}</span>
@@ -438,17 +501,7 @@ export default function OnuDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-2">
-            {([
-              { label: "PPPoE Username", value: pppoeUser, mono: true },
-              { label: "Gateway IP", value: gatewayIp, mono: true },
-              { label: "DNS Primary", value: "8.8.8.8", mono: true },
-              { label: "DNS Secondary", value: "1.1.1.1", mono: true },
-              { label: "Connection Type", value: "Fiber PON" },
-              { label: "Bandwidth Plan", value: onu.bandwidth },
-              { label: "Status", value: onu.status },
-              { label: "VLAN Tag", value: `${onu.vlanId}`, mono: true },
-              { label: "Last Sync", value: onu.lastSync },
-            ] as { label: string; value: string; mono?: boolean }[]).map(({ label, value, mono }) => (
+            {networkRows.map(({ label, value, mono }) => (
               <div key={label} className="flex items-start justify-between gap-2 text-xs">
                 <span className="text-muted-foreground shrink-0">{label}</span>
                 <span className={`font-medium text-right ${mono ? "font-mono break-all" : "truncate"} ${label === "Status" ? (onu.status === "Online" ? "text-green-500" : onu.status === "Offline" ? "text-red-400" : "text-amber-400") : ""}`}>
@@ -467,31 +520,41 @@ export default function OnuDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 text-center">
-                <Download className="h-4 w-4 text-blue-400 mx-auto mb-1" />
-                <div className="text-lg font-bold text-blue-400">{dlGb}</div>
-                <div className="text-[10px] text-muted-foreground">GB Download</div>
+            {isRealOnu ? (
+              <div className="flex flex-col items-center justify-center h-28 gap-2 text-muted-foreground/50">
+                <Tag className="h-8 w-8 opacity-30" />
+                <span className="text-xs">Traffic counters not available</span>
+                <span className="text-[10px] text-muted-foreground/60">No SNMP traffic OIDs polled yet</span>
               </div>
-              <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-center">
-                <Upload className="h-4 w-4 text-green-400 mx-auto mb-1" />
-                <div className="text-lg font-bold text-green-400">{ulGb}</div>
-                <div className="text-[10px] text-muted-foreground">GB Upload</div>
-              </div>
-            </div>
-            <div className="space-y-2">
-              {([
-                { label: "Current DL Speed", value: `${dlMbps} Mbps` },
-                { label: "Current UL Speed", value: `${ulMbps} Mbps` },
-                { label: "Daily Average", value: `${totalGb} GB/day` },
-                { label: "Monthly Est.", value: `${monthGb} GB` },
-              ]).map(({ label, value }) => (
-                <div key={label} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className="font-medium font-mono">{value}</span>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 text-center">
+                    <Download className="h-4 w-4 text-blue-400 mx-auto mb-1" />
+                    <div className="text-lg font-bold text-blue-400">{dlGb}</div>
+                    <div className="text-[10px] text-muted-foreground">GB Download</div>
+                  </div>
+                  <div className="rounded-lg bg-green-500/10 border border-green-500/20 p-3 text-center">
+                    <Upload className="h-4 w-4 text-green-400 mx-auto mb-1" />
+                    <div className="text-lg font-bold text-green-400">{ulGb}</div>
+                    <div className="text-[10px] text-muted-foreground">GB Upload</div>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <div className="space-y-2">
+                  {([
+                    { label: "Current DL Speed", value: `${dlMbps} Mbps` },
+                    { label: "Current UL Speed", value: `${ulMbps} Mbps` },
+                    { label: "Daily Average", value: `${totalGb} GB/day` },
+                    { label: "Monthly Est.", value: `${monthGb} GB` },
+                  ]).map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{label}</span>
+                      <span className="font-medium font-mono">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -503,88 +566,108 @@ export default function OnuDetail() {
             <CardTitle className="text-sm flex items-center gap-2">
               <Activity className="h-4 w-4 text-primary" /> Realtime Internet Usage
             </CardTitle>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {pingMs !== null && (
-                <span className={`font-mono font-medium ${pingMs < 10 ? "text-green-500" : pingMs < 20 ? "text-amber-500" : "text-red-500"}`}>
-                  Ping: {pingMs} ms
-                </span>
-              )}
-              <span className="font-mono text-blue-400">DL: {dlMbps} Mbps</span>
-              <span className="font-mono text-green-400">UL: {ulMbps} Mbps</span>
-            </div>
+            {!isRealOnu && (
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                {pingMs !== null && (
+                  <span className={`font-mono font-medium ${pingMs < 10 ? "text-green-500" : pingMs < 20 ? "text-amber-500" : "text-red-500"}`}>
+                    Ping: {pingMs} ms
+                  </span>
+                )}
+                <span className="font-mono text-blue-400">DL: {dlMbps} Mbps</span>
+                <span className="font-mono text-green-400">UL: {ulMbps} Mbps</span>
+              </div>
+            )}
           </div>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <ResponsiveContainer width="100%" height={180}>
-            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="ulGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" vertical={false} />
-              <XAxis dataKey="t" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} interval={4} />
-              <YAxis yAxisId="bw" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
-              <YAxis yAxisId="ping" orientation="right" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} domain={[0, 80]} />
-              <RechartsTooltip
-                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: 11 }}
-                labelStyle={{ color: "hsl(var(--muted-foreground))" }}
-              />
-              <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
-              <Area yAxisId="bw" type="monotone" dataKey="dl" name="Download (Mbps)" stroke="#3b82f6" fill="url(#dlGrad)" strokeWidth={1.5} dot={false} />
-              <Area yAxisId="bw" type="monotone" dataKey="ul" name="Upload (Mbps)" stroke="#22c55e" fill="url(#ulGrad)" strokeWidth={1.5} dot={false} />
-              <Line yAxisId="ping" type="monotone" dataKey="ping" name="Ping (ms)" stroke="#f59e0b" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-            </ComposedChart>
-          </ResponsiveContainer>
+          {isRealOnu ? (
+            <div className="flex flex-col items-center justify-center h-[180px] gap-2 text-muted-foreground/50">
+              <Activity className="h-8 w-8 opacity-30" />
+              <span className="text-xs">Real-time speed data not available</span>
+              <span className="text-[10px] text-muted-foreground/60">No traffic counters polled via SNMP yet</span>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={180}>
+              <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="dlGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="ulGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border)/0.4)" vertical={false} />
+                <XAxis dataKey="t" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} interval={4} />
+                <YAxis yAxisId="bw" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="ping" orientation="right" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} domain={[0, 80]} />
+                <RechartsTooltip
+                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: 11 }}
+                  labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+                />
+                <Legend wrapperStyle={{ fontSize: 10, paddingTop: 4 }} />
+                <Area yAxisId="bw" type="monotone" dataKey="dl" name="Download (Mbps)" stroke="#3b82f6" fill="url(#dlGrad)" strokeWidth={1.5} dot={false} />
+                <Area yAxisId="bw" type="monotone" dataKey="ul" name="Upload (Mbps)" stroke="#22c55e" fill="url(#ulGrad)" strokeWidth={1.5} dot={false} />
+                <Line yAxisId="ping" type="monotone" dataKey="ping" name="Ping (ms)" stroke="#f59e0b" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
       {/* ── Optical Readings ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className={`border-l-4 ${isPoorSignal ? "border-l-red-500" : isWarningSignal ? "border-l-amber-500" : "border-l-green-500"}`}>
+        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : isPoorSignal ? "border-l-red-500" : isWarningSignal ? "border-l-amber-500" : "border-l-green-500"}`}>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-sm flex items-center gap-2">
               <Signal className="h-4 w-4" /> Current Optical Reading
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            <div className="flex items-end gap-4 mb-3">
-              <div>
-                <div className={`text-3xl font-bold ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}>
-                  {onu.signalLevel}
-                </div>
-                <div className="text-xs text-muted-foreground">dBm RX Power</div>
+            {isRealOnu ? (
+              <div className="flex flex-col items-center justify-center h-28 gap-2 text-muted-foreground/50">
+                <Signal className="h-8 w-8 opacity-30" />
+                <span className="text-xs">Optical OIDs not yet polled</span>
+                <span className="text-[10px] text-muted-foreground/60">RX / TX values will appear after SNMP optical poll</span>
               </div>
-              <div className="flex items-end gap-1 h-10 mb-1">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-3 rounded-sm transition-none ${i < filledBars ? barColor : "bg-muted"}`}
-                    style={{ height: `${(i + 1) * 20}%` }}
-                  />
-                ))}
-              </div>
-              <Badge variant="outline" className={`text-xs ${stabilityConfig.badge} mb-1`}>
-                {stabilityConfig.label}
-              </Badge>
-            </div>
-            <div className="space-y-1.5 text-xs">
-              {([
-                { label: "TX Power", value: `${onu.txPower} dBm` },
-                { label: "Stability", value: stabilityConfig.label },
-                { label: "Note", value: stabilityConfig.desc },
-              ]).map(({ label, value }) => (
-                <div key={label} className="flex items-start justify-between gap-2">
-                  <span className="text-muted-foreground shrink-0">{label}</span>
-                  <span className="text-right text-foreground/80">{value}</span>
+            ) : (
+              <>
+                <div className="flex items-end gap-4 mb-3">
+                  <div>
+                    <div className={`text-3xl font-bold ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}>
+                      {onu.signalLevel}
+                    </div>
+                    <div className="text-xs text-muted-foreground">dBm RX Power</div>
+                  </div>
+                  <div className="flex items-end gap-1 h-10 mb-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className={`w-3 rounded-sm transition-none ${i < filledBars ? barColor : "bg-muted"}`}
+                        style={{ height: `${(i + 1) * 20}%` }}
+                      />
+                    ))}
+                  </div>
+                  <Badge variant="outline" className={`text-xs ${stabilityConfig.badge} mb-1`}>
+                    {stabilityConfig.label}
+                  </Badge>
                 </div>
-              ))}
-            </div>
+                <div className="space-y-1.5 text-xs">
+                  {([
+                    { label: "TX Power", value: `${onu.txPower} dBm` },
+                    { label: "Stability", value: stabilityConfig.label },
+                    { label: "Note", value: stabilityConfig.desc },
+                  ]).map(({ label, value }) => (
+                    <div key={label} className="flex items-start justify-between gap-2">
+                      <span className="text-muted-foreground shrink-0">{label}</span>
+                      <span className="text-right text-foreground/80">{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -644,66 +727,74 @@ export default function OnuDetail() {
           </CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4">
-          <div className="space-y-1">
-            {([
-              {
-                label: "Ping Report",
-                display: pingMs !== null ? `${pingMs} ms` : "—",
-                pill: pingMs === null ? "Offline" : pingMs < 10 ? "Excellent" : pingMs < 20 ? "Acceptable" : "High Latency",
-                status: pingMs === null ? "neutral" : pingMs < 10 ? "good" : pingMs < 20 ? "warn" : "bad",
-              },
-              {
-                label: "Packet Loss",
-                display: lossRate !== null ? `${lossRate}%` : "—",
-                pill: lossRate === null ? "Offline" : lossRate < 1 ? "Negligible" : lossRate < 5 ? "Moderate" : "High Loss",
-                status: lossRate === null ? "neutral" : lossRate < 1 ? "good" : lossRate < 5 ? "warn" : "bad",
-              },
-              {
-                label: "Router Overload",
-                display: routerOverload.display,
-                pill: routerOverload.pill,
-                status: routerOverload.status,
-              },
-              {
-                label: "Fiber Attenuation",
-                display: isPoorSignal ? "High" : isWarningSignal ? "Moderate" : "Normal",
-                pill: isPoorSignal ? "Critical" : isWarningSignal ? "Monitor" : "Normal",
-                status: isPoorSignal ? "bad" : isWarningSignal ? "warn" : "good",
-              },
-              {
-                label: "Signal Quality",
-                display: `${onu.signalLevel} dBm`,
-                pill: filledBars >= 4 ? "Excellent" : filledBars === 3 ? "Good" : filledBars === 2 ? "Fair" : "Poor",
-                status: (filledBars >= 4 ? "good" : filledBars === 3 ? "warn" : "bad") as "good" | "warn" | "bad" | "neutral",
-              },
-              {
-                label: "Stability",
-                display: onu.signalStability,
-                pill: onu.signalStability === "Stable" ? "Stable" : onu.signalStability === "Offline" ? "Offline" : onu.signalStability === "High Loss" ? "Critical" : "Warning",
-                status: (onu.signalStability === "Stable" ? "good" : onu.signalStability === "Offline" || onu.signalStability === "High Loss" ? "bad" : "warn") as "good" | "warn" | "bad" | "neutral",
-              },
-            ]).map(({ label, display, pill, status }) => {
-              const pillCls = {
-                good:    "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
-                warn:    "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
-                bad:     "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
-                neutral: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/20",
-              }[status];
-              const dotCls = { good: "bg-green-500", warn: "bg-amber-500", bad: "bg-red-500", neutral: "bg-slate-400" }[status];
-              return (
-                <div key={label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotCls}`} />
-                    <span className="text-xs text-muted-foreground">{label}</span>
+          {isRealOnu ? (
+            <div className="flex flex-col items-center justify-center h-24 gap-2 text-muted-foreground/50">
+              <Gauge className="h-8 w-8 opacity-30" />
+              <span className="text-xs">Quality metrics not available for real ONUs yet</span>
+              <span className="text-[10px] text-muted-foreground/60">Requires SNMP ping, loss, and optical OID polling</span>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              {([
+                {
+                  label: "Ping Report",
+                  display: pingMs !== null ? `${pingMs} ms` : "—",
+                  pill: pingMs === null ? "Offline" : pingMs < 10 ? "Excellent" : pingMs < 20 ? "Acceptable" : "High Latency",
+                  status: pingMs === null ? "neutral" : pingMs < 10 ? "good" : pingMs < 20 ? "warn" : "bad",
+                },
+                {
+                  label: "Packet Loss",
+                  display: lossRate !== null ? `${lossRate}%` : "—",
+                  pill: lossRate === null ? "Offline" : lossRate < 1 ? "Negligible" : lossRate < 5 ? "Moderate" : "High Loss",
+                  status: lossRate === null ? "neutral" : lossRate < 1 ? "good" : lossRate < 5 ? "warn" : "bad",
+                },
+                {
+                  label: "Router Overload",
+                  display: routerOverload.display,
+                  pill: routerOverload.pill,
+                  status: routerOverload.status,
+                },
+                {
+                  label: "Fiber Attenuation",
+                  display: isPoorSignal ? "High" : isWarningSignal ? "Moderate" : "Normal",
+                  pill: isPoorSignal ? "Critical" : isWarningSignal ? "Monitor" : "Normal",
+                  status: isPoorSignal ? "bad" : isWarningSignal ? "warn" : "good",
+                },
+                {
+                  label: "Signal Quality",
+                  display: `${onu.signalLevel} dBm`,
+                  pill: filledBars >= 4 ? "Excellent" : filledBars === 3 ? "Good" : filledBars === 2 ? "Fair" : "Poor",
+                  status: (filledBars >= 4 ? "good" : filledBars === 3 ? "warn" : "bad") as "good" | "warn" | "bad" | "neutral",
+                },
+                {
+                  label: "Stability",
+                  display: onu.signalStability,
+                  pill: onu.signalStability === "Stable" ? "Stable" : onu.signalStability === "Offline" ? "Offline" : onu.signalStability === "High Loss" ? "Critical" : "Warning",
+                  status: (onu.signalStability === "Stable" ? "good" : onu.signalStability === "Offline" || onu.signalStability === "High Loss" ? "bad" : "warn") as "good" | "warn" | "bad" | "neutral",
+                },
+              ]).map(({ label, display, pill, status }) => {
+                const pillCls = {
+                  good:    "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30",
+                  warn:    "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+                  bad:     "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30",
+                  neutral: "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/20",
+                }[status];
+                const dotCls = { good: "bg-green-500", warn: "bg-amber-500", bad: "bg-red-500", neutral: "bg-slate-400" }[status];
+                return (
+                  <div key={label} className="flex items-center justify-between py-2 border-b border-border/40 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${dotCls}`} />
+                      <span className="text-xs text-muted-foreground">{label}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs font-mono font-medium text-foreground">{display}</span>
+                      <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${pillCls}`}>{pill}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-xs font-mono font-medium text-foreground">{display}</span>
-                    <span className={`text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${pillCls}`}>{pill}</span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -717,30 +808,38 @@ export default function OnuDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            <div className="space-y-0">
-              {timelineEvents.map((entry, idx) => {
-                const Icon = entry.Icon;
-                return (
-                  <div key={idx} className="flex items-start gap-3">
-                    <div className="flex flex-col items-center shrink-0">
-                      <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${entry.color}`}>
-                        <Icon className="h-3.5 w-3.5" />
+            {isRealOnu ? (
+              <div className="flex flex-col items-center justify-center h-28 gap-2 text-muted-foreground/50">
+                <Bell className="h-8 w-8 opacity-30" />
+                <span className="text-xs">No event history available</span>
+                <span className="text-[10px] text-muted-foreground/60">Activity log is not collected for real ONUs yet</span>
+              </div>
+            ) : (
+              <div className="space-y-0">
+                {timelineEvents.map((entry, idx) => {
+                  const Icon = entry.Icon;
+                  return (
+                    <div key={idx} className="flex items-start gap-3">
+                      <div className="flex flex-col items-center shrink-0">
+                        <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${entry.color}`}>
+                          <Icon className="h-3.5 w-3.5" />
+                        </div>
+                        {idx < timelineEvents.length - 1 && (
+                          <div className="w-px h-5 bg-border/50 my-0.5" />
+                        )}
                       </div>
-                      {idx < timelineEvents.length - 1 && (
-                        <div className="w-px h-5 bg-border/50 my-0.5" />
-                      )}
-                    </div>
-                    <div className="pb-3 flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-medium">{entry.label}</span>
-                        <span className="text-[10px] text-muted-foreground shrink-0">{entry.time}</span>
+                      <div className="pb-3 flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-medium">{entry.label}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0">{entry.time}</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{entry.detail}</p>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{entry.detail}</p>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
 

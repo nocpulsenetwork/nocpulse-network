@@ -49,6 +49,8 @@ export interface OnuDevice {
   lastOfflineRxPower: number | null;  // Last RX snapshot before offline
   signalStability: SignalStability;
   onuType: OnuType;
+  /** True for ONUs discovered via real SNMP polling. Suppresses mock/generated data in the UI. */
+  isReal?: boolean;
 }
 
 export interface Alarm {

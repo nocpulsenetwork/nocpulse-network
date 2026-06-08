@@ -72,8 +72,8 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
     onuNo:             `${onu.ponPort}/${onu.onuId}`,
     description:       "",
     distance:          "N/A",
-    signalLevel:       -40.0,
-    txPower:           -5.0,
+    signalLevel:       -40.0,   // placeholder — real OIDs not yet polled
+    txPower:           -5.0,    // placeholder — real OIDs not yet polled
     status,
     macAddress:        onu.serial ?? "",
     clientMac:         "",
@@ -89,6 +89,7 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
     lastOfflineRxPower: null,
     signalStability:   status === "Online" ? "Stable" : "Offline",
     onuType:           "EPON",
+    isReal:            true,
   };
 }
 
