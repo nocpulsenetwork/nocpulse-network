@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { type SignalStability, type OnuDevice, type Status } from "@/data/mockData";
+import { type SignalStability, type OnuDevice } from "@/data/mockData";
 import { useApiData } from "@/contexts/ApiDataContext";
 import { Input } from "@/components/ui/input";
 import {
@@ -128,7 +128,7 @@ type ConfirmAction = { type: "reboot" | "disable" | "enable"; onuId: string } | 
 
 export default function OnuManagement() {
   const { can } = usePermissions();
-  const { onus: apiOnus, olts } = useApiData();
+  const { onus, olts } = useApiData();
   const [, setLocation] = useLocation();
 
   const searchParams = new URLSearchParams(window.location.search);
@@ -159,72 +159,6 @@ export default function OnuManagement() {
     if (o) setOltFilter(o);
     if (p) setPonFilter(p);
   }, []);
-
-  // ── Real ONU discovery cache ─────────────────────────────────────────────
-  // Keyed by OLT ID. Populated by fetching /api/olts/:id/onus/real whenever
-  // the user filters to a specific OLT. Uses the same in-memory cache that
-  // OLT Details writes to after "Discover ONUs".
-  const [realOnusByOlt, setRealOnusByOlt] = useState<Record<string, OnuDevice[]>>({});
-
-  type RealOnuSummary = { onuId: string; ponPort: string; status: string };
-
-  useEffect(() => {
-    if (oltFilter === "All OLTs") return;
-    let cancelled = false;
-
-    fetch(`/api/olts/${encodeURIComponent(oltFilter)}/onus/real`)
-      .then((r) => r.json())
-      .then((json: { data?: { hasData: boolean; onus?: RealOnuSummary[] } }) => {
-        if (cancelled) return;
-        const d = json?.data;
-        if (!d?.hasData || !d.onus?.length) return;
-
-        const discovered: OnuDevice[] = d.onus.map((onu) => {
-          // SNMP port-0 → PON-1, port-1 → PON-2, … (0-indexed → 1-indexed)
-          const portNum = parseInt(onu.ponPort.replace("port-", ""), 10);
-          const ponPort = `PON-${isNaN(portNum) ? 1 : portNum + 1}`;
-          const status: Status = onu.status === "online" ? "Online" : "Offline";
-          return {
-            id:                `${oltFilter}-onu-${onu.onuId}`,
-            oltId:             oltFilter,
-            onuNo:             `${onu.ponPort}/${onu.onuId}`,
-            description:       "",
-            distance:          "N/A",
-            signalLevel:       -40.0,
-            txPower:           -5.0,
-            status,
-            macAddress:        "",
-            clientMac:         "",
-            customerName:      `ONU-${onu.onuId}`,
-            lastSync:          status === "Online" ? "Just now" : "Offline",
-            bandwidth:         "N/A",
-            lastLogoutTime:    "N/A",
-            lastLogoutReason:  "N/A",
-            onlineDuration:    "N/A",
-            ponPort,
-            vlanId:            0,
-            oltPort:           onu.ponPort,
-            lastOfflineRxPower: null,
-            signalStability:   status === "Online" ? "Stable" : "Offline",
-            onuType:           "EPON",
-          };
-        });
-
-        setRealOnusByOlt((prev) => ({ ...prev, [oltFilter]: discovered }));
-      })
-      .catch(() => {});
-
-    return () => { cancelled = true; };
-  }, [oltFilter]);
-
-  // Effective ONU list: real SNMP-discovered data when available for the
-  // active OLT filter, otherwise fall back to the API context data.
-  const onus = useMemo(() => {
-    if (oltFilter !== "All OLTs" && realOnusByOlt[oltFilter]) {
-      return realOnusByOlt[oltFilter];
-    }
-    return apiOnus;
-  }, [apiOnus, oltFilter, realOnusByOlt]);
 
   const oltNameMap = useMemo(() => {
     const m: Record<string, string> = {};
