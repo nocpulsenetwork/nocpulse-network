@@ -373,7 +373,7 @@ export default function OltDetail() {
                   <span className="font-medium text-foreground/80">
                     {isRealOlt && realOnus?.sysUpTimeSecs != null
                       ? fmtUptime(realOnus.sysUpTimeSecs)
-                      : olt.uptime}
+                      : isRealOlt ? 'N/A' : olt.uptime}
                   </span>
                 </span>
               </div>
@@ -396,12 +396,16 @@ export default function OltDetail() {
 
         {/* Footer strip */}
         <div className="px-4 sm:px-5 py-2.5 border-t border-border/30 bg-muted/10 flex flex-wrap items-center gap-x-5 gap-y-1.5">
-          <span className="text-[11px] text-muted-foreground">
-            Uplink: <span className="font-mono font-semibold text-foreground/70">{olt.uplinkPort}</span>
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            Uplink status: <UplinkBadge status={olt.uplinkStatus} />
-          </span>
+          {!isRealOlt && (
+            <span className="text-[11px] text-muted-foreground">
+              Uplink: <span className="font-mono font-semibold text-foreground/70">{olt.uplinkPort}</span>
+            </span>
+          )}
+          {!isRealOlt && (
+            <span className="text-[11px] text-muted-foreground">
+              Uplink status: <UplinkBadge status={olt.uplinkStatus} />
+            </span>
+          )}
           <span className="text-[11px] text-muted-foreground ml-auto">
             Last sync: <span className="font-medium text-foreground/70">{lastSyncAgo}</span>
           </span>
@@ -663,100 +667,127 @@ export default function OltDetail() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
         {/* CPU */}
-        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm space-y-1 ${olt.cpu > 80 ? 'border-red-500/30' : olt.cpu > 60 ? 'border-amber-500/30' : 'border-border/60'}`}>
+        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm space-y-1 border-border/60`}>
           <div className="flex items-center gap-2 mb-3">
             <Cpu className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-semibold text-muted-foreground">CPU Usage</span>
-            {olt.cpu > 80 && <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">HIGH</span>}
           </div>
-          <div className="flex items-center gap-4">
-            <Gauge value={olt.cpu} label="CPU" colorClass={getResColor(olt.cpu, false)} />
-            <div className="flex-1 space-y-2">
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-muted-foreground">Load</span>
-                  <span className="font-mono font-bold">{olt.cpu === 0 ? '—' : `${olt.cpu}%`}</span>
-                </div>
-                <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${olt.cpu > 80 ? 'bg-red-500' : olt.cpu > 60 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${olt.cpu}%` }} />
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground">{olt.status === 'Offline' ? 'Device offline' : olt.cpu > 80 ? 'Critical load' : olt.cpu > 60 ? 'Elevated' : 'Normal'}</p>
+          {isRealOlt ? (
+            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+              <span className="text-2xl font-bold">—</span>
+              <span className="text-[10px]">Not polled via SNMP</span>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Gauge value={olt.cpu} label="CPU" colorClass={getResColor(olt.cpu, false)} />
+              <div className="flex-1 space-y-2">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-muted-foreground">Load</span>
+                    <span className="font-mono font-bold">{olt.cpu === 0 ? '—' : `${olt.cpu}%`}</span>
+                  </div>
+                  <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${olt.cpu > 80 ? 'bg-red-500' : olt.cpu > 60 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${olt.cpu}%` }} />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">{olt.status === 'Offline' ? 'Device offline' : olt.cpu > 80 ? 'Critical load' : olt.cpu > 60 ? 'Elevated' : 'Normal'}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Memory */}
-        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm ${olt.memory > 80 ? 'border-red-500/30' : olt.memory > 60 ? 'border-amber-500/30' : 'border-border/60'}`}>
+        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm border-border/60`}>
           <div className="flex items-center gap-2 mb-3">
             <MemoryStick className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-semibold text-muted-foreground">Memory</span>
-            {olt.memory > 80 && <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">HIGH</span>}
           </div>
-          <div className="flex items-center gap-4">
-            <Gauge value={olt.memory} label="RAM" colorClass={getResColor(olt.memory, false)} />
-            <div className="flex-1 space-y-2">
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-muted-foreground">Used</span>
-                  <span className="font-mono font-bold">{olt.memory === 0 ? '—' : `${olt.memory}%`}</span>
-                </div>
-                <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${olt.memory > 80 ? 'bg-red-500' : olt.memory > 60 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${olt.memory}%` }} />
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground">{olt.status === 'Offline' ? 'Device offline' : olt.memory > 80 ? 'Near capacity' : olt.memory > 60 ? 'Moderate' : 'Healthy'}</p>
+          {isRealOlt ? (
+            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+              <span className="text-2xl font-bold">—</span>
+              <span className="text-[10px]">Not polled via SNMP</span>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Gauge value={olt.memory} label="RAM" colorClass={getResColor(olt.memory, false)} />
+              <div className="flex-1 space-y-2">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-muted-foreground">Used</span>
+                    <span className="font-mono font-bold">{olt.memory === 0 ? '—' : `${olt.memory}%`}</span>
+                  </div>
+                  <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${olt.memory > 80 ? 'bg-red-500' : olt.memory > 60 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${olt.memory}%` }} />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">{olt.status === 'Offline' ? 'Device offline' : olt.memory > 80 ? 'Near capacity' : olt.memory > 60 ? 'Moderate' : 'Healthy'}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Temperature */}
-        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm ${olt.temperature > 55 ? 'border-red-500/30' : olt.temperature > 45 ? 'border-amber-500/30' : 'border-border/60'}`}>
+        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm border-border/60`}>
           <div className="flex items-center gap-2 mb-3">
             <Thermometer className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-semibold text-muted-foreground">Temperature</span>
-            {olt.temperature > 55 && <span className="ml-auto text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20">HOT</span>}
           </div>
-          <div className="flex items-center gap-4">
-            <Gauge value={olt.temperature} max={80} label="Temp" unit="°C" colorClass={getResColor(olt.temperature, true)} />
-            <div className="flex-1 space-y-2">
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px]">
-                  <span className="text-muted-foreground">Celsius</span>
-                  <span className="font-mono font-bold">{olt.temperature === 0 ? '—' : `${olt.temperature}°C`}</span>
-                </div>
-                <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${olt.temperature > 55 ? 'bg-red-500' : olt.temperature > 45 ? 'bg-amber-500' : 'bg-green-500'}`}
-                    style={{ width: `${Math.min(100, (olt.temperature / 80) * 100)}%` }} />
-                </div>
-              </div>
-              <p className="text-[10px] text-muted-foreground">{olt.status === 'Offline' ? 'Device offline' : olt.temperature > 55 ? 'Overheating' : olt.temperature > 45 ? 'Warm' : 'Normal'}</p>
+          {isRealOlt ? (
+            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+              <span className="text-2xl font-bold">—</span>
+              <span className="text-[10px]">Not polled via SNMP</span>
             </div>
-          </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Gauge value={olt.temperature} max={80} label="Temp" unit="°C" colorClass={getResColor(olt.temperature, true)} />
+              <div className="flex-1 space-y-2">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[10px]">
+                    <span className="text-muted-foreground">Celsius</span>
+                    <span className="font-mono font-bold">{olt.temperature === 0 ? '—' : `${olt.temperature}°C`}</span>
+                  </div>
+                  <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${olt.temperature > 55 ? 'bg-red-500' : olt.temperature > 45 ? 'bg-amber-500' : 'bg-green-500'}`}
+                      style={{ width: `${Math.min(100, (olt.temperature / 80) * 100)}%` }} />
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground">{olt.status === 'Offline' ? 'Device offline' : olt.temperature > 55 ? 'Overheating' : olt.temperature > 45 ? 'Warm' : 'Normal'}</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Uplink */}
-        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm ${olt.uplinkStatus === 'Down' ? 'border-red-500/30' : olt.uplinkStatus === 'Standby' ? 'border-amber-500/30' : 'border-border/60'}`}>
+        <div className={`rounded-xl border bg-card/80 p-4 shadow-sm border-border/60`}>
           <div className="flex items-center gap-2 mb-3">
             <Network className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="text-xs font-semibold text-muted-foreground">Uplink</span>
-            <span className="ml-auto"><UplinkBadge status={olt.uplinkStatus} /></span>
+            {!isRealOlt && <span className="ml-auto"><UplinkBadge status={olt.uplinkStatus} /></span>}
           </div>
-          <div className="flex items-center gap-2 mb-3 p-2.5 rounded-lg bg-muted/20 border border-border/40">
-            <div className="flex flex-col items-center gap-0.5">
-              <ArrowUp className={`h-3 w-3 ${olt.uplinkStatus === 'Active' ? 'text-green-400' : 'text-muted-foreground/40'}`} />
-              <ArrowDown className={`h-3 w-3 ${olt.uplinkStatus === 'Active' ? 'text-cyan-400' : 'text-muted-foreground/40'}`} />
+          {isRealOlt ? (
+            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+              <span className="text-2xl font-bold">—</span>
+              <span className="text-[10px]">Not polled via SNMP</span>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[11px] font-bold font-mono truncate">{olt.uplinkPort}</p>
-              <p className="text-[9px] text-muted-foreground">10G Ethernet uplink</p>
-            </div>
-            <Zap className={`h-4 w-4 shrink-0 ${olt.uplinkStatus === 'Active' ? 'text-green-400' : olt.uplinkStatus === 'Standby' ? 'text-amber-400' : 'text-red-400'}`} />
-          </div>
-          <div className="flex items-center justify-between text-[10px]">
-            <span className="text-muted-foreground">Last sync</span>
-            <span className="font-medium">{lastSyncAgo}</span>
-          </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 mb-3 p-2.5 rounded-lg bg-muted/20 border border-border/40">
+                <div className="flex flex-col items-center gap-0.5">
+                  <ArrowUp className={`h-3 w-3 ${olt.uplinkStatus === 'Active' ? 'text-green-400' : 'text-muted-foreground/40'}`} />
+                  <ArrowDown className={`h-3 w-3 ${olt.uplinkStatus === 'Active' ? 'text-cyan-400' : 'text-muted-foreground/40'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold font-mono truncate">{olt.uplinkPort}</p>
+                  <p className="text-[9px] text-muted-foreground">10G Ethernet uplink</p>
+                </div>
+                <Zap className={`h-4 w-4 shrink-0 ${olt.uplinkStatus === 'Active' ? 'text-green-400' : olt.uplinkStatus === 'Standby' ? 'text-amber-400' : 'text-red-400'}`} />
+              </div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">Last sync</span>
+                <span className="font-medium">{lastSyncAgo}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -767,46 +798,58 @@ export default function OltDetail() {
             <Signal className="h-4 w-4 text-primary" />
             <span className="text-sm font-semibold">Signal Health</span>
           </div>
-          <span className="text-[11px] text-muted-foreground">{onlineOnus.length} online ONUs</span>
+          <span className="text-[11px] text-muted-foreground">
+            {isRealOlt ? (realOnus ? `${realOnus.onlineOnus} online ONUs` : 'No data') : `${onlineOnus.length} online ONUs`}
+          </span>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { label: 'Good Signal',    sub: '> −25 dBm',       count: goodSignalOnus.length, color: 'text-green-400', bar: 'bg-green-500', border: 'border-green-500/20', bg: 'bg-green-500/5' },
-            { label: 'Warning Signal', sub: '−25 to −28 dBm',  count: warnSignalOnus.length, color: 'text-amber-400', bar: 'bg-amber-500', border: 'border-amber-500/20', bg: 'bg-amber-500/5' },
-            { label: 'Poor Signal',    sub: '< −28 dBm',       count: poorSignalOnus.length, color: 'text-red-400',   bar: 'bg-red-500',   border: 'border-red-500/20',   bg: 'bg-red-500/5' },
-          ].map(s => {
-            const pct = Math.round((s.count / totalOnlineForHealth) * 100);
-            return (
-              <div key={s.label} className={`rounded-lg border ${s.border} ${s.bg} p-3 space-y-2`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`text-xs font-semibold ${s.color}`}>{s.label}</p>
-                    <p className="text-[10px] text-muted-foreground">{s.sub}</p>
+        {isRealOlt ? (
+          <div className="flex flex-col items-center justify-center h-20 gap-2 text-muted-foreground/40">
+            <Signal className="h-7 w-7 opacity-30" />
+            <span className="text-xs">Signal OIDs not yet polled</span>
+            <span className="text-[10px]">Per-ONU RX power is not collected from this OLT via SNMP</span>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[
+                { label: 'Good Signal',    sub: '> −25 dBm',       count: goodSignalOnus.length, color: 'text-green-400', bar: 'bg-green-500', border: 'border-green-500/20', bg: 'bg-green-500/5' },
+                { label: 'Warning Signal', sub: '−25 to −28 dBm',  count: warnSignalOnus.length, color: 'text-amber-400', bar: 'bg-amber-500', border: 'border-amber-500/20', bg: 'bg-amber-500/5' },
+                { label: 'Poor Signal',    sub: '< −28 dBm',       count: poorSignalOnus.length, color: 'text-red-400',   bar: 'bg-red-500',   border: 'border-red-500/20',   bg: 'bg-red-500/5' },
+              ].map(s => {
+                const pct = Math.round((s.count / totalOnlineForHealth) * 100);
+                return (
+                  <div key={s.label} className={`rounded-lg border ${s.border} ${s.bg} p-3 space-y-2`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={`text-xs font-semibold ${s.color}`}>{s.label}</p>
+                        <p className="text-[10px] text-muted-foreground">{s.sub}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-xl font-bold font-mono ${s.color}`}>{s.count}</p>
+                        <p className="text-[10px] text-muted-foreground">{pct}%</p>
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${s.bar}`} style={{ width: `${pct}%` }} />
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-xl font-bold font-mono ${s.color}`}>{s.count}</p>
-                    <p className="text-[10px] text-muted-foreground">{pct}%</p>
-                  </div>
-                </div>
-                <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${s.bar}`} style={{ width: `${pct}%` }} />
-                </div>
+                );
+              })}
+            </div>
+            <div className="space-y-1.5">
+              <div className="h-2.5 bg-muted rounded-full overflow-hidden flex">
+                <div className="bg-green-500 h-full" style={{ width: `${Math.round((goodSignalOnus.length / totalOnlineForHealth) * 100)}%` }} />
+                <div className="bg-amber-500 h-full" style={{ width: `${Math.round((warnSignalOnus.length / totalOnlineForHealth) * 100)}%` }} />
+                <div className="bg-red-500 h-full" style={{ width: `${Math.round((poorSignalOnus.length / totalOnlineForHealth) * 100)}%` }} />
               </div>
-            );
-          })}
-        </div>
-        <div className="space-y-1.5">
-          <div className="h-2.5 bg-muted rounded-full overflow-hidden flex">
-            <div className="bg-green-500 h-full" style={{ width: `${Math.round((goodSignalOnus.length / totalOnlineForHealth) * 100)}%` }} />
-            <div className="bg-amber-500 h-full" style={{ width: `${Math.round((warnSignalOnus.length / totalOnlineForHealth) * 100)}%` }} />
-            <div className="bg-red-500 h-full" style={{ width: `${Math.round((poorSignalOnus.length / totalOnlineForHealth) * 100)}%` }} />
-          </div>
-          <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Good ({Math.round((goodSignalOnus.length / totalOnlineForHealth) * 100)}%)</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Warning ({Math.round((warnSignalOnus.length / totalOnlineForHealth) * 100)}%)</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Poor ({Math.round((poorSignalOnus.length / totalOnlineForHealth) * 100)}%)</span>
-          </div>
-        </div>
+              <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500 inline-block" /> Good ({Math.round((goodSignalOnus.length / totalOnlineForHealth) * 100)}%)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Warning ({Math.round((warnSignalOnus.length / totalOnlineForHealth) * 100)}%)</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Poor ({Math.round((poorSignalOnus.length / totalOnlineForHealth) * 100)}%)</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── Main body: left col (PON sections) + right sidebar ───────────────── */}

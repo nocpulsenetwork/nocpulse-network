@@ -93,6 +93,30 @@ export default function OnuDetail() {
   const id = params?.id;
   const onu = onus.find((o) => o.id === id);
 
+  // ── Hooks must be declared before any early return (React rules of hooks) ─
+  const stabilityConfig = useMemo(() => {
+    const map: Record<string, { color: string; bg: string; border: string; badge: string; label: string; desc: string }> = {
+      Stable:        { color: "text-green-500", bg: "bg-green-500/10", border: "border-l-green-500", badge: "bg-green-500/10 text-green-500 border-green-500/20",   label: "Stable",       desc: "Signal consistent within ±0.5 dBm" },
+      "Weak Signal": { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-l-amber-400", badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",   label: "Weak Signal",  desc: "RX near warning threshold" },
+      Unstable:      { color: "text-amber-500", bg: "bg-amber-500/10", border: "border-l-amber-500", badge: "bg-amber-500/10 text-amber-500 border-amber-500/20",   label: "Unstable",     desc: "Signal varies ±2–4 dBm" },
+      "High Loss":   { color: "text-red-500",   bg: "bg-red-500/10",   border: "border-l-red-500",   badge: "bg-red-500/10 text-red-500 border-red-500/20",         label: "High Loss",    desc: "Sustained decline — OTDR recommended" },
+      Offline:       { color: "text-slate-400", bg: "bg-slate-500/10", border: "border-l-slate-500", badge: "bg-slate-500/10 text-slate-400 border-slate-500/20",   label: "Offline",      desc: "No optical signal detected" },
+    };
+    return map[onu?.signalStability ?? "Stable"] ?? map["Stable"];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onu?.signalStability]);
+
+  const _preSeed   = onu ? onu.id.charCodeAt(onu.id.length - 1) : 0;
+  const _preIsReal = Boolean(onu?.isReal);
+  const _preIsUp   = onu?.status !== "Offline";
+  const _preMaxBw  = onu ? (parseInt(onu.bandwidth.split("/")[0].replace(/[^0-9]/g, "")) || 1000) : 1000;
+  const _preDl     = (!_preIsReal && _preIsUp && onu) ? Math.round(_preMaxBw * 0.62 + (_preSeed % 25)) : 0;
+  const _preUl     = (!_preIsReal && _preIsUp && onu) ? Math.round(_preMaxBw * 0.23 + (_preSeed % 12)) : 0;
+  const chartData = useMemo(
+    () => generateChartData(_preSeed, _preDl, _preUl),
+    [_preSeed, _preDl, _preUl]
+  );
+
   if (!onu) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
@@ -110,8 +134,9 @@ export default function OnuDetail() {
 
   const parentOlt = olts.find((o) => o.id === onu.oltId);
 
-  const displayDescription =
-    customDescription || onu.description || onu.customerName || onu.onuNo || "Unknown ONU";
+  const displayDescription = Boolean(onu.isReal)
+    ? (customDescription || onu.onuNo || "Unknown ONU")
+    : (customDescription || onu.description || onu.customerName || onu.onuNo || "Unknown ONU");
 
   // Real ONUs (discovered via SNMP) have placeholder signalLevel/txPower values.
   // Gate all signal-derived and mock-generated computations behind this flag.
@@ -205,16 +230,7 @@ export default function OnuDetail() {
   const barColor =
     filledBars >= 4 ? "bg-green-500" : filledBars === 3 ? "bg-amber-500" : "bg-red-500";
 
-  const stabilityConfig = useMemo(() => {
-    const map: Record<string, { color: string; bg: string; border: string; badge: string; label: string; desc: string }> = {
-      Stable: { color: "text-green-500", bg: "bg-green-500/10", border: "border-l-green-500", badge: "bg-green-500/10 text-green-500 border-green-500/20", label: "Stable", desc: "Signal consistent within ±0.5 dBm" },
-      "Weak Signal": { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-l-amber-400", badge: "bg-amber-500/10 text-amber-400 border-amber-500/20", label: "Weak Signal", desc: "RX near warning threshold" },
-      Unstable: { color: "text-amber-500", bg: "bg-amber-500/10", border: "border-l-amber-500", badge: "bg-amber-500/10 text-amber-500 border-amber-500/20", label: "Unstable", desc: "Signal varies ±2–4 dBm" },
-      "High Loss": { color: "text-red-500", bg: "bg-red-500/10", border: "border-l-red-500", badge: "bg-red-500/10 text-red-500 border-red-500/20", label: "High Loss", desc: "Sustained decline — OTDR recommended" },
-      Offline: { color: "text-slate-400", bg: "bg-slate-500/10", border: "border-l-slate-500", badge: "bg-slate-500/10 text-slate-400 border-slate-500/20", label: "Offline", desc: "No optical signal detected" },
-    };
-    return map[onu.signalStability] ?? map["Stable"];
-  }, [onu.signalStability]);
+  // stabilityConfig is declared above the early return (hooks rule)
 
   const onuTypeBadge =
     onu.onuType === "EPON"
@@ -237,22 +253,18 @@ export default function OnuDetail() {
   const totalGb = (parseFloat(dlGb) + parseFloat(ulGb)).toFixed(1);
   const monthGb = (parseFloat(totalGb) * 30).toFixed(0);
 
-  const chartData = useMemo(
-    () => generateChartData(seed, dlMbps, ulMbps),
-    [seed, dlMbps, ulMbps]
-  );
+  // chartData is declared above the early return (hooks rule)
 
   // Typed row arrays extracted here to avoid JSX-incompatible inline `as` casts
   const deviceInfoRows: { label: string; value: string; mono?: boolean; note?: string }[] = isRealOnu
     ? [
         { label: "OLT",          value: parentOlt?.name ?? onu.oltId },
-        { label: "OLT Port",     value: onu.oltPort, mono: true },
         { label: "PON Port",     value: onu.ponPort },
         { label: "ONU Index",    value: onu.onuNo, mono: true },
         { label: "ONU Type",     value: onu.onuType },
         { label: "Serial / MAC", value: onu.macAddress || "N/A", mono: true },
         { label: "Status",       value: onu.status },
-        { label: "Last Seen",    value: onu.lastSync },
+        { label: "Last Seen",    value: "N/A" },
       ]
     : [
         { label: "OLT",          value: parentOlt?.name ?? onu.oltId },
@@ -275,10 +287,10 @@ export default function OnuDetail() {
         { label: "DNS Primary",    value: "N/A" },
         { label: "DNS Secondary",  value: "N/A" },
         { label: "Connection Type", value: "Fiber PON" },
-        { label: "Bandwidth Plan", value: onu.bandwidth },
+        { label: "Bandwidth Plan", value: "N/A" },
         { label: "Status",         value: onu.status },
         { label: "VLAN Tag",       value: "N/A" },
-        { label: "Last Sync",      value: onu.lastSync },
+        { label: "Last Sync",      value: "N/A" },
       ]
     : [
         { label: "PPPoE Username", value: pppoeUser, mono: true },
@@ -338,9 +350,13 @@ export default function OnuDetail() {
               )}
               <span className="opacity-40">·</span>
               <span>{onu.ponPort}</span>
-              <span className="opacity-40">·</span>
-              <span className="font-mono text-xs">{onu.oltPort}</span>
-              {onu.onlineDuration !== "N/A" && (
+              {!isRealOnu && (
+                <>
+                  <span className="opacity-40">·</span>
+                  <span className="font-mono text-xs">{onu.oltPort}</span>
+                </>
+              )}
+              {!isRealOnu && onu.onlineDuration !== "N/A" && (
                 <>
                   <span className="opacity-40">·</span>
                   <span className="flex items-center gap-1 text-green-500 font-medium">
@@ -428,30 +444,39 @@ export default function OnuDetail() {
         </Card>
 
         {/* Distance */}
-        <Card className="border-l-4 border-l-cyan-500">
+        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : "border-l-cyan-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Distance</span>
               <Ruler className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className="text-xl font-bold">
-              {onu.distance.replace(" km", "")} <span className="text-xs font-normal text-muted-foreground">km</span>
-            </div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Fiber length</div>
+            {isRealOnu ? (
+              <>
+                <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">OID not yet polled</div>
+              </>
+            ) : (
+              <>
+                <div className="text-xl font-bold">
+                  {onu.distance.replace(" km", "")} <span className="text-xs font-normal text-muted-foreground">km</span>
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">Fiber length</div>
+              </>
+            )}
           </CardContent>
         </Card>
 
         {/* Uptime */}
-        <Card className="border-l-4 border-l-blue-500">
+        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : "border-l-blue-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Uptime</span>
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className={`text-lg font-bold leading-tight ${onu.status === "Offline" ? "text-muted-foreground" : ""}`}>
-              {onu.onlineDuration === "N/A" ? "—" : onu.onlineDuration}
+            <div className={`text-lg font-bold leading-tight ${isRealOnu ? "text-muted-foreground/40" : onu.status === "Offline" ? "text-muted-foreground" : ""}`}>
+              {isRealOnu ? "N/A" : onu.onlineDuration === "N/A" ? "—" : onu.onlineDuration}
             </div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Current session</div>
+            <div className="mt-1 text-[10px] text-muted-foreground">{isRealOnu ? "OID not yet polled" : "Current session"}</div>
           </CardContent>
         </Card>
 
@@ -851,7 +876,13 @@ export default function OnuDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            {onu.lastLogoutTime !== "N/A" ? (
+            {isRealOnu ? (
+              <div className="flex flex-col items-center justify-center h-28 gap-2 text-muted-foreground/50">
+                <WifiOff className="h-8 w-8 opacity-30" />
+                <span className="text-xs">Disconnect history not available</span>
+                <span className="text-[10px] text-muted-foreground/60">Event log not collected for real ONUs</span>
+              </div>
+            ) : onu.lastLogoutTime !== "N/A" ? (
               <div className="space-y-3">
                 {/* Status badge */}
                 <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${disconnectResolved ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/25" : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/25"}`}>
@@ -905,7 +936,7 @@ export default function OnuDetail() {
                 <span className="text-xs text-muted-foreground text-center">No disconnects recorded</span>
                 <span className="text-[10px] text-muted-foreground/60">ONU has been online without interruption</span>
               </div>
-            )}
+            ) }
           </CardContent>
         </Card>
       </div>

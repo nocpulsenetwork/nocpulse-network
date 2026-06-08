@@ -1,0 +1,203 @@
+PHASE: Complete Real CDATA ONU Discovery + Real PON Hardware Mapping
+
+IMPORTANT:
+
+Current working:
+- Real OLT Validation
+- Real SNMP Connection
+- Real Vendor Detection
+- Real Model Detection
+- Partial Real ONU Discovery
+
+Do NOT break existing working functionality.
+
+==================================================
+SAFETY RULES
+
+1. Read-only SNMP only
+2. No SNMP SET
+3. No Reboot
+4. No Disable/Enable
+5. No SSH/Telnet write
+6. No OLT configuration changes
+7. Timeout = 3 seconds
+8. Retry = 1
+9. CPU-safe polling only
+10. Keep VPS/PM2 compatibility
+11. Do not redesign UI
+12. Do not modify auth/login
+
+==================================================
+PROBLEM #1
+INCOMPLETE ONU DISCOVERY
+
+Current:
+- Discovery returns only ~26 ONUs
+
+Actual:
+- OLT has 8 EPON PON ports
+- OLT has 284+ real online ONUs
+
+Required:
+
+Analyze discovery logic and determine:
+
+- Is GETBULK stopping early?
+- Is pagination incomplete?
+- Are all PON ports scanned?
+- Is index parsing dropping rows?
+- Is filtering removing valid ONUs?
+- Is discovery reading only one subtree?
+
+Discovery must aggregate all ONU rows from:
+
+PON-1
+PON-2
+PON-3
+PON-4
+PON-5
+PON-6
+PON-7
+PON-8
+
+Use only real SNMP data.
+
+Never generate ONUs.
+
+==================================================
+PROBLEM #2
+PON PORT STATUS SHOWS ONLY ACTIVE PORTS
+
+Current:
+
+Shows:
+PON-1
+PON-2
+PON-3
+
+But OLT is physically 8-port.
+
+Required:
+
+Always display all physical PON ports detected from OLT hardware.
+
+Example:
+
+8-port OLT:
+
+PON-1
+PON-2
+PON-3
+PON-4
+PON-5
+PON-6
+PON-7
+PON-8
+
+Color rules:
+
+Green:
+Active ONUs exist
+
+Gray:
+Port exists but no ONU online
+
+Yellow:
+Degraded/alarm state
+
+Never hide physical ports because ONU count is zero.
+
+Port count must come from OLT hardware/SNMP.
+
+Not from ONU discovery results.
+
+Future compatible:
+
+4-port
+8-port
+16-port
+32-port
+
+No hardcoding.
+
+==================================================
+PROBLEM #3
+ONU MANAGEMENT INTEGRATION
+
+Current:
+
+OLT Details page shows discovered ONUs.
+
+But ONU Management and filters are inconsistent.
+
+Required:
+
+Use same real ONU cache everywhere:
+
+- OLT Details
+- ONU Management
+- ONU Search
+- OLT Filter
+- ONU Detail Page
+
+Create stable ONU ID:
+
+OLT_ID + ONU_INDEX
+
+No "ONU not found" errors.
+
+==================================================
+PROBLEM #4
+REAL DATA ONLY
+
+For real OLTs:
+
+Never show:
+
+- Fake PPPoE
+- Fake Gateway
+- Fake DNS
+- Fake Router Info
+- Fake Traffic
+- Fake Realtime Speed
+- Fake RX/TX
+- Fake Uptime
+- Fake Stability
+- Fake Customer Names
+
+If not available:
+
+Show:
+
+N/A
+
+Only real SNMP data may be displayed.
+
+==================================================
+DO NOT IMPLEMENT YET
+
+- RX Power
+- TX Power
+- Distance
+- Traffic Usage
+- Temperature
+- PPPoE
+- Reboot
+- Disable/Enable
+- ONU Description Sync
+
+Those will be separate phases.
+
+==================================================
+SUCCESS CRITERIA
+
+1. Discovery returns all real ONUs from all PON ports.
+2. ONU count moves closer to actual 284+.
+3. Online/offline counts come from real status.
+4. All physical PON ports are visible.
+5. ONU Management uses same real ONU dataset.
+6. ONU detail pages open correctly.
+7. No fake data remains.
+8. No hardcoded port counts.
+9. Future vendors remain compatible through adapter architecture.
+10. Existing OLT validation remains unchanged.
