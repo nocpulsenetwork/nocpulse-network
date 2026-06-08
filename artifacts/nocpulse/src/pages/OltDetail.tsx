@@ -173,7 +173,9 @@ export default function OltDetail() {
   const onlineOnus     = connectedOnus.filter(o => o.status === 'Online');
   const offlineOnus    = connectedOnus.filter(o => o.status === 'Offline');
   const degradedOnus   = connectedOnus.filter(o => o.status === 'Degraded');
-  const oltAlarms      = alarms.filter(a => a.deviceId === olt.id || a.deviceName === olt.name || a.deviceName.includes(olt.name));
+  // For real (managed) OLTs, we have no real alarm tracking — show 0 to avoid
+  // false matches from mock/demo alarms belonging to other OLTs.
+  const oltAlarms      = managed !== null ? [] : alarms.filter(a => a.deviceId === olt.id || a.deviceName === olt.name || a.deviceName.includes(olt.name));
   const unackedAlarms  = oltAlarms.filter(a => !a.acknowledged);
   const criticalAlarms = unackedAlarms.filter(a => a.severity === 'Critical');
   const majorAlarms    = unackedAlarms.filter(a => a.severity === 'Major');
@@ -200,17 +202,42 @@ export default function OltDetail() {
 
   // PON port data: for real OLTs with discovery, use real port breakdown.
   // For demo OLTs, use the mock-derived ponPorts computed below.
-  const realPonPortsDisplay = isRealOlt && realOnus && realOnus.ponPorts.length > 0
-    ? realOnus.ponPorts.map((p, idx) => ({
-        id:      idx + 1,
-        name:    `PON-${p.id}`,
-        total:   p.total,
-        online:  p.online,
-        offline: p.offline + p.unknown,
-        degraded: 0,
-        status:  (p.online > 0 ? 'Active' : 'Idle') as 'Active' | 'Degraded' | 'Idle',
-        avgRx:   '--',
-      }))
+  //
+  // Port name rule: SNMP uses 0-indexed "port-N" identifiers; the UI must
+  // show 1-indexed "PON-N" labels (port-0 → PON-1, port-1 → PON-2, …).
+  //
+  // Port count rule: prefer the configured ponPortCount (e.g. 8 for an 8-port
+  // EPON); fall back to the count of unique discovered ports. This ensures all
+  // physical ports are shown even when some carry 0 ONUs.
+  const realPonPortsDisplay = isRealOlt && realOnus
+    ? (() => {
+        // Build a map from 1-based port number → discovery row
+        const portDataMap = new Map<number, typeof realOnus.ponPorts[number]>();
+        for (const p of realOnus.ponPorts) {
+          const rawNum = parseInt(String(p.id).replace('port-', ''), 10);
+          if (!isNaN(rawNum)) portDataMap.set(rawNum + 1, p);
+        }
+        // Number of ports to render: configured value wins; fall back to discovered unique count
+        const totalPorts = olt.ponPortCount > 0 ? olt.ponPortCount : realOnus.ponPortCount;
+        if (totalPorts === 0) return null;
+        return Array.from({ length: totalPorts }, (_, idx) => {
+          const portNum = idx + 1;
+          const p       = portDataMap.get(portNum);
+          const online  = p?.online  ?? 0;
+          const offline = (p?.offline ?? 0) + (p?.unknown ?? 0);
+          const total   = online + offline;
+          return {
+            id:       portNum,
+            name:     `PON-${portNum}`,
+            total,
+            online,
+            offline,
+            degraded: 0,
+            status:   (online > 0 ? 'Active' : total > 0 ? 'Degraded' : 'Idle') as 'Active' | 'Degraded' | 'Idle',
+            avgRx:    '--',
+          };
+        });
+      })()
     : null;
 
   const ponPorts = Array.from({ length: olt.ponPortCount }, (_, i) => {
@@ -602,13 +629,13 @@ export default function OltDetail() {
               <Server className="h-3 w-3 text-primary" />
             </div>
           </div>
-          <p className="text-2xl font-bold tracking-tight">{olt.ponPortCount}</p>
+          <p className="text-2xl font-bold tracking-tight">{displayPonPorts.length || olt.ponPortCount}</p>
           <div className="space-y-1">
             <div className="h-1 bg-muted rounded-full overflow-hidden">
               <div className="h-full bg-primary rounded-full"
-                style={{ width: `${Math.round((ponPorts.filter(p => p.status === 'Active').length / (olt.ponPortCount || 1)) * 100)}%` }} />
+                style={{ width: `${Math.round((displayPonPorts.filter(p => p.status === 'Active').length / (displayPonPorts.length || 1)) * 100)}%` }} />
             </div>
-            <p className="text-[10px] text-muted-foreground">{ponPorts.filter(p => p.status === 'Active').length} active · {olt.portCount} total ports</p>
+            <p className="text-[10px] text-muted-foreground">{displayPonPorts.filter(p => p.status === 'Active').length} active · {displayPonPorts.length || olt.portCount} ports</p>
           </div>
         </div>
       </div>
@@ -825,7 +852,7 @@ export default function OltDetail() {
                 <Server className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-semibold">PON Port Status</span>
               </div>
-              <span className="text-[11px] text-muted-foreground px-2 py-0.5 rounded bg-muted/40 border border-border/40">{olt.ponPortCount} ports</span>
+              <span className="text-[11px] text-muted-foreground px-2 py-0.5 rounded bg-muted/40 border border-border/40">{displayPonPorts.length || olt.ponPortCount} ports</span>
             </div>
 
             {/* Visual port grid */}
@@ -865,7 +892,7 @@ export default function OltDetail() {
             </div>
 
             {/* PON table */}
-            <div className={`overflow-x-auto${olt.ponPortCount > 8 ? ' max-h-64 overflow-y-auto' : ''}`}>
+            <div className={`overflow-x-auto${(displayPonPorts.length || olt.ponPortCount) > 8 ? ' max-h-64 overflow-y-auto' : ''}`}>
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/20 hover:bg-muted/20 border-b border-border/50">
@@ -964,7 +991,9 @@ export default function OltDetail() {
                       <div className="font-mono font-bold text-sm">ONU-{o.onuId}</div>
                       <span className={`h-2 w-2 rounded-full ${o.status === 'online' ? 'bg-green-400' : o.status === 'offline' ? 'bg-red-400' : 'bg-slate-500'}`} />
                     </div>
-                    <div className="text-[11px] text-muted-foreground">PON {o.ponPort}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {(() => { const n = parseInt(String(o.ponPort).replace('port-', ''), 10); return `PON ${isNaN(n) ? o.ponPort : n + 1}`; })()}
+                    </div>
                     {o.serial && <div className="text-[10px] font-mono text-muted-foreground truncate">{o.serial}</div>}
                     <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
                       <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${o.status === 'online' ? 'text-green-400' : o.status === 'offline' ? 'text-red-400' : 'text-slate-400'}`}>
