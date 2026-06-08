@@ -14,8 +14,8 @@ description: FD1208S-B0 V1.6.0 firmware SNMP behavior — ONU table OID, column 
 ## ONU table location — ACTIVE registration table (correct one to use)
 `1.3.6.1.4.1.17409.2.2.11.2.1.1.{col}.{idx1}.{idx2}` — 8 columns (2,3,4,6,7,8,9,10)
 
-Each column has exactly as many rows as there are currently-registered ONUs. Verified
-exhaustively: at test time = 30 ONUs across 3 PON ports.
+This is tableIdx=1 in the OID path.  All currently-registered ONUs appear here.
+Verified exhaustively on 2026-06-08: active count ~31 ONUs across 2 PON ports.
 
 ## Column map (confirmed live)
 | Col | Type           | Meaning                                     |
@@ -35,18 +35,34 @@ exhaustively: at test time = 30 ONUs across 3 PON ports.
 - Use idx1 as the ONU identifier (onuId)
 
 ## Second sub-table — DO NOT USE for ONU status
-`1.3.6.1.4.1.17409.2.2.11.2.2.1.{col}.{idx1}.{idx2}` — same column layout but
-this is a **historical LLID session log**, NOT current ONU registrations. At the same
-test time it had 2000 COL4 entries (1673 status=4, 316 status=8, 11 status=2) — far
-more than the 30 currently registered ONUs. Ignore this sub-table for discovery.
+`1.3.6.1.4.1.17409.2.2.11.2.2.1.{col}.{idx1}.{idx2}` — this is a
+**historical LLID session log**, NOT current ONU registrations.
+
+**Confirmed on 2026-06-08:**
+- ~1969 COL4 entries (1642 status=4, 319 other, 12 status=2)
+- COL3 (port bytes) is ENTIRELY ABSENT — GETBULK from `.2.2.1.3` returns 0 entries
+- tableIdx=2 is a ring-buffer (~2000 slots) that accumulates all past ONU registration
+  events; status=4 in this table means "online when the session was logged",
+  NOT "currently online"
+- Ignore this sub-table for discovery — including it gives garbage "online" counts
+  and wrong port assignments (portIdx fallback only, no real COL3 data)
 
 **Why:** The FD1208S-B0 maintains both a current-registration view (2.1.1) and a
 historical-session log (2.2.1). The session log accumulates over the device's lifetime
 and has a completely different cardinality from the current active ONU count.
 
+## Other sub-tables (tableIdx = 0, 3–7)
+Probed on 2026-06-08 — all return 0 COL4 entries. Empty; do not walk.
+
 ## No MAC/Serial
 This firmware does not expose ONU MAC addresses or serial numbers via SNMP.
 Leave serial=null and mac=null in SnmpOnu.
+
+## Identity columns (COL2, COL5, COL6, COL9) — SKIP
+All four identity columns return noSuchInstance for every ONU on this firmware.
+Removed from readEasyPathOnuTable() to avoid ~120 s of wasted SNMP round-trips
+over WAN (each GET chunk takes 3–5 s; 40 chunks for 500 ONUs = 120–200 s wasted).
+**Do not re-add** unless the user confirms a firmware version that populates them.
 
 ## Critical: GETBULK maxRepetitions limit
 - maxRepetitions ≤ 40: works fine (~70ms)
@@ -72,3 +88,8 @@ prefix) or when the cursor OID did not advance (infinite-loop guard).
   walk completes in <1 second under normal conditions.
 - Do NOT use `timeoutMs: 10_000`. With `retries: 1`, a timed-out PDU costs 20s; across
   15 PDUs that exceeds typical HTTP client timeouts (60s) and makes discovery appear hung.
+
+## Broader SNMP tree
+Attempting GETBULK from the enterprise root `1.3.6.1.4.1.17409` returns 0 bindings —
+the agent does not support tree-walk from high-level OIDs.  Only specific known OIDs
+respond.  No other ONU-related OID paths were found under .17409 besides .2.2.11.2.x.1.

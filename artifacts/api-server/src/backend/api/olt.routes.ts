@@ -747,7 +747,9 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
 
   let easyPathPhysicalPorts: number | undefined;
   if (isEasyPath) {
-    // EasyPath EPON: walk confirmed live table 1.3.6.1.4.1.17409.2.2.11.2.1.1
+    // EasyPath EPON: walk the active registration table (tableIdx=1 only).
+    // tableIdx=2 is a historical session log and must NOT be walked — see
+    // readEasyPathOnuTable() for full rationale.
     ponType   = "EPON (EasyPath)";
     onuResult = await client.readEasyPathOnuTable(500);
     // Query hardware port count from ifTable (gives empty ports too).

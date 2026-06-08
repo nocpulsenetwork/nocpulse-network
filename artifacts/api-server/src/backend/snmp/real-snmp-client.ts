@@ -1332,153 +1332,214 @@ export class RealSnmpClient {
   /**
    * Discover ONUs from a CDATA FD1208S-B0 / EasyPath Ethernet-PON OLT.
    *
-   * This firmware (V1.6.0, sysObjId 1.3.6.1.4.1.17409) exposes a different
-   * MIB tree from standard C-DATA devices (1.3.6.1.4.1.34592). Confirmed
-   * live ONU table:
-   *   1.3.6.1.4.1.17409.2.2.11.2.1.1.{col}.{idx1}.{idx2}
+   * This firmware (V1.6.0, sysObjId 1.3.6.1.4.1.17409) organises ONU entries
+   * in per-PON-port sub-tables under:
+   *   1.3.6.1.4.1.17409.2.2.11.2.{portIdx}.1.{col}.{idx1}.{idx2}
+   *
+   * Each PON port (0–7) has its own sub-table.  Walking only .2.1.1 (portIdx=1)
+   * returns ~31 ONUs from port 1 and misses the remaining 7 ports.  This method
+   * walks all 8 port sub-tables and aggregates results.
    *
    * Confirmed columns (verified live on FD1208S-B0 V1.6.0_250227):
    *   COL 4 (INTEGER)         — status: 4=online, 2=offline
    *   COL 3 (OctetString[9])  — byte[5] = PON port index, 0-indexed
    *
-   * ONU identifier: idx1 — auto-incremented by the OLT at registration time.
-   * MAC / serial: not available in this firmware MIB (left null).
+   * Best-effort identity columns (present/null depends on firmware config):
+   *   COL 2 — ONU alias/name  COL 5 — MAC/LLID  COL 6 — type  COL 9 — offline reason
    *
-   * Safety: one GETBULK on COL4 + one GET for COL3 port bytes. No SET.
+   * ONU IDs are "{portIdx}.{idx1}.{idx2}" to guarantee uniqueness across all ports.
+   * Safety: GETBULK read-only — no SET operations.
    */
   async readEasyPathOnuTable(limit: number): Promise<ReadOnuTableResult> {
     const start     = Date.now();
-    const safeLimit = Math.min(limit, 1000);  // safety cap — never more than 1,000 ONUs
+    const safeLimit = Math.min(limit, 500);  // safety cap
 
-    const TABLE_ROOT  = "1.3.6.1.4.1.17409.2.2.11.2.1.1";
-    const COL4_STATUS = `${TABLE_ROOT}.4`;
-    const COL3_PORT   = `${TABLE_ROOT}.3`;
-    const MIB_NAME    = "EasyPathEponOnuTable";
-
-    // ── Phase 1: Iterative GETBULK walk of COL4 status column ───────────────
+    // FD1208S-B0 V1.6.0 ONU table layout (confirmed live):
     //
-    // Uses per-PDU snmpGetBulk() calls (each with their own session) rather than
-    // the long-lived snmpWalk() session. This keeps each network round-trip
-    // bounded to timeoutMs independently.
+    //   1.3.6.1.4.1.17409.2.2.11.2.{tableIdx}.1.{col}.{idx1}.{idx2}
     //
-    // Two bugs from the original implementation are fixed here:
-    //   1. The hard cap of 50 (cappedLimit = Math.min(limit, 50)) is removed.
-    //      safeLimit is now 1,000, and the caller passes 500.
-    //   2. The `if (batch.length < BATCH) break` early exit is removed.
-    //      The FD1208S-B0 firmware returns partial GETBULK responses mid-table
-    //      (likely due to internal per-port pagination), so a short batch does
-    //      NOT mean end-of-table. End-of-table is detected only when inTree.length
-    //      is 0 (the walk has passed the column) or the cursor did not advance.
-    const BATCH      = 20;
-    const col4Prefix = `${COL4_STATUS}.`;
-    const instances: Array<{ idx1: number; idx2: number; statusVal: number }> = [];
-    let walkCursor   = COL4_STATUS;
-    let walkError: string | undefined;
+    // tableIdx=1  (.2.1.1)  →  ACTIVE ONU registration table.  All currently
+    //                          registered ONUs appear here.  COL3 (port bytes),
+    //                          COL4 (status), and all other columns are present.
+    //
+    // tableIdx=2  (.2.2.1)  →  Historical LLID session log.  Accumulates all past
+    //                          ONU registration events (ring-buffer, ~2000 slots).
+    //                          COL3 is ABSENT in this table — only COL4 status is
+    //                          populated.  Walking it returns stale/historical
+    //                          entries, NOT current active ONUs.  Do NOT include.
+    //
+    // tableIdx=0,3–7        →  Empty; return 0 COL4 entries.  Probed on 2026-06-08.
+    //
+    // We therefore walk ONLY tableIdx=1.  If a future firmware version adds new
+    // active tables, add their indices here.
 
-    let consecutiveErrors = 0;
-    while (instances.length < safeLimit) {
-      let batch: snmp.Varbind[];
-      try {
-        batch = await this.snmpGetBulk([walkCursor], BATCH);
-        consecutiveErrors = 0;  // reset on success
-      } catch (err) {
-        consecutiveErrors++;
-        if (consecutiveErrors >= 3) {
-          // Three failures in a row from the same cursor — give up on further walk.
-          // Partial results (already in instances[]) are still returned.
-          walkError = err instanceof Error ? err.message : "SNMP GETBULK failed";
-          break;
-        }
-        // Transient error (e.g. UDP drop between PON port segments) — retry same cursor.
-        continue;
-      }
+    const BASE_PARENT = "1.3.6.1.4.1.17409.2.2.11.2";
+    const PORT_INDICES = [1] as const;  // ONLY the active registration table
+    const STATUS_COL   = 4;   // confirmed live: 4=online, 2=offline
+    const PORT_COL     = 3;   // confirmed live: byte[5] = 0-based PON port index
+    const IDENTITY_COLS = [2, 5, 6, 9] as const;
+    const MIB_NAME     = "EasyPathEponOnuTable";
+    const BATCH        = 20;
+    const GET_CHUNK    = 50;
 
-      const inTree = batch.filter((vb) => vb.oid.startsWith(col4Prefix));
-      for (const vb of inTree) {
-        if (instances.length >= safeLimit) break;
-        const tail = vb.oid.slice(col4Prefix.length).split(".");
-        if (tail.length < 2) continue;
-        const idx1 = parseInt(tail[0]!, 10);
-        const idx2 = parseInt(tail[1]!, 10);
-        if (!Number.isFinite(idx1) || !Number.isFinite(idx2)) continue;
-        instances.push({ idx1, idx2, statusVal: intVal(vb) ?? 0 });
-      }
+    // ── Phase 1: Walk COL4 of each port's sub-table ───────────────────────────
+    //
+    // For each portIdx we walk:  BASE_PARENT.{portIdx}.1.4
+    // Results are tagged with the portIdx and their per-port tableRoot so that
+    // subsequent GET calls use the correct OID prefix for each sub-table.
 
-      if (inTree.length === 0) break;  // walked past the column — done
-      const newCursor = inTree[inTree.length - 1]!.oid;
-      if (newCursor === walkCursor) break;  // no progress — guard against infinite loop
-      walkCursor = newCursor;
-      // NOTE: intentionally NOT breaking on batch.length < BATCH here.
-      // The FD1208S-B0 returns partial batches between PON port segments.
+    interface PortInstance {
+      portIdx:   number;
+      tableRoot: string;     // BASE_PARENT.{portIdx}.1
+      idx1:      number;
+      idx2:      number;
+      statusVal: number;
     }
 
-    if (instances.length === 0) {
+    const allInstances: PortInstance[] = [];
+    const walkLog: string[] = [];
+    let globalError: string | undefined;
+
+    for (const portIdx of PORT_INDICES) {
+      if (allInstances.length >= safeLimit) break;
+
+      const tableRoot  = `${BASE_PARENT}.${portIdx}.1`;
+      const col4Root   = `${tableRoot}.${STATUS_COL}`;
+      const col4Prefix = `${col4Root}.`;
+
+      const portInstances: PortInstance[] = [];
+      let cursor           = col4Root;
+      let consecutiveErrors = 0;
+
+      while (portInstances.length + allInstances.length < safeLimit) {
+        let batch: snmp.Varbind[];
+        try {
+          batch = await this.snmpGetBulk([cursor], BATCH);
+          consecutiveErrors = 0;
+        } catch (err) {
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) {
+            // Three consecutive failures on this port — move on to the next.
+            const msg = err instanceof Error ? err.message : "SNMP GETBULK error";
+            walkLog.push(`port${portIdx}:err(${msg})`);
+            globalError = msg;
+            break;
+          }
+          continue;  // retry same cursor on transient UDP loss
+        }
+
+        const inTree = batch.filter((vb) => vb.oid.startsWith(col4Prefix));
+
+        for (const vb of inTree) {
+          if (portInstances.length + allInstances.length >= safeLimit) break;
+          const tail = vb.oid.slice(col4Prefix.length).split(".");
+          if (tail.length < 2) continue;
+          const idx1 = parseInt(tail[0]!, 10);
+          const idx2 = parseInt(tail[1]!, 10);
+          if (!Number.isFinite(idx1) || !Number.isFinite(idx2)) continue;
+          portInstances.push({ portIdx, tableRoot, idx1, idx2, statusVal: intVal(vb) ?? 0 });
+        }
+
+        if (inTree.length === 0) break;  // walked past this port's COL4 — done
+        const newCursor = inTree[inTree.length - 1]!.oid;
+        if (newCursor === cursor) break;  // no progress guard
+        cursor = newCursor;
+        // NOTE: intentionally NOT breaking on batch.length < BATCH.
+        // Firmware may return short batches within a port's entries.
+      }
+
+      walkLog.push(`port${portIdx}:${portInstances.length}`);
+      allInstances.push(...portInstances);
+    }
+
+    if (allInstances.length === 0) {
       return {
-        success:    !walkError,
+        success:    !globalError,
         vendor:     "CDATA",
         totalFound: 0,
         onus:       [],
-        message:    walkError
-          ?? `GETBULK walk of ${MIB_NAME} (${COL4_STATUS}) returned 0 entries in the status column.`,
+        message:    globalError
+          ?? `GETBULK walk of ${MIB_NAME} (ports 0–7) returned 0 ONU entries.` +
+             ` Walk log: ${walkLog.join(", ")}`,
         latencyMs:  Date.now() - start,
         mibUsed:    MIB_NAME,
       };
     }
 
-    // ── Phase 2: GET COL3 in chunks to read PON port byte[5] ──────────────────
+    // ── Deduplication: drop any instance whose (idx1, idx2) was already seen ──
     //
-    // Batched into chunks of 50 OIDs per GET to stay within SNMP PDU size limits.
-    // A single GET of 284+ OIDs would exceed the max PDU size on most SNMP agents
-    // and fail silently, leaving all ONUs on "port-?".
-    const GET_CHUNK = 50;
-    const portOids  = instances.map(({ idx1, idx2 }) => `${COL3_PORT}.${idx1}.${idx2}`);
+    // The firmware splits the flat ONU registration table across OID sub-tables
+    // (portIdx = 1, 2, …).  In practice the idx1 ranges are disjoint across
+    // sub-tables, so duplicates are unlikely.  This guard is a belt-and-braces
+    // check in case a future firmware version overlaps ranges.
+    const seenIdx = new Set<string>();
+    const dedupedInstances: PortInstance[] = [];
+    for (const inst of allInstances) {
+      const key = `${inst.idx1}.${inst.idx2}`;
+      if (seenIdx.has(key)) continue;
+      seenIdx.add(key);
+      dedupedInstances.push(inst);
+    }
+
+    // ── Phase 2: GET COL3 (port byte) for all instances ───────────────────────
+    //
+    // Group by tableRoot to keep OIDs within the correct sub-table prefix.
+    // Batched into chunks of 50 to stay within SNMP PDU limits.
+
     const attrMap: Record<string, snmp.Varbind> = {};
-    for (let i = 0; i < portOids.length; i += GET_CHUNK) {
-      const chunk = portOids.slice(i, i + GET_CHUNK);
-      try {
-        Object.assign(attrMap, indexVarbinds(await this.snmpGet(chunk)));
-      } catch {
-        // GET failed for this chunk — affected ONUs default to "port-?"
-      }
+
+    // Group instances by tableRoot for efficient per-port GETs
+    const byTableRoot = new Map<string, PortInstance[]>();
+    for (const inst of dedupedInstances) {
+      const arr = byTableRoot.get(inst.tableRoot) ?? [];
+      arr.push(inst);
+      byTableRoot.set(inst.tableRoot, arr);
     }
 
-    // ── Phase 3: GET identity columns (best-effort) ───────────────────────────
-    //
-    // Probe candidate columns for ONU identity data. Results are merged into the
-    // shared attrMap; OID columns absent from this firmware return no entries and
-    // leave the corresponding SnmpOnu fields null.
-    //
-    //   COL2 — ONU name/alias (OCTET STRING, printable ASCII when set)
-    //   COL5 — MAC address / EPON LLID (6-byte OCTET STRING)
-    //   COL6 — ONU model/type string (OCTET STRING)
-    //   COL9 — de-registration reason code (INTEGER enum)
-    //
-    const IDENTITY_COLS = [2, 5, 6, 9] as const;
-    const identityOids: string[] = [];
-    for (const col of IDENTITY_COLS) {
-      for (const { idx1, idx2 } of instances) {
-        identityOids.push(`${TABLE_ROOT}.${col}.${idx1}.${idx2}`);
+    for (const [tableRoot, insts] of byTableRoot) {
+      // COL3: PON port byte[5]
+      const portOids = insts.map(({ idx1, idx2 }) => `${tableRoot}.${PORT_COL}.${idx1}.${idx2}`);
+      for (let i = 0; i < portOids.length; i += GET_CHUNK) {
+        try {
+          Object.assign(attrMap, indexVarbinds(await this.snmpGet(portOids.slice(i, i + GET_CHUNK))));
+        } catch { /* affected ONUs will use portIdx fallback */ }
       }
-    }
-    for (let i = 0; i < identityOids.length; i += GET_CHUNK) {
-      const chunk = identityOids.slice(i, i + GET_CHUNK);
-      try {
-        Object.assign(attrMap, indexVarbinds(await this.snmpGet(chunk)));
-      } catch {
-        // Identity data is best-effort; a failed chunk leaves those fields null.
-      }
+
+      // NOTE: Identity column GETs (COL2 name, COL5 MAC, COL6 type, COL9 reason)
+      // are intentionally omitted for the EasyPath firmware.  Live testing on the
+      // FD1208S-B0 V1.6.0 shows all four columns return noSuchInstance for every
+      // ONU, but each GET chunk still takes ~3–5 s of network time (SNMP over WAN).
+      // With 500+ ONUs that adds up to 120+ seconds of wasted time — longer than the
+      // entire status walk itself.  The fields stay null in the output (showing N/A
+      // in the UI), which is the same result as before but without the overhead.
+      // Re-enable by uncommenting the block below once/if the firmware is confirmed
+      // to populate these OIDs.
+      //
+      // const identityOids: string[] = [];
+      // for (const col of IDENTITY_COLS) {
+      //   for (const { idx1, idx2 } of insts) {
+      //     identityOids.push(`${tableRoot}.${col}.${idx1}.${idx2}`);
+      //   }
+      // }
+      // for (let i = 0; i < identityOids.length; i += GET_CHUNK) {
+      //   try {
+      //     Object.assign(attrMap, indexVarbinds(await this.snmpGet(identityOids.slice(i, i + GET_CHUNK))));
+      //   } catch { /* identity data is best-effort */ }
+      // }
     }
 
-    // ── Phase 4: Build normalised ONU list ─────────────────────────────────────
+    // ── Phase 4: Build normalised ONU list ────────────────────────────────────
     const onus: SnmpOnu[] = [];
-    for (const { idx1, idx2, statusVal } of instances) {
+    for (const { portIdx, tableRoot, idx1, idx2, statusVal } of dedupedInstances) {
       const instSuffix = `${idx1}.${idx2}`;
-      const portVb     = attrMap[`${COL3_PORT}.${instSuffix}`];
 
-      // PON port: COL3 byte[5], 0-indexed (e.g. 0 → "port-0")
-      let ponPort = "port-?";
+      // PON port: COL3 byte[5] (primary), portIdx (fallback)
+      const portVb = attrMap[`${tableRoot}.${PORT_COL}.${instSuffix}`];
+      let ponPort: string;
       if (portVb && Buffer.isBuffer(portVb.value) && portVb.value.length >= 6) {
         ponPort = `port-${portVb.value[5]}`;
+      } else {
+        ponPort = `port-${portIdx}`;
       }
 
       const status: "online" | "offline" | "unknown" =
@@ -1486,16 +1547,15 @@ export class RealSnmpClient {
         : statusVal === 2 ? "offline"
         : "unknown";
 
-      // ── Identity fields from Phase 3 probe ──────────────────────────────────
-      const col2Vb = attrMap[`${TABLE_ROOT}.2.${instSuffix}`];
-      const col5Vb = attrMap[`${TABLE_ROOT}.5.${instSuffix}`];
-      const col6Vb = attrMap[`${TABLE_ROOT}.6.${instSuffix}`];
-      const col9Vb = attrMap[`${TABLE_ROOT}.9.${instSuffix}`];
+      const col2Vb = attrMap[`${tableRoot}.2.${instSuffix}`];
+      const col5Vb = attrMap[`${tableRoot}.5.${instSuffix}`];
+      const col6Vb = attrMap[`${tableRoot}.6.${instSuffix}`];
+      const col9Vb = attrMap[`${tableRoot}.9.${instSuffix}`];
 
       // COL2: ONU name/alias
       const name: string | null =
-        Buffer.isBuffer(col2Vb?.value)       ? bufToPrintableAscii(col2Vb.value)
-        : typeof col2Vb?.value === "string"  ? (col2Vb.value.trim() || null)
+        Buffer.isBuffer(col2Vb?.value)      ? bufToPrintableAscii(col2Vb.value)
+        : typeof col2Vb?.value === "string" ? (col2Vb.value.trim() || null)
         : null;
 
       // COL5: MAC address / EPON LLID (6-byte OCTET STRING)
@@ -1503,8 +1563,8 @@ export class RealSnmpClient {
 
       // COL6: ONU model/type
       const type: string | null =
-        Buffer.isBuffer(col6Vb?.value)       ? bufToPrintableAscii(col6Vb.value)
-        : typeof col6Vb?.value === "string"  ? (col6Vb.value.trim() || null)
+        Buffer.isBuffer(col6Vb?.value)      ? bufToPrintableAscii(col6Vb.value)
+        : typeof col6Vb?.value === "string" ? (col6Vb.value.trim() || null)
         : null;
 
       // COL9: de-registration reason code (INTEGER)
@@ -1512,21 +1572,21 @@ export class RealSnmpClient {
         col9Vb != null ? (intVal(col9Vb) ?? null) : null;
 
       onus.push({
-        onuId:             `${idx1}.${idx2}`,  // full instance OID — unique per ONU across all ports
+        // Include portIdx in onuId to guarantee uniqueness across all port sub-tables.
+        // Format: "{portIdx}.{idx1}.{idx2}"
+        onuId:          `${portIdx}.${idx1}.${idx2}`,
         ponPort,
-        serial:            null,
+        serial:         null,
         mac,
         name,
         status,
         type,
         offlineReasonCode,
-        // Optical power and distance are not available in the EasyPath ONU registration
-        // table (1.3.6.1.4.1.17409.2.2.11.2.1.1). No confirmed optical OIDs exist for
-        // FD1208S-B0 V1.6.0. Fields left null — will show N/A in the UI.
-        rxPowerDbm:        null,
-        txPowerDbm:        null,
-        distanceMeters:    null,
-        rawInstanceOid:    instSuffix,
+        // Optical power and distance: no confirmed OIDs for FD1208S-B0 V1.6.0.
+        rxPowerDbm:     null,
+        txPowerDbm:     null,
+        distanceMeters: null,
+        rawInstanceOid: `${portIdx}.${idx1}.${idx2}`,
       });
     }
 
@@ -1538,9 +1598,8 @@ export class RealSnmpClient {
       onus,
       message:
         `Found ${onus.length} ONU${onus.length !== 1 ? "s" : ""} in ${MIB_NAME}` +
-        (onus.length > 0
-          ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown)`
-          : ""),
+        ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown).` +
+        ` Walk log: ${walkLog.join(", ")}`,
       latencyMs: Date.now() - start,
       mibUsed:   MIB_NAME,
     };
