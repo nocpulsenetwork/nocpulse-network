@@ -2,3 +2,4 @@
 - [ONU discovery architecture](onu-discovery-arch.md) — POST /discover-onus → in-memory Map cache → GET /:id/onus/real; frontend reads cache, never polls directly.
 - [Vendor adapter pattern](vendor-adapter-pattern.md) — VendorAdapter interface + C-DATA EPON/GPON split: NEVER assume all C-DATA are GPON; use detectCdataPonType() first.
 - [OltDetail real vs demo split](oltdetail-real-demo.md) — `isRealOlt = managed !== null`; display* vars override summary card counts; mock ONU mini-cards gated on `!isRealOlt`.
+- [net-snmp getBulk 2D array](netsnmp-getbulk-structure.md) — getBulk callback returns mixed flat/nested structure; must flatten before use.

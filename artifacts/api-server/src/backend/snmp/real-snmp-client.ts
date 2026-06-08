@@ -578,7 +578,19 @@ export class RealSnmpClient {
             reject(classifyError(error, this.host, this.timeoutMs));
             return;
           }
-          resolve(varbinds);
+          // net-snmp getBulk returns a mixed structure:
+          //   non-repeater OIDs → flat Varbind at top level
+          //   repeater OIDs     → Array<Varbind> at top level (one per starting OID)
+          // Normalize to a flat Varbind[] so all callers can iterate uniformly.
+          const flat: snmp.Varbind[] = [];
+          for (const entry of varbinds as unknown as Array<snmp.Varbind | snmp.Varbind[]>) {
+            if (Array.isArray(entry)) {
+              flat.push(...entry);
+            } else {
+              flat.push(entry);
+            }
+          }
+          resolve(flat);
         },
       );
     });
