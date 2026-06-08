@@ -67,6 +67,13 @@ export interface OnuDiscoveryResult {
   /** Number of distinct PON ports seen in the ONU list. */
   ponPortCount: number;
 
+  /**
+   * Number of physical PON ports confirmed from OLT hardware (ifTable scan).
+   * May exceed ponPortCount when some ports have zero ONUs.
+   * Undefined when hardware port count could not be determined.
+   */
+  physicalPortCount?: number;
+
   /** Per-port breakdown. */
   ponPorts: RealPonPort[];
 

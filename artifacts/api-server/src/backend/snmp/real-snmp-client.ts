@@ -1344,13 +1344,22 @@ export class RealSnmpClient {
     let walkCursor   = COL4_STATUS;
     let walkError: string | undefined;
 
+    let consecutiveErrors = 0;
     while (instances.length < safeLimit) {
       let batch: snmp.Varbind[];
       try {
         batch = await this.snmpGetBulk([walkCursor], BATCH);
+        consecutiveErrors = 0;  // reset on success
       } catch (err) {
-        walkError = err instanceof Error ? err.message : "SNMP GETBULK failed";
-        break;
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) {
+          // Three failures in a row from the same cursor — give up on further walk.
+          // Partial results (already in instances[]) are still returned.
+          walkError = err instanceof Error ? err.message : "SNMP GETBULK failed";
+          break;
+        }
+        // Transient error (e.g. UDP drop between PON port segments) — retry same cursor.
+        continue;
       }
 
       const inTree = batch.filter((vb) => vb.oid.startsWith(col4Prefix));
@@ -1420,7 +1429,7 @@ export class RealSnmpClient {
         : "unknown";
 
       onus.push({
-        onuId:          String(idx1),
+        onuId:          `${idx1}.${idx2}`,  // full instance OID — unique per ONU across all ports
         ponPort,
         serial:         null,
         mac:            null,
@@ -1444,6 +1453,61 @@ export class RealSnmpClient {
       latencyMs: Date.now() - start,
       mibUsed:   MIB_NAME,
     };
+  }
+
+  // ── readEasyPathPhysicalPorts ─────────────────────────────────────────────
+
+  /**
+   * Determine the number of physical PON ports on an EasyPath OLT.
+   *
+   * Walks the standard ifDescr table (1.3.6.1.2.1.2.2.1.2) and counts
+   * interfaces whose description contains "PON", "EPON", or "GPON"
+   * (case-insensitive). This is vendor-agnostic and works on any device
+   * that populates standard ifTable.
+   *
+   * Returns 0 when the count cannot be determined (caller should fall back
+   * to discovered-port count or model-name inference).
+   *
+   * Safety: one GETBULK walk of ifDescr only. No SET.
+   */
+  async readEasyPathPhysicalPorts(): Promise<number> {
+    const IF_DESCR_COL = "1.3.6.1.2.1.2.2.1.2";
+    const prefix       = IF_DESCR_COL + ".";
+    let   cursor       = IF_DESCR_COL;
+    let   ponCount     = 0;
+    let   total        = 0;
+    const MAX_IFS      = 128;  // safety cap — even a 32-port OLT has < 128 interfaces total
+    const PON_RE       = /pon|epon|gpon/i;
+
+    while (total < MAX_IFS) {
+      let batch: snmp.Varbind[];
+      try {
+        batch = await this.snmpGetBulk([cursor], 20);
+      } catch {
+        break;
+      }
+
+      const inTree = batch.filter((vb) => vb.oid.startsWith(prefix));
+      if (inTree.length === 0) break;
+
+      for (const vb of inTree) {
+        if (total >= MAX_IFS) break;
+        total++;
+        const desc =
+          Buffer.isBuffer(vb.value)
+            ? vb.value.toString("ascii")
+            : typeof vb.value === "string"
+              ? vb.value
+              : "";
+        if (PON_RE.test(desc)) ponCount++;
+      }
+
+      const newCursor = inTree[inTree.length - 1]!.oid;
+      if (newCursor === cursor) break;
+      cursor = newCursor;
+    }
+
+    return ponCount;
   }
 
   // ── readOnuDetails ────────────────────────────────────────────────────────

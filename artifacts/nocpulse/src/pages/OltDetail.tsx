@@ -50,6 +50,7 @@ interface RealOnuData {
   offlineOnus: number;
   unknownOnus: number;
   ponPortCount: number;
+  physicalPortCount?: number;
   ponPorts: Array<{ id: string; total: number; online: number; offline: number; unknown: number }>;
   onus: Array<{ onuId: string; ponPort: string; status: 'online' | 'offline' | 'unknown'; serial: string | null; type: string | null }>;
   discoveredAt: string;
@@ -122,7 +123,7 @@ function UplinkBadge({ status }: { status: 'Active' | 'Standby' | 'Down' }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function OltDetail() {
-  const { olts, onus, alarms } = useApiData();
+  const { olts, onus, alarms, refreshRealOnus } = useApiData();
   const [, params]   = useRoute('/olts/:id');
   const [, navigate] = useLocation();
 
@@ -165,6 +166,8 @@ export default function OltDetail() {
         setDiscoverError(j.error ?? 'Discovery failed — check OLT connectivity and SNMP credentials.');
       } else {
         setRealOnus(j.data);
+        // Refresh merged ONU cache so all pages (ONU Management, search, etc.) see new data.
+        void refreshRealOnus(managed.id);
       }
     } catch (e) {
       setDiscoverError(e instanceof Error ? e.message : 'Network error');
@@ -233,7 +236,9 @@ export default function OltDetail() {
           if (!isNaN(rawNum)) portDataMap.set(rawNum + 1, p);
         }
         // Number of ports to render: configured value wins; fall back to discovered unique count
-        const totalPorts = olt.ponPortCount > 0 ? olt.ponPortCount : realOnus.ponPortCount;
+        const totalPorts = olt.ponPortCount > 0
+          ? olt.ponPortCount
+          : (realOnus.physicalPortCount ?? realOnus.ponPortCount);
         if (totalPorts === 0) return null;
         return Array.from({ length: totalPorts }, (_, idx) => {
           const portNum = idx + 1;
@@ -1044,28 +1049,35 @@ export default function OltDetail() {
             {/* Real OLT — show discovered ONUs */}
             {isRealOlt && realOnus && (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                {realOnus.onus.slice(0, 8).map((o, idx) => (
-                  <div
-                    key={`${o.ponPort}-${o.onuId}-${idx}`}
-                    className="rounded-lg border border-border/60 bg-card/50 p-3 transition-colors text-left space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="font-mono font-bold text-sm">ONU-{o.onuId}</div>
-                      <span className={`h-2 w-2 rounded-full ${o.status === 'online' ? 'bg-green-400' : o.status === 'offline' ? 'bg-red-400' : 'bg-slate-500'}`} />
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      {(() => { const n = parseInt(String(o.ponPort).replace('port-', ''), 10); return `PON ${isNaN(n) ? o.ponPort : n + 1}`; })()}
-                    </div>
-                    {o.serial && <div className="text-[10px] font-mono text-muted-foreground truncate">{o.serial}</div>}
-                    <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${o.status === 'online' ? 'text-green-400' : o.status === 'offline' ? 'text-red-400' : 'text-slate-400'}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${o.status === 'online' ? 'bg-green-400' : o.status === 'offline' ? 'bg-red-400' : 'bg-slate-500'}`} />
-                        {o.status}
-                      </span>
-                      {o.type && <span className="text-[10px] text-muted-foreground truncate max-w-[60px]">{o.type}</span>}
-                    </div>
-                  </div>
-                ))}
+                {realOnus.onus.slice(0, 8).map((o, idx) => {
+                  const safeId   = o.onuId.replace(/\./g, "-");
+                  const onuLabel = o.onuId.includes(".")
+                    ? o.onuId.split(".")[1] ?? o.onuId
+                    : o.onuId;
+                  return (
+                    <button
+                      key={`${o.ponPort}-${o.onuId}-${idx}`}
+                      onClick={() => navigate(`/onus/${olt.id}-onu-${safeId}`)}
+                      className="rounded-lg border border-border/60 bg-card/50 p-3 hover:bg-card hover:border-primary/30 cursor-pointer transition-colors text-left space-y-1.5 group w-full"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="font-mono font-bold text-sm group-hover:text-primary transition-colors">{onuLabel}</div>
+                        <span className={`h-2 w-2 rounded-full ${o.status === 'online' ? 'bg-green-400' : o.status === 'offline' ? 'bg-red-400' : 'bg-slate-500'}`} />
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        {(() => { const n = parseInt(String(o.ponPort).replace('port-', ''), 10); return `PON-${isNaN(n) ? o.ponPort : n + 1}`; })()}
+                      </div>
+                      {o.serial && <div className="text-[10px] font-mono text-muted-foreground truncate">{o.serial}</div>}
+                      <div className="flex items-center justify-between pt-1.5 border-t border-border/40">
+                        <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${o.status === 'online' ? 'text-green-400' : o.status === 'offline' ? 'text-red-400' : 'text-slate-400'}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${o.status === 'online' ? 'bg-green-400' : o.status === 'offline' ? 'bg-red-400' : 'bg-slate-500'}`} />
+                          {o.status}
+                        </span>
+                        {o.type && <span className="text-[10px] text-muted-foreground truncate max-w-[60px]">{o.type}</span>}
+                      </div>
+                    </button>
+                  );
+                })}
                 {realOnus.onus.length > 8 && (
                   <div className="rounded-lg border border-dashed border-border/40 bg-muted/20 p-3 flex flex-col items-center justify-center gap-1 text-muted-foreground">
                     <span className="text-xs font-semibold">+{realOnus.onus.length - 8} more</span>

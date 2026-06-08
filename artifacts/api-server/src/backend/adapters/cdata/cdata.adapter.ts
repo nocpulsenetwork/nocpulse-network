@@ -109,14 +109,17 @@ export class CdataAdapter implements VendorAdapter {
         serial:  o.serial,
         type:    o.type,
       }));
+      // Query physical port count from ifTable — gives us empty ports too.
+      const rawPortCount = await client.readEasyPathPhysicalPorts();
       return {
-        hasData:      true,
-        oltId:        request.oltId,
-        totalOnus:    snmpResult.totalFound,
-        onlineOnus:   onlineCount,
-        offlineOnus:  offlineCount,
-        unknownOnus:  unknownCount,
-        ponPortCount: portMap.size,
+        hasData:           true,
+        oltId:             request.oltId,
+        totalOnus:         snmpResult.totalFound,
+        onlineOnus:        onlineCount,
+        offlineOnus:       offlineCount,
+        unknownOnus:       unknownCount,
+        ponPortCount:      portMap.size,
+        physicalPortCount: rawPortCount > 0 ? rawPortCount : undefined,
         ponPorts,
         onus,
         discoveredAt: new Date().toISOString(),

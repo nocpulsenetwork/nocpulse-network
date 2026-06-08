@@ -745,10 +745,14 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
   // ── Step 3: Read ONU management table ────────────────────────────────────
   let onuResult: ReadOnuTableResult;
 
+  let easyPathPhysicalPorts: number | undefined;
   if (isEasyPath) {
     // EasyPath EPON: walk confirmed live table 1.3.6.1.4.1.17409.2.2.11.2.1.1
     ponType   = "EPON (EasyPath)";
     onuResult = await client.readEasyPathOnuTable(500);
+    // Query hardware port count from ifTable (gives empty ports too).
+    const portCount = await client.readEasyPathPhysicalPorts();
+    if (portCount > 0) easyPathPhysicalPorts = portCount;
   } else {
     // Standard vendor flow: GETBULK on index column + GET attribute columns
     onuResult = await client.readOnuTable(mibKey, 50);
@@ -802,7 +806,8 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
     onlineOnus:   onlineCount,
     offlineOnus:  offlineCount,
     unknownOnus:  unknownCount,
-    ponPortCount: portMap.size,
+    ponPortCount:      portMap.size,
+    physicalPortCount: easyPathPhysicalPorts,
     ponPorts,
     onus,
     discoveredAt: probeAt,

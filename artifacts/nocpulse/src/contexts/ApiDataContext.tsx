@@ -16,6 +16,7 @@
  */
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -66,10 +67,12 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
   const portNum = parseInt(onu.ponPort.replace("port-", ""), 10);
   const ponPort = `PON-${isNaN(portNum) ? 1 : portNum + 1}`;
   const status: Status = onu.status === "online" ? "Online" : "Offline";
+  // onuId may be "idx1.idx2" (dot-separated) — sanitise for use in URLs and IDs.
+  const safeOnuId = onu.onuId.replace(/\./g, "-");
   return {
-    id:                `${oltId}-onu-${onu.onuId}`,
+    id:                `${oltId}-onu-${safeOnuId}`,
     oltId,
-    onuNo:             `${onu.ponPort}/${onu.onuId}`,
+    onuNo:             `${ponPort}/${onu.onuId}`,
     description:       "",
     distance:          "N/A",
     signalLevel:       -40.0,   // placeholder — real OIDs not yet polled
@@ -77,8 +80,8 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
     status,
     macAddress:        onu.serial ?? "",
     clientMac:         "",
-    customerName:      `ONU-${onu.onuId}`,
-    lastSync:          status === "Online" ? "Just now" : "Offline",
+    customerName:      "",      // real — customer name not available via SNMP
+    lastSync:          "N/A",  // real — last sync not available via SNMP
     bandwidth:         "N/A",
     lastLogoutTime:    "N/A",
     lastLogoutReason:  "N/A",
@@ -136,6 +139,12 @@ export interface ApiDataState {
   source: DataSource;
 }
 
+/** ApiDataState extended with methods for dynamic updates. */
+export type ApiDataContextValue = ApiDataState & {
+  /** Re-fetch the real ONU cache for a single OLT and merge results into state. */
+  refreshRealOnus: (oltId: string) => Promise<void>;
+};
+
 function buildMetrics(
   olts: OltDevice[],
   onus: OnuDevice[],
@@ -164,7 +173,7 @@ function buildMetrics(
 
 const mockMetrics = buildMetrics(mockOlts, mockOnus, mockAlarms);
 
-const ApiDataContext = createContext<ApiDataState | null>(null);
+const ApiDataContext = createContext<ApiDataContextValue | null>(null);
 
 export function ApiDataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ApiDataState>({
@@ -239,14 +248,26 @@ export function ApiDataProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const refreshRealOnus = useCallback(async (oltId: string): Promise<void> => {
+    const newOnus = await fetchRealOnusForOlt(oltId);
+    if (newOnus.length === 0) return;
+    setState((prev) => {
+      const withoutOlt = prev.onus.filter(
+        (o) => !((o as OnuDevice & { isReal?: boolean }).isReal && o.oltId === oltId)
+      );
+      const allOnus = [...withoutOlt, ...newOnus];
+      return { ...prev, onus: allOnus, metrics: buildMetrics(prev.olts, allOnus, prev.alarms) };
+    });
+  }, []);
+
   return (
-    <ApiDataContext.Provider value={state}>
+    <ApiDataContext.Provider value={{ ...state, refreshRealOnus }}>
       {children}
     </ApiDataContext.Provider>
   );
 }
 
-export function useApiData(): ApiDataState {
+export function useApiData(): ApiDataContextValue {
   const ctx = useContext(ApiDataContext);
   if (!ctx) {
     throw new Error("useApiData must be used inside <ApiDataProvider>");
