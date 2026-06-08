@@ -78,7 +78,7 @@ export class CdataAdapter implements VendorAdapter {
       host:      request.ipAddress,
       community: request.community ?? "public",
       port:      request.port      ?? 161,
-      timeoutMs: 3_000,
+      timeoutMs: 5_000,
       retries:   1,
     });
 
@@ -88,7 +88,7 @@ export class CdataAdapter implements VendorAdapter {
     // ── EasyPath firmware (FD1208S-B0 V1.6.0, sysObjId 1.3.6.1.4.1.17409) ─
     // Different OID tree — bypass the generic EPON/GPON readOnuTable flow.
     if (sysInfo.sysObjectID.startsWith("1.3.6.1.4.1.17409")) {
-      const snmpResult   = await client.readEasyPathOnuTable(50);
+      const snmpResult   = await client.readEasyPathOnuTable(500);
       const onlineCount  = snmpResult.onus.filter(o => o.status === "online").length;
       const offlineCount = snmpResult.onus.filter(o => o.status === "offline").length;
       const unknownCount = snmpResult.onus.filter(o => o.status === "unknown").length;

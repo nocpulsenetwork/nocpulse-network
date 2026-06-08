@@ -58,6 +58,21 @@ interface RealOnuData {
   vendor: string;
   mibUsed: string;
   message: string;
+  sysUpTimeSecs?: number | null;
+  sysDescr?: string | null;
+  sysName?: string | null;
+}
+
+/** Format seconds into a human-readable uptime string: "14d 3h 22m". */
+function fmtUptime(secs: number): string {
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(' ');
 }
 
 // ─── Circular SVG gauge ───────────────────────────────────────────────────────
@@ -355,7 +370,11 @@ export default function OltDetail() {
                 <span className="text-border hidden sm:inline">·</span>
                 <span className="inline-flex items-center gap-1 text-xs">
                   <Clock className="h-3 w-3 shrink-0" />
-                  <span className="font-medium text-foreground/80">{olt.uptime}</span>
+                  <span className="font-medium text-foreground/80">
+                    {isRealOlt && realOnus?.sysUpTimeSecs != null
+                      ? fmtUptime(realOnus.sysUpTimeSecs)
+                      : olt.uptime}
+                  </span>
                 </span>
               </div>
             </div>

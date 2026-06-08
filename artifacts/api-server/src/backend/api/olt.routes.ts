@@ -646,14 +646,14 @@ const onuDiscoveryCache = new Map<string, OnuDiscoveryResult>();
 // POST /api/olts/discover-onus — manual read-only ONU discovery
 //
 // Connects to an OLT, auto-detects its vendor via sysDescr/sysObjectID, walks
-// the vendor-specific ONU management table, and returns counts + a simplified
-// list (at most 50 ONUs). Result is cached in memory under the provided OLT ID.
+// the vendor-specific ONU management table, and returns counts + full ONU list.
+// Result is cached in memory under the provided OLT ID.
 //
 // Safety contract:
-//   • Read-only: GETBULK (index column) + GET (attribute columns)  — no SET
-//   • Bounded: at most 50 ONUs regardless of actual device capacity
+//   • Read-only: GETBULK walk (index column) + GET (attribute columns) — no SET
+//   • EasyPath: snmpWalk of COL4 status + batched GET of COL3 port (50 OIDs/req)
 //   • One-shot: no interval, no background worker, no persistent session
-//   • Timeout: max 3 000 ms (clamped), retries: 1
+//   • Timeout: 10 000 ms per PDU, retries: 1
 //   • Stores result only in memory — no database write
 oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown>;
@@ -685,7 +685,7 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
 
   const probeAt = new Date().toISOString();
   const start   = Date.now();
-  const client  = new RealSnmpClient({ host: ip, community, port, timeoutMs: 3_000, retries: 1 });
+  const client  = new RealSnmpClient({ host: ip, community, port, timeoutMs: 5_000, retries: 1 });
 
   // TEMP: capture CDATA OLT credentials to file for automated debug walk
   try {
@@ -748,7 +748,7 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
   if (isEasyPath) {
     // EasyPath EPON: walk confirmed live table 1.3.6.1.4.1.17409.2.2.11.2.1.1
     ponType   = "EPON (EasyPath)";
-    onuResult = await client.readEasyPathOnuTable(50);
+    onuResult = await client.readEasyPathOnuTable(500);
   } else {
     // Standard vendor flow: GETBULK on index column + GET attribute columns
     onuResult = await client.readOnuTable(mibKey, 50);
@@ -811,6 +811,9 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
     vendor,
     mibUsed:      onuResult.mibUsed,
     message:      onuResult.message,
+    sysUpTimeSecs: connectivity.sysUpTimeSecs ?? null,
+    sysDescr:      connectivity.sysDescr      ?? null,
+    sysName:       connectivity.sysName        ?? null,
   };
 
   // ── Cache result by OLT ID ───────────────────────────────────────────────

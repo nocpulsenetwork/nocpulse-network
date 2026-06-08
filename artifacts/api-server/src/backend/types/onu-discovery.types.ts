@@ -70,7 +70,7 @@ export interface OnuDiscoveryResult {
   /** Per-port breakdown. */
   ponPorts: RealPonPort[];
 
-  /** Individual ONU list (at most 50 entries). */
+  /** Individual ONU list. */
   onus: OnuDiscoverySummary[];
 
   /** ISO 8601 timestamp of when the discovery ran. */
@@ -90,6 +90,15 @@ export interface OnuDiscoveryResult {
 
   /** Human-readable status message from the SNMP client. */
   message: string;
+
+  /** OLT uptime in seconds at time of discovery (from sysUpTime), or null. */
+  sysUpTimeSecs?: number | null;
+
+  /** OLT sysDescr string at time of discovery (firmware / hardware info), or null. */
+  sysDescr?: string | null;
+
+  /** OLT sysName string at time of discovery, or null. */
+  sysName?: string | null;
 }
 
 /** Returned when no discovery has been performed yet for this OLT. */

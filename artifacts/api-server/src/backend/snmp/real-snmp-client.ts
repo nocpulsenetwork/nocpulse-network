@@ -1316,8 +1316,8 @@ export class RealSnmpClient {
    * Safety: one GETBULK on COL4 + one GET for COL3 port bytes. No SET.
    */
   async readEasyPathOnuTable(limit: number): Promise<ReadOnuTableResult> {
-    const start       = Date.now();
-    const cappedLimit = Math.min(limit, 50);
+    const start     = Date.now();
+    const safeLimit = Math.min(limit, 1000);  // safety cap — never more than 1,000 ONUs
 
     const TABLE_ROOT  = "1.3.6.1.4.1.17409.2.2.11.2.1.1";
     const COL4_STATUS = `${TABLE_ROOT}.4`;
@@ -1325,15 +1325,26 @@ export class RealSnmpClient {
     const MIB_NAME    = "EasyPathEponOnuTable";
 
     // ── Phase 1: Iterative GETBULK walk of COL4 status column ───────────────
-    // Uses batches of 20 — matches WALK_MAX_REPETITIONS and stays well below
-    // the FD1208S-B0 firmware limit (~40 max repetitions before timeout).
+    //
+    // Uses per-PDU snmpGetBulk() calls (each with their own session) rather than
+    // the long-lived snmpWalk() session. This keeps each network round-trip
+    // bounded to timeoutMs independently.
+    //
+    // Two bugs from the original implementation are fixed here:
+    //   1. The hard cap of 50 (cappedLimit = Math.min(limit, 50)) is removed.
+    //      safeLimit is now 1,000, and the caller passes 500.
+    //   2. The `if (batch.length < BATCH) break` early exit is removed.
+    //      The FD1208S-B0 firmware returns partial GETBULK responses mid-table
+    //      (likely due to internal per-port pagination), so a short batch does
+    //      NOT mean end-of-table. End-of-table is detected only when inTree.length
+    //      is 0 (the walk has passed the column) or the cursor did not advance.
     const BATCH      = 20;
     const col4Prefix = `${COL4_STATUS}.`;
     const instances: Array<{ idx1: number; idx2: number; statusVal: number }> = [];
     let walkCursor   = COL4_STATUS;
     let walkError: string | undefined;
 
-    walkLoop: while (instances.length < cappedLimit) {
+    while (instances.length < safeLimit) {
       let batch: snmp.Varbind[];
       try {
         batch = await this.snmpGetBulk([walkCursor], BATCH);
@@ -1344,7 +1355,7 @@ export class RealSnmpClient {
 
       const inTree = batch.filter((vb) => vb.oid.startsWith(col4Prefix));
       for (const vb of inTree) {
-        if (instances.length >= cappedLimit) break walkLoop;
+        if (instances.length >= safeLimit) break;
         const tail = vb.oid.slice(col4Prefix.length).split(".");
         if (tail.length < 2) continue;
         const idx1 = parseInt(tail[0]!, 10);
@@ -1353,9 +1364,12 @@ export class RealSnmpClient {
         instances.push({ idx1, idx2, statusVal: intVal(vb) ?? 0 });
       }
 
-      if (inTree.length === 0) break;                // walked past column
-      walkCursor = inTree[inTree.length - 1]!.oid;  // advance to last in-tree OID
-      if (batch.length < BATCH) break;               // last batch — table exhausted
+      if (inTree.length === 0) break;  // walked past the column — done
+      const newCursor = inTree[inTree.length - 1]!.oid;
+      if (newCursor === walkCursor) break;  // no progress — guard against infinite loop
+      walkCursor = newCursor;
+      // NOTE: intentionally NOT breaking on batch.length < BATCH here.
+      // The FD1208S-B0 returns partial batches between PON port segments.
     }
 
     if (instances.length === 0) {
@@ -1371,16 +1385,24 @@ export class RealSnmpClient {
       };
     }
 
-    // ── Phase 2: GET COL3 for each ONU to read PON port (byte[5]) ────────────
-    const portOids = instances.map(({ idx1, idx2 }) => `${COL3_PORT}.${idx1}.${idx2}`);
-    let attrMap: Record<string, snmp.Varbind> = {};
-    try {
-      attrMap = indexVarbinds(await this.snmpGet(portOids));
-    } catch {
-      // GET failed — PON port will default to "port-?" for all ONUs
+    // ── Phase 2: GET COL3 in chunks to read PON port byte[5] ──────────────────
+    //
+    // Batched into chunks of 50 OIDs per GET to stay within SNMP PDU size limits.
+    // A single GET of 284+ OIDs would exceed the max PDU size on most SNMP agents
+    // and fail silently, leaving all ONUs on "port-?".
+    const GET_CHUNK = 50;
+    const portOids  = instances.map(({ idx1, idx2 }) => `${COL3_PORT}.${idx1}.${idx2}`);
+    const attrMap: Record<string, snmp.Varbind> = {};
+    for (let i = 0; i < portOids.length; i += GET_CHUNK) {
+      const chunk = portOids.slice(i, i + GET_CHUNK);
+      try {
+        Object.assign(attrMap, indexVarbinds(await this.snmpGet(chunk)));
+      } catch {
+        // GET failed for this chunk — affected ONUs default to "port-?"
+      }
     }
 
-    // ── Phase 3: Build normalised ONU list ────────────────────────────────────
+    // ── Phase 3: Build normalised ONU list ─────────────────────────────────────
     const onus: SnmpOnu[] = [];
     for (const { idx1, idx2, statusVal } of instances) {
       const instSuffix = `${idx1}.${idx2}`;
