@@ -1,6 +1,6 @@
 ---
 name: EasyPath SNMP quirks
-description: FD1208S-B0 V1.6.0 firmware SNMP behavior — ONU table OID, column map, maxRepetitions limit, dual sub-table structure.
+description: FD1208S-B0 V1.6.0 firmware — full ONU discovery uses 34592 MAC table (NOT 17409.2.2.11.2.1.1), bigN port encoding, maxRepetitions limit.
 ---
 
 # EasyPath Ethernet-PON (FD1208S-B0 V1.6.0) SNMP quirks
@@ -11,85 +11,81 @@ description: FD1208S-B0 V1.6.0 firmware SNMP behavior — ONU table OID, column 
 - sysName: "EasyPath Series PON Switch Access"
 - Detected vendor: "CDATA" (added "easypath" and OID prefix checks to detectVendor())
 
-## ONU table location — ACTIVE registration table (correct one to use)
-`1.3.6.1.4.1.17409.2.2.11.2.1.1.{col}.{idx1}.{idx2}` — 8 columns (2,3,4,6,7,8,9,10)
+## ONU discovery — USE 34592 MAC TABLE (confirmed 2026-06-08)
 
-This is tableIdx=1 in the OID path.  All currently-registered ONUs appear here.
-Verified exhaustively on 2026-06-08: active count ~31 ONUs across 2 PON ports.
+The ONLY SNMP path that surfaces all provisioned ONUs across all 8 PON ports:
 
-## Column map (confirmed live)
-| Col | Type           | Meaning                                     |
-|-----|----------------|---------------------------------------------|
-| 3   | OctetString[9] | byte[5] = PON port index (0-indexed)        |
-| 4   | INTEGER        | Status: 4=online, 2=offline                 |
-| 6   | OctetString[11]| DateAndTime registration timestamp          |
-| 7   | OctetString[11]| DateAndTime (last de-reg or same as COL6)   |
-| 8   | Counter32      | Registration count                          |
-| 9   | INTEGER        | Always 1 (admin state enabled)              |
-| 10  | OctetString    | ONU name (empty — not configured)           |
-| 2   | INTEGER        | ONU type code (203/310/321/401/403)         |
+`1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2.{bigN}`
 
-## Index structure
-- idx1: auto-incremented ONU registration ID (stable per ONU session, monotone with reg time)
-- idx2: second auto-incremented counter, always > idx1, not port/slot derived
-- Use idx1 as the ONU identifier (onuId)
+OctetString value = 6-byte ONU MAC address.
 
-## Second sub-table — DO NOT USE for ONU status
-`1.3.6.1.4.1.17409.2.2.11.2.2.1.{col}.{idx1}.{idx2}` — this is a
-**historical LLID session log**, NOT current ONU registrations.
+### bigN index encoding (4-byte big-endian integer)
+- byte[0] = 0x01 (OLT group, always 1)
+- byte[1] = 0x00 (reserved)
+- byte[2] = port slot  (13–20 for PON1–PON8 on FD1208S-B0)
+- byte[3] = ONU slot within port (1-based sequential)
 
-**Confirmed on 2026-06-08:**
-- ~1969 COL4 entries (1642 status=4, 319 other, 12 status=2)
-- COL3 (port bytes) is ENTIRELY ABSENT — GETBULK from `.2.2.1.3` returns 0 entries
-- tableIdx=2 is a ring-buffer (~2000 slots) that accumulates all past ONU registration
-  events; status=4 in this table means "online when the session was logged",
-  NOT "currently online"
-- Ignore this sub-table for discovery — including it gives garbage "online" counts
-  and wrong port assignments (portIdx fallback only, no real COL3 data)
+Port extraction in TypeScript/JavaScript:
+```ts
+const portSlot  = (bigN >>> 8) & 0xFF;  // byte[2]
+const portIndex = portSlot - 13;         // 0=PON1, …, 7=PON8
+```
 
-**Why:** The FD1208S-B0 maintains both a current-registration view (2.1.1) and a
-historical-session log (2.2.1). The session log accumulates over the device's lifetime
-and has a completely different cardinality from the current active ONU count.
+PORT_SLOT_MIN=13, PORT_SLOT_MAX=28 (accepts up to 16-port C-DATA variants).
 
-## Other sub-tables (tableIdx = 0, 3–7)
-Probed on 2026-06-08 — all return 0 COL4 entries. Empty; do not walk.
+### Per-ONU online/offline status — NOT AVAILABLE
+- community=public does not expose per-ONU online/offline status for all ONUs
+- All 353 provisioned ONUs are reported with status="online"
+- 17409.2.2.11.2.1.1 (portIdx=1) only exposes 31 ONUs from PON1–3; not representative
 
-## No MAC/Serial
-This firmware does not expose ONU MAC addresses or serial numbers via SNMP.
-Leave serial=null and mac=null in SnmpOnu.
+### 34592 sub-table structure (reference)
+- sub-col 1.2: 353 × 6-byte OctetString = MAC ← USE THIS
+- sub-col 1.3, 1.4, 1.5: 353 × INTEGER=0 (padding/reserved)
+- sub-col 1.6: 353 × INTEGER ∈ {61, 62, outliers} — service profile ID; NOT status
+- sub-col 1.7: 353 × INTEGER=1 — constant flag; NOT status
+- sub-col 1.8+: empty
 
-## Identity columns (COL2, COL5, COL6, COL9) — SKIP
-All four identity columns return noSuchInstance for every ONU on this firmware.
-Removed from readEasyPathOnuTable() to avoid ~120 s of wasted SNMP round-trips
-over WAN (each GET chunk takes 3–5 s; 40 chunks for 500 ONUs = 120–200 s wasted).
-**Do not re-add** unless the user confirms a firmware version that populates them.
+### Confirmed configured counts per port (FD1208S-B0 at 103.111.225.76, 2026-06-08)
+| Port  | Configured | OLT web UI (online) | Offline |
+|-------|-----------|---------------------|---------|
+| PON1  | 58        | 53                  | 5       |
+| PON2  | 42        | 42                  | 0       |
+| PON3  | 19        | 17                  | 2       |
+| PON4  | 46        | 31                  | 15      |
+| PON5  | 58        | 45                  | 13      |
+| PON6  | 56        | 31                  | 25      |
+| PON7  | 35        | 33                  | 2       |
+| PON8  | 39        | 28                  | 11      |
+| Total | 353       | 280                 | 73      |
+
+The 73 offline ONUs remain in the 34592 table (config persists). Their presence is
+indistinguishable from online ONUs via community=public.
+
+## Why not 17409.2.2.11.2.1.1 (portIdx=1)?
+- portIdx=1: ONLY 31 ONUs (PON1–PON3 partial subset); genuinely has only 31 rows
+- portIdx=2: historical LLID session ring-buffer (~2000 entries) for PON1–PON3 only
+- portIdx=3: historical overflow log for PON1 only (byte[5]=0 for all entries)
+- portIdx=4–10, portIdx=8–10: all return 0 entries
+- No other 17409 subtree exposes ONU data: 17409.2.1, 17409.2.2.1–10, 17409.2.2.11.1/3, 17409.2.3 all return 0 entries
 
 ## Critical: GETBULK maxRepetitions limit
 - maxRepetitions ≤ 40: works fine (~70ms)
-- maxRepetitions = 50: OLT agent hangs → timeout after 3000ms × retries
-- **Always use iterative GETBULK with BATCH=20** (same as WALK_MAX_REPETITIONS)
-
-**Why:** The FD1208S-B0 SNMP agent cannot handle large bulk requests on this specific
-table. BATCH=20 stays well below the limit and is consistent with debugWalkSubtree.
-
-**How to apply:** In readEasyPathOnuTable(), Phase 1 uses a walkLoop with
-`snmpGetBulk([cursor], 20)` until the subtree is exhausted, not a single large GETBULK.
+- maxRepetitions = 50: OLT agent hangs → timeout
+- **Always use BATCH=20** for all GETBULK on this device
 
 ## Critical: do NOT break on batch.length < BATCH
-The FD1208S-B0 firmware returns **partial GETBULK responses mid-table** between PON port
-segments (e.g. batch of 10 when BATCH=20 even with more entries remaining). Breaking on
-`batch.length < BATCH` causes premature termination — ONUs on subsequent ports are missed.
-
-**End-of-table detection:** break only when `inTree.length === 0` (walked past the column
-prefix) or when the cursor OID did not advance (infinite-loop guard).
+The FD1208S-B0 firmware returns partial GETBULK responses. Break only when
+`inTree.length === 0` or cursor did not advance (no-progress guard).
 
 ## Per-PDU timeout
-- Use `timeoutMs: 5_000` (5s per GETBULK PDU). With ~2 PDUs per 30 ONUs the full
-  walk completes in <1 second under normal conditions.
-- Do NOT use `timeoutMs: 10_000`. With `retries: 1`, a timed-out PDU costs 20s; across
-  15 PDUs that exceeds typical HTTP client timeouts (60s) and makes discovery appear hung.
+- Use `timeoutMs: 5_000` (5s per GETBULK PDU).
+- Do NOT use 10_000: with retries=1, a timeout costs 20s; compound over many PDUs.
 
-## Broader SNMP tree
-Attempting GETBULK from the enterprise root `1.3.6.1.4.1.17409` returns 0 bindings —
-the agent does not support tree-walk from high-level OIDs.  Only specific known OIDs
-respond.  No other ONU-related OID paths were found under .17409 besides .2.2.11.2.x.1.
+## ONU ID format
+- New format: `cdp_${bigN}` (e.g. `cdp_16780545`)
+- "cdp" = C-DATA provisioned entry
+- bigN is the decimal OID suffix integer
+
+## MAC addresses
+- 6-byte OctetString from sub-col 1.2 of 34592 table
+- All 353 ONUs have valid MACs; use `parseMacAddress(vb.value)` directly
