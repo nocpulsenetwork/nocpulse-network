@@ -25,6 +25,7 @@ import ActivityLogs from "@/pages/ActivityLogs";
 import NotificationCenter from "@/pages/NotificationCenter";
 import SmartDiagnostics from "@/pages/SmartDiagnostics";
 import DeviceInventory from "@/pages/DeviceInventory";
+import SnmpExplorer from "@/pages/SnmpExplorer";
 import NotFound from "@/pages/not-found";
 
 const ADMIN_UP:       UserRole[] = ['super_admin', 'admin'];
@@ -69,6 +70,7 @@ function Router() {
             <Route path="/staff" component={() => <RoleGuard allow={ADMIN_UP}><StaffManagement /></RoleGuard>} />
             <Route path="/subscribers" component={() => <RoleGuard allow={SUPER_ADMIN}><SubscriberManagement /></RoleGuard>} />
             <Route path="/settings" component={() => <RoleGuard allow={SUPER_ADMIN}><Settings /></RoleGuard>} />
+            <Route path="/admin/snmp-explorer" component={() => <RoleGuard allow={SUPER_ADMIN}><SnmpExplorer /></RoleGuard>} />
             <Route component={NotFound} />
           </Switch>
         </Layout>

@@ -20,6 +20,7 @@ import {
   Lock,
   Eye,
   HardDrive,
+  Terminal,
 } from "lucide-react";
 import logoIconUrl from '@/assets/logo-icon.png';
 import { cn } from "@/lib/utils";
@@ -107,6 +108,12 @@ export function Sidebar({
       href: "/settings",
       label: "Settings",
       icon: Settings,
+      minRole: "super_admin",
+    },
+    {
+      href: "/admin/snmp-explorer",
+      label: "SNMP Explorer",
+      icon: Terminal,
       minRole: "super_admin",
     },
   ];
