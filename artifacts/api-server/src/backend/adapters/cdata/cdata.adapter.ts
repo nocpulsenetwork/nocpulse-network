@@ -82,9 +82,52 @@ export class CdataAdapter implements VendorAdapter {
       retries:   1,
     });
 
-    // ── Step 1: Read sysDescr to detect PON type ────────────────────────
-    // One SNMP GET — reuses the same session pattern as testConnection().
+    // ── Step 1: Read sysDescr + sysObjectID to detect PON type and firmware ─
     const sysInfo  = await client.getSysInfo();
+
+    // ── EasyPath firmware (FD1208S-B0 V1.6.0, sysObjId 1.3.6.1.4.1.17409) ─
+    // Different OID tree — bypass the generic EPON/GPON readOnuTable flow.
+    if (sysInfo.sysObjectID.startsWith("1.3.6.1.4.1.17409")) {
+      const snmpResult   = await client.readEasyPathOnuTable(50);
+      const onlineCount  = snmpResult.onus.filter(o => o.status === "online").length;
+      const offlineCount = snmpResult.onus.filter(o => o.status === "offline").length;
+      const unknownCount = snmpResult.onus.filter(o => o.status === "unknown").length;
+      const portMap      = new Map<string, { total: number; online: number; offline: number; unknown: number }>();
+      for (const onu of snmpResult.onus) {
+        const e = portMap.get(onu.ponPort) ?? { total: 0, online: 0, offline: 0, unknown: 0 };
+        e.total++;
+        if (onu.status === "online")       e.online++;
+        else if (onu.status === "offline") e.offline++;
+        else                               e.unknown++;
+        portMap.set(onu.ponPort, e);
+      }
+      const ponPorts: RealPonPort[] = [...portMap.entries()].map(([id, counts]) => ({ id, ...counts }));
+      const onus: OnuDiscoverySummary[] = snmpResult.onus.map(o => ({
+        onuId:   o.onuId,
+        ponPort: o.ponPort,
+        status:  o.status,
+        serial:  o.serial,
+        type:    o.type,
+      }));
+      return {
+        hasData:      true,
+        oltId:        request.oltId,
+        totalOnus:    snmpResult.totalFound,
+        onlineOnus:   onlineCount,
+        offlineOnus:  offlineCount,
+        unknownOnus:  unknownCount,
+        ponPortCount: portMap.size,
+        ponPorts,
+        onus,
+        discoveredAt: new Date().toISOString(),
+        latencyMs:    snmpResult.latencyMs,
+        source:       "live-snmp",
+        vendor:       "CDATA",
+        mibUsed:      snmpResult.mibUsed,
+        message:      snmpResult.message + " (EasyPath EPON)",
+      };
+    }
+
     const ponType  = detectCdataPonType(sysInfo.sysDescr);
 
     // ── Step 2: Select primary MIB table based on detected PON type ──────

@@ -1296,6 +1296,134 @@ export class RealSnmpClient {
     };
   }
 
+  // ── readEasyPathOnuTable ──────────────────────────────────────────────────
+
+  /**
+   * Discover ONUs from a CDATA FD1208S-B0 / EasyPath Ethernet-PON OLT.
+   *
+   * This firmware (V1.6.0, sysObjId 1.3.6.1.4.1.17409) exposes a different
+   * MIB tree from standard C-DATA devices (1.3.6.1.4.1.34592). Confirmed
+   * live ONU table:
+   *   1.3.6.1.4.1.17409.2.2.11.2.1.1.{col}.{idx1}.{idx2}
+   *
+   * Confirmed columns (verified live on FD1208S-B0 V1.6.0_250227):
+   *   COL 4 (INTEGER)         — status: 4=online, 2=offline
+   *   COL 3 (OctetString[9])  — byte[5] = PON port index, 0-indexed
+   *
+   * ONU identifier: idx1 — auto-incremented by the OLT at registration time.
+   * MAC / serial: not available in this firmware MIB (left null).
+   *
+   * Safety: one GETBULK on COL4 + one GET for COL3 port bytes. No SET.
+   */
+  async readEasyPathOnuTable(limit: number): Promise<ReadOnuTableResult> {
+    const start       = Date.now();
+    const cappedLimit = Math.min(limit, 50);
+
+    const TABLE_ROOT  = "1.3.6.1.4.1.17409.2.2.11.2.1.1";
+    const COL4_STATUS = `${TABLE_ROOT}.4`;
+    const COL3_PORT   = `${TABLE_ROOT}.3`;
+    const MIB_NAME    = "EasyPathEponOnuTable";
+
+    // ── Phase 1: Iterative GETBULK walk of COL4 status column ───────────────
+    // Uses batches of 20 — matches WALK_MAX_REPETITIONS and stays well below
+    // the FD1208S-B0 firmware limit (~40 max repetitions before timeout).
+    const BATCH      = 20;
+    const col4Prefix = `${COL4_STATUS}.`;
+    const instances: Array<{ idx1: number; idx2: number; statusVal: number }> = [];
+    let walkCursor   = COL4_STATUS;
+    let walkError: string | undefined;
+
+    walkLoop: while (instances.length < cappedLimit) {
+      let batch: snmp.Varbind[];
+      try {
+        batch = await this.snmpGetBulk([walkCursor], BATCH);
+      } catch (err) {
+        walkError = err instanceof Error ? err.message : "SNMP GETBULK failed";
+        break;
+      }
+
+      const inTree = batch.filter((vb) => vb.oid.startsWith(col4Prefix));
+      for (const vb of inTree) {
+        if (instances.length >= cappedLimit) break walkLoop;
+        const tail = vb.oid.slice(col4Prefix.length).split(".");
+        if (tail.length < 2) continue;
+        const idx1 = parseInt(tail[0]!, 10);
+        const idx2 = parseInt(tail[1]!, 10);
+        if (!Number.isFinite(idx1) || !Number.isFinite(idx2)) continue;
+        instances.push({ idx1, idx2, statusVal: intVal(vb) ?? 0 });
+      }
+
+      if (inTree.length === 0) break;                // walked past column
+      walkCursor = inTree[inTree.length - 1]!.oid;  // advance to last in-tree OID
+      if (batch.length < BATCH) break;               // last batch — table exhausted
+    }
+
+    if (instances.length === 0) {
+      return {
+        success:    !walkError,
+        vendor:     "CDATA",
+        totalFound: 0,
+        onus:       [],
+        message:    walkError
+          ?? `GETBULK walk of ${MIB_NAME} (${COL4_STATUS}) returned 0 entries in the status column.`,
+        latencyMs:  Date.now() - start,
+        mibUsed:    MIB_NAME,
+      };
+    }
+
+    // ── Phase 2: GET COL3 for each ONU to read PON port (byte[5]) ────────────
+    const portOids = instances.map(({ idx1, idx2 }) => `${COL3_PORT}.${idx1}.${idx2}`);
+    let attrMap: Record<string, snmp.Varbind> = {};
+    try {
+      attrMap = indexVarbinds(await this.snmpGet(portOids));
+    } catch {
+      // GET failed — PON port will default to "port-?" for all ONUs
+    }
+
+    // ── Phase 3: Build normalised ONU list ────────────────────────────────────
+    const onus: SnmpOnu[] = [];
+    for (const { idx1, idx2, statusVal } of instances) {
+      const instSuffix = `${idx1}.${idx2}`;
+      const portVb     = attrMap[`${COL3_PORT}.${instSuffix}`];
+
+      // PON port: COL3 byte[5], 0-indexed (e.g. 0 → "port-0")
+      let ponPort = "port-?";
+      if (portVb && Buffer.isBuffer(portVb.value) && portVb.value.length >= 6) {
+        ponPort = `port-${portVb.value[5]}`;
+      }
+
+      const status: "online" | "offline" | "unknown" =
+        statusVal === 4 ? "online"
+        : statusVal === 2 ? "offline"
+        : "unknown";
+
+      onus.push({
+        onuId:          String(idx1),
+        ponPort,
+        serial:         null,
+        mac:            null,
+        status,
+        type:           null,
+        rawInstanceOid: instSuffix,
+      });
+    }
+
+    const onlineCount = onus.filter((o) => o.status === "online").length;
+    return {
+      success:    true,
+      vendor:     "CDATA",
+      totalFound: onus.length,
+      onus,
+      message:
+        `Found ${onus.length} ONU${onus.length !== 1 ? "s" : ""} in ${MIB_NAME}` +
+        (onus.length > 0
+          ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown)`
+          : ""),
+      latencyMs: Date.now() - start,
+      mibUsed:   MIB_NAME,
+    };
+  }
+
   // ── readOnuDetails ────────────────────────────────────────────────────────
 
   /**
@@ -1864,6 +1992,9 @@ function detectVendor(sysDescr: string, sysObjectID: string): string {
   if (d.includes("vsol") || d.includes("v1600") || d.includes("v2801") || o.startsWith("1.3.6.1.4.1.37950"))
     return "VSOL";
   if (d.includes("c-data") || d.includes("cdata") || d.includes("fd1616") || d.includes("fd8920") || o.startsWith("1.3.6.1.4.1.34592"))
+    return "CDATA";
+  // EasyPath Ethernet-PON (FD1208S-B0 V1.6.0) — same vendor, different firmware OID tree
+  if (d.includes("easypath") || o.startsWith("1.3.6.1.4.1.17409"))
     return "CDATA";
 
   return "Unknown";

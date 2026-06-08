@@ -726,13 +726,15 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
   // ── Step 2: Extract model and resolve MIB key ────────────────────────────
   const model = extractModelFromDescr(connectivity.sysDescr ?? "");
 
+  // EasyPath firmware (FD1208S-B0 V1.6.0): sysObjId 1.3.6.1.4.1.17409.
+  // Different OID tree — bypass the generic EPON/GPON MIB key selection.
+  const isEasyPath = vendor === "CDATA" &&
+    (connectivity.sysObjectID ?? "").startsWith("1.3.6.1.4.1.17409");
+
   // CDATA: must detect PON type (EPON vs GPON) BEFORE picking the ONU table.
-  // Passing raw "CDATA" to readOnuTable falls through to the GPON alias, which
-  // returns 0 on EPON devices. Use sysDescr (already fetched in step 1) to
-  // select the correct key upfront.
-  let mibKey   = vendor;
-  let ponType  = "N/A";
-  if (vendor === "CDATA") {
+  let mibKey  = vendor;
+  let ponType = "N/A";
+  if (!isEasyPath && vendor === "CDATA") {
     const detected = detectCdataPonType(connectivity.sysDescr ?? "");
     ponType  = detected;
     mibKey   = detected === "EPON" ? "CDATA-EPON"
@@ -741,23 +743,31 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
   }
 
   // ── Step 3: Read ONU management table ────────────────────────────────────
-  // GETBULK (index column, max 50) + GET (attribute columns for found ONUs).
-  let onuResult: ReadOnuTableResult = await client.readOnuTable(mibKey, 50);
+  let onuResult: ReadOnuTableResult;
 
-  // CDATA-EPON: static table may return 0 if firmware uses a non-standard OID
-  // path or if the index column is marked not-accessible. Fall back to the
-  // dynamic probe which walks the enterprise subtree and identifies ONUs by
-  // their 6-byte MAC/LLID OctetStrings.
-  if (vendor === "CDATA" && mibKey === "CDATA-EPON" && onuResult.totalFound === 0) {
-    const probeResult = await client.readCdataEponOnusProbe(50);
-    if (probeResult.totalFound > 0) onuResult = probeResult;
-  }
+  if (isEasyPath) {
+    // EasyPath EPON: walk confirmed live table 1.3.6.1.4.1.17409.2.2.11.2.1.1
+    ponType   = "EPON (EasyPath)";
+    onuResult = await client.readEasyPathOnuTable(50);
+  } else {
+    // Standard vendor flow: GETBULK on index column + GET attribute columns
+    onuResult = await client.readOnuTable(mibKey, 50);
 
-  // CDATA: if both EPON paths returned 0, try GPON as a last resort.
-  if (vendor === "CDATA" && onuResult.totalFound === 0) {
-    const altKey    = mibKey === "CDATA-EPON" ? "CDATA-GPON" : "CDATA-EPON";
-    const altResult = await client.readOnuTable(altKey, 50);
-    if (altResult.totalFound > 0) onuResult = altResult;
+    // CDATA-EPON: static table may return 0 if firmware uses a non-standard OID
+    // path or if the index column is marked not-accessible. Fall back to the
+    // dynamic probe which walks the enterprise subtree and identifies ONUs by
+    // their 6-byte MAC/LLID OctetStrings.
+    if (vendor === "CDATA" && mibKey === "CDATA-EPON" && onuResult.totalFound === 0) {
+      const probeResult = await client.readCdataEponOnusProbe(50);
+      if (probeResult.totalFound > 0) onuResult = probeResult;
+    }
+
+    // CDATA: if both EPON paths returned 0, try GPON as a last resort.
+    if (vendor === "CDATA" && onuResult.totalFound === 0) {
+      const altKey    = mibKey === "CDATA-EPON" ? "CDATA-GPON" : "CDATA-EPON";
+      const altResult = await client.readOnuTable(altKey, 50);
+      if (altResult.totalFound > 0) onuResult = altResult;
+    }
   }
 
   // ── Derive counts ─────────────────────────────────────────────────────────
