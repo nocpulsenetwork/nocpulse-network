@@ -24,6 +24,24 @@ export interface OnuDiscoverySummary {
 
   /** ONU hardware model/type string, or null. */
   type: string | null;
+
+  /**
+   * ONU name/alias as configured on the OLT management interface, or null
+   * when unavailable from this firmware version.
+   */
+  name: string | null;
+
+  /**
+   * MAC address / EPON LLID for this ONU (XX:XX:XX:XX:XX:XX format), or null.
+   * Distinct from `serial` — serial is for GPON VENDORHEX, mac is hardware MAC.
+   */
+  mac: string | null;
+
+  /**
+   * De-registration reason code from the OLT (vendor INTEGER enum), or null.
+   * See SnmpOnu.offlineReasonCode for the C-DATA/EasyPath value mapping.
+   */
+  offlineReasonCode: number | null;
 }
 
 /** Per-PON-port summary derived from the ONU discovery list. */

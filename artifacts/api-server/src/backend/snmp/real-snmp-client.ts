@@ -167,11 +167,26 @@ export interface SnmpOnu {
   /** MAC address for EPON ONUs (e.g. "A1:B2:C3:D4:E5:F6"), or null. */
   mac: string | null;
 
+  /**
+   * ONU name/alias as configured on the OLT management interface, or null
+   * when the firmware does not expose this column or the value is blank.
+   * Undefined (not set) when the adapter has not attempted to read it.
+   */
+  name?: string | null;
+
   /** Operational status from the ONU management table. */
   status: "online" | "offline" | "unknown";
 
   /** ONU hardware model/type string (e.g. "HG8310M"), or null. */
   type: string | null;
+
+  /**
+   * De-registration reason code from the OLT (vendor-specific INTEGER enum).
+   * Null when not reported; undefined when the adapter has not attempted to read.
+   * Common C-DATA/EasyPath values: 0=Unknown, 1=DyingGasp, 2=LOS,
+   * 3=AdminDisabled, 4=MPCPTimeout, 5=LinkFault, 6=Deregistered, 7=AgingOut.
+   */
+  offlineReasonCode?: number | null;
 
   /** Raw OID instance suffix — useful for debugging MIB mapping. */
   rawInstanceOid: string;
@@ -1411,7 +1426,34 @@ export class RealSnmpClient {
       }
     }
 
-    // ── Phase 3: Build normalised ONU list ─────────────────────────────────────
+    // ── Phase 3: GET identity columns (best-effort) ───────────────────────────
+    //
+    // Probe candidate columns for ONU identity data. Results are merged into the
+    // shared attrMap; OID columns absent from this firmware return no entries and
+    // leave the corresponding SnmpOnu fields null.
+    //
+    //   COL2 — ONU name/alias (OCTET STRING, printable ASCII when set)
+    //   COL5 — MAC address / EPON LLID (6-byte OCTET STRING)
+    //   COL6 — ONU model/type string (OCTET STRING)
+    //   COL9 — de-registration reason code (INTEGER enum)
+    //
+    const IDENTITY_COLS = [2, 5, 6, 9] as const;
+    const identityOids: string[] = [];
+    for (const col of IDENTITY_COLS) {
+      for (const { idx1, idx2 } of instances) {
+        identityOids.push(`${TABLE_ROOT}.${col}.${idx1}.${idx2}`);
+      }
+    }
+    for (let i = 0; i < identityOids.length; i += GET_CHUNK) {
+      const chunk = identityOids.slice(i, i + GET_CHUNK);
+      try {
+        Object.assign(attrMap, indexVarbinds(await this.snmpGet(chunk)));
+      } catch {
+        // Identity data is best-effort; a failed chunk leaves those fields null.
+      }
+    }
+
+    // ── Phase 4: Build normalised ONU list ─────────────────────────────────────
     const onus: SnmpOnu[] = [];
     for (const { idx1, idx2, statusVal } of instances) {
       const instSuffix = `${idx1}.${idx2}`;
@@ -1428,14 +1470,41 @@ export class RealSnmpClient {
         : statusVal === 2 ? "offline"
         : "unknown";
 
+      // ── Identity fields from Phase 3 probe ──────────────────────────────────
+      const col2Vb = attrMap[`${TABLE_ROOT}.2.${instSuffix}`];
+      const col5Vb = attrMap[`${TABLE_ROOT}.5.${instSuffix}`];
+      const col6Vb = attrMap[`${TABLE_ROOT}.6.${instSuffix}`];
+      const col9Vb = attrMap[`${TABLE_ROOT}.9.${instSuffix}`];
+
+      // COL2: ONU name/alias
+      const name: string | null =
+        Buffer.isBuffer(col2Vb?.value)       ? bufToPrintableAscii(col2Vb.value)
+        : typeof col2Vb?.value === "string"  ? (col2Vb.value.trim() || null)
+        : null;
+
+      // COL5: MAC address / EPON LLID (6-byte OCTET STRING)
+      const mac: string | null = parseMacAddress(col5Vb?.value ?? null);
+
+      // COL6: ONU model/type
+      const type: string | null =
+        Buffer.isBuffer(col6Vb?.value)       ? bufToPrintableAscii(col6Vb.value)
+        : typeof col6Vb?.value === "string"  ? (col6Vb.value.trim() || null)
+        : null;
+
+      // COL9: de-registration reason code (INTEGER)
+      const offlineReasonCode: number | null =
+        col9Vb != null ? (intVal(col9Vb) ?? null) : null;
+
       onus.push({
-        onuId:          `${idx1}.${idx2}`,  // full instance OID — unique per ONU across all ports
+        onuId:             `${idx1}.${idx2}`,  // full instance OID — unique per ONU across all ports
         ponPort,
-        serial:         null,
-        mac:            null,
+        serial:            null,
+        mac,
+        name,
         status,
-        type:           null,
-        rawInstanceOid: instSuffix,
+        type,
+        offlineReasonCode,
+        rawInstanceOid:    instSuffix,
       });
     }
 
@@ -2573,6 +2642,22 @@ function parseGponSerial(value: unknown): string | null {
   }
   if (typeof value === "string") return value.trim() || null;
   return null;
+}
+
+/**
+ * Extract a printable ASCII string from an SNMP OCTET STRING buffer.
+ *
+ * Returns null when the buffer is empty, all-zero, or contains mostly
+ * non-printable bytes (threshold: ≥75% must be ASCII 0x20–0x7E).
+ */
+function bufToPrintableAscii(buf: Buffer): string | null {
+  const str = buf.toString("ascii").replace(/\x00/g, "").trim();
+  if (str.length === 0) return null;
+  const printable = [...str].filter((c) => {
+    const code = c.charCodeAt(0);
+    return code >= 0x20 && code < 0x7f;
+  }).length;
+  return printable / str.length >= 0.75 ? str : null;
 }
 
 /**

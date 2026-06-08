@@ -60,7 +60,30 @@ type RawDiscoveredOnu = {
   status: string;
   serial: string | null;
   type: string | null;
+  /** ONU name/alias from OLT management table, or null/absent if unsupported. */
+  name?: string | null;
+  /** MAC address / EPON LLID, or null/absent if unsupported. */
+  mac?: string | null;
+  /** De-registration reason code (C-DATA/EasyPath INTEGER enum), or null/absent. */
+  offlineReasonCode?: number | null;
 };
+
+// ── Offline reason decoder (C-DATA / EasyPath EPON) ──────────────────────────
+const EPON_OFFLINE_REASON: Record<number, string> = {
+  0: "Unknown",
+  1: "Dying Gasp",
+  2: "LOS",
+  3: "Admin Disabled",
+  4: "MPCP Timeout",
+  5: "Link Fault",
+  6: "Deregistered",
+  7: "Aging Out",
+};
+
+function decodeOfflineReason(code: number | null | undefined): string {
+  if (code == null) return "N/A";
+  return EPON_OFFLINE_REASON[code] ?? `Code-${code}`;
+}
 
 function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice {
   // SNMP port-0 → PON-1, port-1 → PON-2, … (0-indexed → 1-indexed)
@@ -73,18 +96,18 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
     id:                `${oltId}-onu-${safeOnuId}`,
     oltId,
     onuNo:             `${ponPort}/${onu.onuId}`,
-    description:       "",
+    description:       onu.name ?? "",  // real ONU name/alias from OLT
     distance:          "N/A",
     signalLevel:       -40.0,   // placeholder — real OIDs not yet polled
     txPower:           -5.0,    // placeholder — real OIDs not yet polled
     status,
-    macAddress:        onu.serial ?? "",
+    macAddress:        onu.mac ?? onu.serial ?? "",  // real MAC preferred over serial
     clientMac:         "",
-    customerName:      "",      // real — customer name not available via SNMP
-    lastSync:          "N/A",  // real — last sync not available via SNMP
+    customerName:      "",                           // real — not available via SNMP
+    lastSync:          "N/A",                        // real — not available via SNMP
     bandwidth:         "N/A",
     lastLogoutTime:    "N/A",
-    lastLogoutReason:  "N/A",
+    lastLogoutReason:  decodeOfflineReason(onu.offlineReasonCode),
     onlineDuration:    "N/A",
     ponPort,
     vlanId:            0,

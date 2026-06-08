@@ -52,7 +52,16 @@ interface RealOnuData {
   ponPortCount: number;
   physicalPortCount?: number;
   ponPorts: Array<{ id: string; total: number; online: number; offline: number; unknown: number }>;
-  onus: Array<{ onuId: string; ponPort: string; status: 'online' | 'offline' | 'unknown'; serial: string | null; type: string | null }>;
+  onus: Array<{
+    onuId: string;
+    ponPort: string;
+    status: 'online' | 'offline' | 'unknown';
+    serial: string | null;
+    type: string | null;
+    name: string | null;
+    mac: string | null;
+    offlineReasonCode: number | null;
+  }>;
   discoveredAt: string;
   latencyMs: number;
   source: 'live-snmp';

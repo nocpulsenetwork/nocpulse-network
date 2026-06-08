@@ -258,13 +258,15 @@ export default function OnuDetail() {
   // Typed row arrays extracted here to avoid JSX-incompatible inline `as` casts
   const deviceInfoRows: { label: string; value: string; mono?: boolean; note?: string }[] = isRealOnu
     ? [
-        { label: "OLT",          value: parentOlt?.name ?? onu.oltId },
-        { label: "PON Port",     value: onu.ponPort },
-        { label: "ONU Index",    value: onu.onuNo, mono: true },
-        { label: "ONU Type",     value: onu.onuType },
-        { label: "Serial / MAC", value: onu.macAddress || "N/A", mono: true },
-        { label: "Status",       value: onu.status },
-        { label: "Last Seen",    value: "N/A" },
+        { label: "OLT",           value: parentOlt?.name ?? onu.oltId },
+        { label: "PON Port",      value: onu.ponPort },
+        { label: "ONU Index",     value: onu.onuNo, mono: true },
+        { label: "ONU Type",      value: onu.onuType },
+        { label: "Name",          value: onu.description || "N/A" },
+        { label: "MAC / LLID",    value: onu.macAddress || "N/A", mono: true },
+        { label: "Status",        value: onu.status },
+        { label: "Offline Cause", value: onu.lastLogoutReason !== "N/A" ? onu.lastLogoutReason : "None recorded" },
+        { label: "Last Seen",     value: "N/A" },
       ]
     : [
         { label: "OLT",          value: parentOlt?.name ?? onu.oltId },

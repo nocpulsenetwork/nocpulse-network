@@ -103,11 +103,14 @@ export class CdataAdapter implements VendorAdapter {
       }
       const ponPorts: RealPonPort[] = [...portMap.entries()].map(([id, counts]) => ({ id, ...counts }));
       const onus: OnuDiscoverySummary[] = snmpResult.onus.map(o => ({
-        onuId:   o.onuId,
-        ponPort: o.ponPort,
-        status:  o.status,
-        serial:  o.serial,
-        type:    o.type,
+        onuId:             o.onuId,
+        ponPort:           o.ponPort,
+        status:            o.status,
+        serial:            o.serial,
+        type:              o.type,
+        name:              o.name ?? null,
+        mac:               o.mac,
+        offlineReasonCode: o.offlineReasonCode ?? null,
       }));
       // Query physical port count from ifTable — gives us empty ports too.
       const rawPortCount = await client.readEasyPathPhysicalPorts();
@@ -186,11 +189,14 @@ export class CdataAdapter implements VendorAdapter {
     const ponPorts: RealPonPort[] = [...portMap.entries()].map(([id, counts]) => ({ id, ...counts }));
 
     const onus: OnuDiscoverySummary[] = snmpResult.onus.map(o => ({
-      onuId:   o.onuId,
-      ponPort: o.ponPort,
-      status:  o.status,
-      serial:  o.serial,
-      type:    o.type,
+      onuId:             o.onuId,
+      ponPort:           o.ponPort,
+      status:            o.status,
+      serial:            o.serial,
+      type:              o.type,
+      name:              o.name ?? null,
+      mac:               o.mac,
+      offlineReasonCode: o.offlineReasonCode ?? null,
     }));
 
     // ── Build human-readable message including PON type ────────────────────
