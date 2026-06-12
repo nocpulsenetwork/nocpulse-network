@@ -1533,30 +1533,34 @@ export class RealSnmpClient {
       return out;
     };
 
-    // ── Phase 2: OIDs not yet verified ───────────────────────────────────────
-    // Columns 9/10/11 of 17409.2.3.4.1.1 returned wrong values (col9 gave
-    // 0.1 dBm when the OLT web UI shows -12.24 dBm for the same ONU).
-    // The correct column numbers are unknown until a live SNMP probe is run
-    // from a host with direct SNMP access to the OLT.
-    // All optical telemetry is null (→ "N/A" in UI) until OIDs are confirmed.
+    // ── Phase 2: Optical columns — confirmed OIDs for EasyPath FD1208S-B0 ────
     //
-    // TODO: when the correct OIDs are identified, replace these empty Maps with:
-    //   const [rxRaw, txRaw, distRaw] = await Promise.all([
-    //     walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.??"),  // RX power
-    //     walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.??"),  // TX power
-    //     walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.??"),  // distance
-    //   ]);
-    const rxRaw   = new Map<number, number>();
-    const txRaw   = new Map<number, number>();
-    const distRaw = new Map<number, number>();
+    // col9  → ONU RX optical power
+    // col10 → ONU TX optical power
+    // col11 → fiber distance in metres
+    //
+    // Confirmed encoding (validated against OLT web UI):
+    //   OLT UI = -12.24 dBm, raw SNMP = -1224  →  0.01 dBm scale (÷100)
+    //   OLT UI =   2.70 dBm, raw SNMP =   270  →  0.01 dBm scale (÷100)
+    //   (auto-detect: median negative < -500 → ÷100, else ÷10)
+    //
+    // TX power is always positive on EPON, so dBmDiv() would incorrectly
+    // default to ÷10. Fix: derive txDiv from rxDiv (same table, same scale).
+    const [rxRaw, txRaw, distRaw] = await Promise.all([
+      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.9"),
+      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.10"),
+      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.11"),
+    ]);
 
-    // Validate: does the column contain plausible optical power values?
-    // EPON ONU RX typical: -8 to -30 dBm → raw -80 to -300 (0.1 dBm scale).
-    // Accept [-5000, 100] to cover both 0.1 dBm and 0.01 dBm encodings.
+    // Validate: plausible optical power values in the column.
+    // Require |val| > 10 to reject status-flag columns (raw 0, 1, 2, …).
+    // Accept range [-5000, 2000] to cover both 0.1 dBm and 0.01 dBm encodings
+    // for the full practical EPON optical power range (−50 dBm to +20 dBm).
     const isOpticalLike = (m: Map<number, number>): boolean => {
-      const nonZero = Array.from(m.values()).filter((v) => v !== 0);
-      if (nonZero.length === 0) return false;
-      return nonZero.filter((v) => v >= -5000 && v <= 100).length / nonZero.length >= 0.5;
+      const vals = Array.from(m.values()).filter((v) => v !== 0);
+      if (vals.length === 0) return false;
+      const plausible = vals.filter((v) => v >= -5000 && v <= 2000 && Math.abs(v) > 10);
+      return plausible.length / vals.length >= 0.3;
     };
 
     // Validate: plausible fiber distance (meters, non-negative, ≤ 100 km).
@@ -1566,9 +1570,12 @@ export class RealSnmpClient {
       return vals.filter((v) => v >= 0 && v <= 100_000).length / vals.length >= 0.8;
     };
 
-    // Auto-detect dBm scale: if median negative value < -500, assume 0.01 dBm (÷100);
-    // otherwise assume 0.1 dBm (÷10).
-    const dBmDiv = (m: Map<number, number>): number => {
+    // Detect dBm scale from the RX column (which has negative values).
+    // If median negative raw < -500 the firmware uses 0.01 dBm units (÷100);
+    // otherwise 0.1 dBm units (÷10).
+    // TX shares the same table and scale, so txDiv is derived from rxDiv rather
+    // than auto-detected (TX values are positive → auto-detect would default to ÷10).
+    const dBmDivFromNeg = (m: Map<number, number>): number => {
       const neg = Array.from(m.values()).filter((v) => v < 0).sort((a, b) => a - b);
       if (neg.length === 0) return 10;
       return (neg[Math.floor(neg.length / 2)]! < -500) ? 100 : 10;
@@ -1577,8 +1584,9 @@ export class RealSnmpClient {
     const rxValid   = isOpticalLike(rxRaw);
     const txValid   = isOpticalLike(txRaw);
     const distValid = isDistanceLike(distRaw);
-    const rxDiv     = rxValid ? dBmDiv(rxRaw) : 10;
-    const txDiv     = txValid ? dBmDiv(txRaw) : 10;
+    const rxDiv     = rxValid ? dBmDivFromNeg(rxRaw) : 10;
+    // TX is positive, so inherit the scale detected from the RX column.
+    const txDiv     = txValid ? rxDiv : 10;
 
     // ── Phase 3: Probe integer cols 15–21 for temperature + register duration ─
     //

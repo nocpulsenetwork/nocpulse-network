@@ -74,27 +74,23 @@ serial = mac.replace(/:/g,"").toUpperCase() (EPON has no separate serial; MAC IS
 ## Per-PON online count OID (for reference / validation)
 `1.3.6.1.4.1.17409.2.3.3.1.1.8.1.0.{portSlot}` for portSlot 13–20
 
-## ONU optical power + distance (Phase 2 probe)
+## ONU optical power + distance (Phase 2 probe) — confirmed
 
-**Status as of 2026-06-12: WRONG COLUMNS — all telemetry set to null/N/A.**
+Confirmed OIDs (same `17409.2.3.4.1.1` table, same bigN index):
+- **col9**  → RX optical power
+- **col10** → TX optical power
+- **col11** → fiber distance (metres, integer, no scaling)
 
-Cols 9/10/11 of `17409.2.3.4.1.1` returned wrong values. Col9 gave RX=0.1 dBm when
-OLT web UI shows -12.24 dBm for the same ONU (PON-3, ONU-6). Col9 appears to contain
-a status flag (raw=1) not optical power. The `isOpticalLike` heuristic incorrectly
-accepted it (1 is within [-5000, 100]).
+Confirmed encoding (validated by user against OLT web UI):
+- OLT UI -12.24 dBm = raw SNMP -1224  →  **0.01 dBm scale (÷100)**
+- OLT UI   2.70 dBm = raw SNMP   270  →  **0.01 dBm scale (÷100)**
+- Auto-detect: median of negative values in RX col; if < -500 → ÷100, else ÷10
+- TX is positive-only so auto-detect defaults wrong (÷10); fixed by inheriting rxDiv for txDiv
 
-Known-good OLT web UI values for PON-3 / ONU-6 (bigN=16781062):
-  RX Power : -12.24 dBm → expect raw -1224 (×0.01) or -122 (×0.1)
-  TX Power :   2.70 dBm → expect raw  270 (×0.01) or  27 (×0.1)
-  Distance :    985 m   → expect raw 985
-  Temp     :  29.68 °C  → expect raw 2968 (×0.01) or 297 (×0.1)
-  Duration :   6051 s   → expect raw 6051
+`isOpticalLike` heuristic requires `|val| > 10` to reject status-flag columns (raw 0, 1, 2).
+Old bug: raw=1 passed the old `>= -5000 && <= 100` check; now rejected by abs threshold.
 
-Phase 2 probe is disabled (empty Maps returned, no SNMP walk). The correct OID columns
-need to be found by running an SNMP GET on cols 1–45 of `17409.2.3.4.1.1.{col}.16781062`
-from a host with direct SNMP access to 103.111.225.76 (the OLT is unreachable from Replit servers).
-Once the correct col numbers are confirmed, replace the empty-Map stubs in `readEasyPathOnuTable()`
-with the actual walkIntCol calls (TODO comment in code marks the spot).
+Phase 3 (temperature/duration, cols 15–21) — OIDs not yet confirmed. Disabled (null/N/A).
 
 ## Dead-end OIDs (do not retry)
 - `17409.2.2.11.2.1.1.3+.4` — only ~146 rows (MPCP subset), gives ~141 online (wrong)
