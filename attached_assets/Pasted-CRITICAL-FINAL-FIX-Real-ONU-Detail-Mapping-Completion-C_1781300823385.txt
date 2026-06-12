@@ -1,0 +1,79 @@
+CRITICAL FINAL FIX: Real ONU Detail Mapping Completion
+
+Current state:
+- Real ONU discovery works.
+- Real online/offline counts work.
+- Real PON counts work.
+- ONU list loads correctly.
+
+Remaining issue:
+ONU Details page opens the wrong ONU due to PON/ONU index mapping mismatch.
+
+Example:
+OLT Web UI selected:
+- PON-3
+- ONU ID 6
+- MAC: A2:3E:08:24:78:50
+- RX: -12.24 dBm
+- TX: 2.7 dBm
+- Distance: 985 meters
+- Temperature: 29.68°C
+- Register Duration: 0 day 1 hour 40 minute 51 second
+
+NOCPulse currently shows:
+- Different PON
+- Different ONU index
+- Different MAC
+- Wrong optical values
+
+Requirements:
+
+1. Fix ONU Detail mapping only.
+2. Use the exact SNMP discovery index pair (idx1, idx2) as the single source of truth.
+3. Preserve real:
+   - PON number
+   - ONU ID
+   - MAC
+4. Do not reconstruct ONU identifiers from list position.
+5. When opening ONU Details, always pass and use:
+   - OLT ID
+   - Real PON number
+   - Real ONU ID
+   - Original SNMP index pair
+6. Verify that the selected ONU in ONU Management is exactly the same ONU opened in ONU Details.
+7. After mapping is fixed, populate these fields using the same exact ONU index:
+   - MAC / LLID
+   - RX Power
+   - TX Power
+   - Distance
+   - Temperature
+   - Register Duration
+8. ONU Name/Description:
+   - Use real OLT description if available.
+   - Otherwise show N/A.
+9. Do not show generated IDs such as cdp_xxxxx.
+10. Keep read-only SNMP.
+
+Do NOT:
+- Modify ONU discovery logic.
+- Modify online/offline counting logic.
+- Redesign UI.
+- Add traffic monitoring.
+- Add PPPoE.
+- Add reboot/disable operations.
+- Hardcode any values.
+
+Validation before completion:
+Select several ONUs from different PON ports and confirm:
+- PON number matches OLT Web UI.
+- ONU ID matches OLT Web UI.
+- MAC matches OLT Web UI.
+- RX/TX matches OLT Web UI.
+- Distance matches OLT Web UI.
+- Temperature matches OLT Web UI.
+- Register Duration matches OLT Web UI.
+
+Success Criteria:
+ONU Details page always displays the exact same ONU selected from ONU Management, with real values from the OLT.
+
+Implement, validate against current CDATA OLT, then stop.

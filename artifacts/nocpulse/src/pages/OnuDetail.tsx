@@ -522,29 +522,69 @@ export default function OnuDetail() {
           </CardContent>
         </Card>
 
-        {/* Uptime */}
-        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : "border-l-blue-500"}`}>
+        {/* Uptime / Register Duration */}
+        <Card className={`border-l-4 ${isRealOnu && onu.registerDurationSecs != null ? "border-l-blue-500" : isRealOnu ? "border-l-slate-500" : "border-l-blue-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Uptime</span>
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className={`text-lg font-bold leading-tight ${isRealOnu ? "text-muted-foreground/40" : onu.status === "Offline" ? "text-muted-foreground" : ""}`}>
-              {isRealOnu ? "N/A" : onu.onlineDuration === "N/A" ? "—" : onu.onlineDuration}
-            </div>
-            <div className="mt-1 text-[10px] text-muted-foreground">{isRealOnu ? "OID not yet polled" : "Current session"}</div>
+            {isRealOnu ? (
+              onu.registerDurationSecs != null ? (() => {
+                const secs  = onu.registerDurationSecs!;
+                const days  = Math.floor(secs / 86400);
+                const hours = Math.floor((secs % 86400) / 3600);
+                const mins  = Math.floor((secs % 3600) / 60);
+                const s     = secs % 60;
+                return (
+                  <>
+                    <div className="text-lg font-bold leading-tight font-mono">
+                      {days > 0 ? `${days}d ` : ""}{hours}h {mins}m {s}s
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted-foreground">Since last registration</div>
+                  </>
+                );
+              })() : (
+                <>
+                  <div className="text-lg font-bold leading-tight text-muted-foreground/40">N/A</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Not available via SNMP</div>
+                </>
+              )
+            ) : (
+              <>
+                <div className={`text-lg font-bold leading-tight ${onu.status === "Offline" ? "text-muted-foreground" : ""}`}>
+                  {onu.onlineDuration === "N/A" ? "—" : onu.onlineDuration}
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">Current session</div>
+              </>
+            )}
           </CardContent>
         </Card>
 
         {/* Temperature */}
-        <Card className="border-l-4 border-l-slate-500 col-span-2 sm:col-span-1">
+        <Card className={`border-l-4 col-span-2 sm:col-span-1 ${isRealOnu && onu.temperatureCelsius != null ? (onu.temperatureCelsius > 70 ? "border-l-red-500" : onu.temperatureCelsius > 55 ? "border-l-amber-500" : "border-l-green-500") : "border-l-slate-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Temperature</span>
               <Thermometer className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
-            <div className="text-xl font-bold text-muted-foreground/40">—</div>
-            <div className="mt-1 text-[10px] text-muted-foreground">Sensor not available</div>
+            {isRealOnu && onu.temperatureCelsius != null ? (
+              <>
+                <div className={`text-xl font-bold font-mono ${onu.temperatureCelsius > 70 ? "text-red-500" : onu.temperatureCelsius > 55 ? "text-amber-500" : "text-green-500"}`}>
+                  {onu.temperatureCelsius.toFixed(1)}°C
+                </div>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  {onu.temperatureCelsius > 70 ? "Critical — inspect ONU" : onu.temperatureCelsius > 55 ? "Elevated" : "Normal"}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-xl font-bold text-muted-foreground/40">—</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  {isRealOnu ? "Not available via SNMP" : "Sensor not available"}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

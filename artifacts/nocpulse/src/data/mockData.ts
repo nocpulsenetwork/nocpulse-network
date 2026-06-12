@@ -51,6 +51,10 @@ export interface OnuDevice {
   onuType: OnuType;
   /** True for ONUs discovered via real SNMP polling. Suppresses mock/generated data in the UI. */
   isReal?: boolean;
+  /** ONU optical module temperature in °C from SNMP, or null when unavailable. */
+  temperatureCelsius?: number | null;
+  /** Seconds since the ONU last registered on the PON from SNMP, or null when unavailable. */
+  registerDurationSecs?: number | null;
 }
 
 export interface Alarm {

@@ -206,6 +206,18 @@ export interface SnmpOnu {
 
   /** Raw OID instance suffix — useful for debugging MIB mapping. */
   rawInstanceOid: string;
+
+  /**
+   * ONU optical module temperature in degrees Celsius, or null when unavailable.
+   * Populated by vendor-specific probes (e.g. EasyPath Phase 3 col walk).
+   */
+  temperatureC?: number | null;
+
+  /**
+   * Time since the ONU last registered on the PON, in seconds.
+   * Null when unavailable from this firmware/vendor.
+   */
+  registerDurationSecs?: number | null;
 }
 
 /** Result returned by `readOnuTable()`. */
@@ -1557,12 +1569,54 @@ export class RealSnmpClient {
     const rxDiv     = rxValid ? dBmDiv(rxRaw) : 10;
     const txDiv     = txValid ? dBmDiv(txRaw) : 10;
 
+    // ── Phase 3: Probe integer cols 15–21 for temperature + register duration ─
+    //
+    // Same 17409.2.3.4.1.1 table, same bigN index.  Walk all candidate columns
+    // in parallel and use heuristics to identify which is temperature and which
+    // is register duration (seconds since last registration).
+    //
+    // Temperature detection: per-ONU module temp is typically 15–70 °C.
+    //   If stored as tenths of °C → raw values are 150–700.
+    //   Accept column if ≥70% of non-zero values are in [100, 1500].
+    //
+    // Register-duration detection: seconds since last PON registration.
+    //   Typical: minutes to days = hundreds to millions of seconds.
+    //   Accept column if ≥90% of values are in [0, 10_000_000] AND median > 0.
+
+    const PHASE3_COLS = [15, 16, 17, 18, 19, 20, 21].map(
+      (c) => `1.3.6.1.4.1.17409.2.3.4.1.1.${c}`,
+    );
+    const phase3Maps = await Promise.all(PHASE3_COLS.map(walkIntCol));
+
+    const isTempLike = (m: Map<number, number>): boolean => {
+      const nonZero = Array.from(m.values()).filter((v) => v > 0);
+      if (nonZero.length < 3) return false;
+      return nonZero.filter((v) => v >= 100 && v <= 1500).length / nonZero.length >= 0.7;
+    };
+
+    const isDurLike = (m: Map<number, number>): boolean => {
+      if (m.size < 3) return false;
+      const vals = Array.from(m.values());
+      const inRange = vals.filter((v) => v >= 0 && v <= 10_000_000);
+      if (inRange.length / vals.length < 0.9) return false;
+      const sorted  = [...inRange].sort((a, b) => a - b);
+      const median  = sorted[Math.floor(sorted.length / 2)] ?? 0;
+      return median > 0;
+    };
+
+    const tempColIdx = phase3Maps.findIndex(isTempLike);
+    const tempByBigN = tempColIdx >= 0 ? phase3Maps[tempColIdx]! : new Map<number, number>();
+
+    const durColIdx  = phase3Maps.findIndex((m, i) => i !== tempColIdx && isDurLike(m));
+    const durByBigN  = durColIdx >= 0 ? phase3Maps[durColIdx]! : new Map<number, number>();
+
     const onus: SnmpOnu[] = [];
 
     for (const [bigN, status] of statusByBigN) {
       if (onus.length >= safeLimit) break;
 
       const portSlot  = (bigN >>> 8) & 0xFF;
+      const onuSlot   = bigN & 0xFF;
       const portIndex = portSlot - PORT_SLOT_MIN;
       const mac       = macByBigN.get(bigN) ?? null;
 
@@ -1575,8 +1629,15 @@ export class RealSnmpClient {
       const txPowRaw = txValid   ? (txRaw.get(bigN)   ?? null) : null;
       const distMRaw = distValid ? (distRaw.get(bigN) ?? null) : null;
 
+      const tempRaw  = tempByBigN.get(bigN) ?? null;
+      const durRaw   = durByBigN.get(bigN)  ?? null;
+
       onus.push({
-        onuId:   `cdp_${bigN}`,
+        // Use the explicit two-part SNMP index "portSlot.onuSlot" as the ONU ID.
+        // This is the canonical identifier on C-DATA/EasyPath EPON firmware and
+        // allows the frontend to unambiguously recover portSlot and onuSlot
+        // without bit-masking the encoded bigN integer.
+        onuId:   `${portSlot}.${onuSlot}`,
         ponPort: `port-${portIndex}`,
         serial,
         mac,
@@ -1588,6 +1649,9 @@ export class RealSnmpClient {
         txPowerDbm:        txPowRaw !== null ? Math.round(txPowRaw / txDiv * 10) / 10 : null,
         distanceMeters:    distMRaw,
         rawInstanceOid:    String(bigN),
+        // Phase 3 probes — null when the column was not found or OLT didn't return data
+        temperatureC:        tempRaw !== null ? Math.round(tempRaw / 10 * 100) / 100 : null,
+        registerDurationSecs: durRaw,
       });
     }
 

@@ -59,6 +59,18 @@ export interface OnuDiscoverySummary {
    * Convert to km for display: `(distanceMeters / 1000).toFixed(2) + " km"`.
    */
   distanceMeters: number | null;
+
+  /**
+   * ONU optical module temperature in °C, or null when unavailable.
+   * Populated by EasyPath Phase 3 integer-column probe.
+   */
+  temperatureCelsius: number | null;
+
+  /**
+   * Seconds since the ONU last registered on the PON, or null when unavailable.
+   * Format for display: "{d}d {h}h {m}m {s}s" or the OLT-style "X day Y hour …".
+   */
+  registerDurationSecs: number | null;
 }
 
 /** Per-PON-port summary derived from the ONU discovery list. */

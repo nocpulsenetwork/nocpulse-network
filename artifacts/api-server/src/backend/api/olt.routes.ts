@@ -794,17 +794,19 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
 
   const ponPorts: RealPonPort[] = [...portMap.entries()].map(([id, counts]) => ({ id, ...counts }));
   const onus: OnuDiscoverySummary[] = onuResult.onus.map(o => ({
-    onuId:             o.onuId,
-    ponPort:           o.ponPort,
-    status:            o.status,
-    serial:            o.serial,
-    type:              o.type,
-    name:              o.name ?? null,
-    mac:               o.mac,
-    offlineReasonCode: o.offlineReasonCode ?? null,
-    rxPowerDbm:        o.rxPowerDbm    ?? null,
-    txPowerDbm:        o.txPowerDbm    ?? null,
-    distanceMeters:    o.distanceMeters ?? null,
+    onuId:               o.onuId,
+    ponPort:             o.ponPort,
+    status:              o.status,
+    serial:              o.serial,
+    type:                o.type,
+    name:                o.name ?? null,
+    mac:                 o.mac,
+    offlineReasonCode:   o.offlineReasonCode   ?? null,
+    rxPowerDbm:          o.rxPowerDbm          ?? null,
+    txPowerDbm:          o.txPowerDbm          ?? null,
+    distanceMeters:      o.distanceMeters       ?? null,
+    temperatureCelsius:  o.temperatureC         ?? null,
+    registerDurationSecs: o.registerDurationSecs ?? null,
   }));
 
   const result: OnuDiscoveryResult = {

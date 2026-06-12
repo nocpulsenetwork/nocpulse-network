@@ -108,9 +108,18 @@ The FD1208S-B0 firmware returns partial GETBULK responses. Break only when
 - Use `timeoutMs: 5_000` (5s per GETBULK PDU).
 
 ## ONU ID format
-- Format: `cdp_${bigN}` (e.g. `cdp_16780545`)
-- "cdp" = C-DATA provisioned entry
-- bigN is the decimal OID suffix integer
+- Format: `${portSlot}.${onuSlot}` (e.g. `"15.6"`) — the explicit SNMP two-part index
+- Replaces old `cdp_${bigN}` encoding; frontend parses second part directly for onuSlot
+- Frontend safeOnuId = onuId.replace(/\./g, "-") → "15-6" (URL/ID safe)
+- `onuSlot = parseInt(onuId.split(".")[1], 10)` — no bit-masking needed
+
+## Phase 3 probe — temperature and register duration
+Same `17409.2.3.4.1.1` table, same bigN index. Walk cols 15–21 in parallel after Phase 2.
+Auto-detect columns by heuristic:
+- **Temperature**: ≥70% of non-zero values in [100, 1500] → divide by 10 for °C
+- **Register duration**: ≥90% of values in [0, 10_000_000], median > 0 → seconds since last registration
+Both mapped to `temperatureC` and `registerDurationSecs` on `SnmpOnu`.
+**Status as of 2026-06-12:** Implemented, not yet confirmed live. If all 7 cols return 0 rows → data is in a different subtree.
 
 ## Implementation location
 `artifacts/api-server/src/backend/snmp/real-snmp-client.ts` — `readEasyPathOnuTable()`
