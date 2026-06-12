@@ -143,7 +143,7 @@ export default function OnuDetail() {
   const parentOlt = olts.find((o) => o.id === onu.oltId);
 
   const displayDescription = Boolean(onu.isReal)
-    ? (customDescription || onu.description || onu.macAddress || onu.onuNo || "Unknown ONU")
+    ? (customDescription || onu.description || "N/A")
     : (customDescription || onu.description || onu.customerName || onu.onuNo || "Unknown ONU");
 
   // Real ONUs (discovered via SNMP) have placeholder signalLevel/txPower values.
@@ -269,7 +269,7 @@ export default function OnuDetail() {
     ? [
         { label: "OLT",           value: parentOlt?.name ?? onu.oltId },
         { label: "PON Port",      value: onu.ponPort },
-        { label: "ONU Index",     value: onu.onuNo, mono: true },
+        { label: "ONU Index",     value: onu.onuNo.split("/").at(-1) ?? "N/A", mono: true },
         { label: "ONU Type",      value: onu.onuType },
         { label: "Name",          value: onu.description || "N/A" },
         { label: "MAC / LLID",   value: onu.macAddress || "N/A", mono: true },
@@ -339,7 +339,9 @@ export default function OnuDetail() {
           <div className="w-px h-8 bg-border hidden sm:block mt-0.5 shrink-0" />
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono font-bold text-lg tracking-tight">{onu.onuNo}</span>
+              <span className="font-mono font-bold text-lg tracking-tight">
+                {isRealOnu && parentOlt?.name ? `${parentOlt.name} ` : ""}{onu.onuNo}
+              </span>
               <StatusBadge status={onu.status} />
               {!isRealOnu && (
                 <Badge variant="outline" className={`text-[10px] ${stabilityConfig.badge}`}>
