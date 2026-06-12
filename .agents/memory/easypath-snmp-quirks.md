@@ -74,6 +74,20 @@ serial = mac.replace(/:/g,"").toUpperCase() (EPON has no separate serial; MAC IS
 ## Per-PON online count OID (for reference / validation)
 `1.3.6.1.4.1.17409.2.3.3.1.1.8.1.0.{portSlot}` for portSlot 13–20
 
+## ONU optical power + distance (Phase 2 probe)
+
+Added to `readEasyPathOnuTable()` Phase 2 — probes in parallel after Phase 1 col7+col8 walk.
+Candidate columns in same `17409.2.3.4.1.1` table, same bigN index:
+- **col9**: `1.3.6.1.4.1.17409.2.3.4.1.1.9` — candidate RX power (signed INT, 0.1 dBm units)
+- **col10**: `1.3.6.1.4.1.17409.2.3.4.1.1.10` — candidate TX power (signed INT, 0.1 dBm units)
+- **col11**: `1.3.6.1.4.1.17409.2.3.4.1.1.11` — candidate distance (positive INT, meters)
+
+Validation (defensive — if column returns 0 rows or wrong range → null, "N/A" in UI):
+- Optical: accept values in [-5000, 100]; if median < -500 → assume 0.01 dBm scale (÷100), else 0.1 dBm (÷10)
+- Distance: accept values in [0, 100_000]; if <80% in range → discard column
+
+**Status as of 2026-06-12:** Not yet confirmed live. Next step: run discovery, check if cols 9/10/11 return plausible optical data. If 0 rows → OLT doesn't expose optical via these OIDs (will need to probe other subtrees e.g. `17409.2.3.5` or `17409.2.4.*`).
+
 ## Dead-end OIDs (do not retry)
 - `17409.2.2.11.2.1.1.3+.4` — only ~146 rows (MPCP subset), gives ~141 online (wrong)
 - `34592.4.1.3.1` (EPON ONU table) — not implemented on this device, 0 rows

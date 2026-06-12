@@ -343,7 +343,7 @@ export default function OnuDetail() {
                 {isRealOnu && parentOlt?.name ? `${parentOlt.name} ` : ""}{onu.onuNo}
               </span>
               <StatusBadge status={onu.status} />
-              {!isRealOnu && (
+              {(!isRealOnu || onu.signalLevel !== null) && (
                 <Badge variant="outline" className={`text-[10px] ${stabilityConfig.badge}`}>
                   {stabilityConfig.label}
                 </Badge>
@@ -405,17 +405,32 @@ export default function OnuDetail() {
       {/* ── 5 Metric Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {/* RX Power */}
-        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : isPoorSignal ? "border-l-red-500" : isWarningSignal ? "border-l-amber-500" : "border-l-green-500"}`}>
+        <Card className={`border-l-4 ${
+          isRealOnu
+            ? (onu.signalLevel !== null
+                ? (onu.signalLevel <= -29 ? "border-l-red-500" : onu.signalLevel <= -27 ? "border-l-amber-500" : "border-l-green-500")
+                : "border-l-slate-500")
+            : (isPoorSignal ? "border-l-red-500" : isWarningSignal ? "border-l-amber-500" : "border-l-green-500")
+        }`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">RX Power</span>
               <Signal className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             {isRealOnu ? (
-              <>
-                <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">OID not yet polled</div>
-              </>
+              onu.signalLevel !== null ? (
+                <>
+                  <div className={`text-xl font-bold ${onu.signalLevel <= -29 ? "text-red-400" : onu.signalLevel <= -27 ? "text-amber-400" : "text-green-400"}`}>
+                    {onu.signalLevel.toFixed(1)} <span className="text-xs font-normal text-muted-foreground">dBm</span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Live from SNMP</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Not available via SNMP</div>
+                </>
+              )
             ) : (
               <>
                 <div className={`text-xl font-bold ${isPoorSignal ? "text-red-500" : isWarningSignal ? "text-amber-500" : "text-green-500"}`}>
@@ -435,17 +450,30 @@ export default function OnuDetail() {
         </Card>
 
         {/* TX Power */}
-        <Card className={`border-l-4 ${isRealOnu || onu.txPower == null ? "border-l-slate-500" : onu.txPower < -3 || onu.txPower > 5 ? "border-l-red-500" : "border-l-purple-500"}`}>
+        <Card className={`border-l-4 ${
+          isRealOnu
+            ? (onu.txPower !== null ? (onu.txPower < -3 || onu.txPower > 5 ? "border-l-red-500" : "border-l-purple-500") : "border-l-slate-500")
+            : (onu.txPower == null ? "border-l-slate-500" : onu.txPower < -3 || onu.txPower > 5 ? "border-l-red-500" : "border-l-purple-500")
+        }`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">TX Power</span>
               <Radio className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             {isRealOnu ? (
-              <>
-                <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">OID not yet polled</div>
-              </>
+              onu.txPower !== null ? (
+                <>
+                  <div className={`text-xl font-bold ${onu.txPower < -3 || onu.txPower > 5 ? "text-red-400" : "text-purple-400"}`}>
+                    {onu.txPower.toFixed(1)} <span className="text-xs font-normal text-muted-foreground">dBm</span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Live from SNMP</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Not available via SNMP</div>
+                </>
+              )
             ) : (
               <>
                 {(() => {
@@ -463,17 +491,26 @@ export default function OnuDetail() {
         </Card>
 
         {/* Distance */}
-        <Card className={`border-l-4 ${isRealOnu ? "border-l-slate-500" : "border-l-cyan-500"}`}>
+        <Card className={`border-l-4 ${isRealOnu ? (onu.distance ? "border-l-cyan-500" : "border-l-slate-500") : "border-l-cyan-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Distance</span>
               <Ruler className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             {isRealOnu ? (
-              <>
-                <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">OID not yet polled</div>
-              </>
+              onu.distance ? (
+                <>
+                  <div className="text-xl font-bold text-cyan-400">
+                    {onu.distance.replace(" km", "")} <span className="text-xs font-normal text-muted-foreground">km</span>
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Live from SNMP</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xl font-bold text-muted-foreground/40">N/A</div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Not available via SNMP</div>
+                </>
+              )
             ) : (
               <>
                 <div className="text-xl font-bold">

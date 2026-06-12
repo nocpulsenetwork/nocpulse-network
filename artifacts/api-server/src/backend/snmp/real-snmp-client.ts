@@ -1473,6 +1473,90 @@ export class RealSnmpClient {
       };
     }
 
+    // ── Phase 2: Probe optical columns (col9=RX, col10=TX, col11=distance) ─────
+    //
+    // Same 17409.2.3.4.1.1 table, same bigN index as col7/col8.
+    // Run in parallel — all are read-only GETBULK, BATCH=20 mandatory.
+    //
+    // Expected encoding (if implemented by this firmware):
+    //   col9  → ONU RX power: signed INTEGER, 0.1 dBm units (e.g. -250 = -25.0 dBm)
+    //   col10 → ONU TX power: signed INTEGER, 0.1 dBm units
+    //   col11 → fiber distance: positive INTEGER, meters
+    //
+    // If a column returns 0 rows or values outside plausible range it is
+    // silently skipped — corresponding ONU fields stay null (→ "N/A" in UI).
+
+    const walkIntCol = async (colRoot: string): Promise<Map<number, number>> => {
+      const prefix = colRoot + ".";
+      const out    = new Map<number, number>();
+      let cursor   = colRoot;
+      let errors   = 0;
+      while (true) {
+        let batch: snmp.Varbind[];
+        try {
+          batch  = await this.snmpGetBulk([cursor], BATCH);
+          errors = 0;
+        } catch {
+          if (++errors >= 3) break;
+          continue;
+        }
+        const inTree = batch.filter((vb) => vb.oid.startsWith(prefix));
+        if (inTree.length === 0) break;
+        for (const vb of inTree) {
+          const bigNStr = vb.oid.slice(prefix.length);
+          if (bigNStr.includes(".")) continue;
+          const bigN = parseInt(bigNStr, 10);
+          if (!Number.isFinite(bigN) || bigN < 0) continue;
+          const ps = (bigN >>> 8) & 0xFF;
+          if (ps < PORT_SLOT_MIN || ps > PORT_SLOT_MAX) continue;
+          const val = typeof vb.value === "number" ? vb.value
+                    : typeof vb.value === "bigint" ? Number(vb.value)
+                    : null;
+          if (val !== null) out.set(bigN, val);
+        }
+        const lastOid = inTree[inTree.length - 1]!.oid;
+        if (lastOid === cursor) break;
+        cursor = lastOid;
+      }
+      return out;
+    };
+
+    const [rxRaw, txRaw, distRaw] = await Promise.all([
+      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.9"),
+      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.10"),
+      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.11"),
+    ]);
+
+    // Validate: does the column contain plausible optical power values?
+    // EPON ONU RX typical: -8 to -30 dBm → raw -80 to -300 (0.1 dBm scale).
+    // Accept [-5000, 100] to cover both 0.1 dBm and 0.01 dBm encodings.
+    const isOpticalLike = (m: Map<number, number>): boolean => {
+      const nonZero = Array.from(m.values()).filter((v) => v !== 0);
+      if (nonZero.length === 0) return false;
+      return nonZero.filter((v) => v >= -5000 && v <= 100).length / nonZero.length >= 0.5;
+    };
+
+    // Validate: plausible fiber distance (meters, non-negative, ≤ 100 km).
+    const isDistanceLike = (m: Map<number, number>): boolean => {
+      const vals = Array.from(m.values());
+      if (vals.length === 0) return false;
+      return vals.filter((v) => v >= 0 && v <= 100_000).length / vals.length >= 0.8;
+    };
+
+    // Auto-detect dBm scale: if median negative value < -500, assume 0.01 dBm (÷100);
+    // otherwise assume 0.1 dBm (÷10).
+    const dBmDiv = (m: Map<number, number>): number => {
+      const neg = Array.from(m.values()).filter((v) => v < 0).sort((a, b) => a - b);
+      if (neg.length === 0) return 10;
+      return (neg[Math.floor(neg.length / 2)]! < -500) ? 100 : 10;
+    };
+
+    const rxValid   = isOpticalLike(rxRaw);
+    const txValid   = isOpticalLike(txRaw);
+    const distValid = isDistanceLike(distRaw);
+    const rxDiv     = rxValid ? dBmDiv(rxRaw) : 10;
+    const txDiv     = txValid ? dBmDiv(txRaw) : 10;
+
     const onus: SnmpOnu[] = [];
 
     for (const [bigN, status] of statusByBigN) {
@@ -1487,6 +1571,10 @@ export class RealSnmpClient {
       // a serial number while `mac` retains the colon-separated display format.
       const serial = mac ? mac.replace(/:/g, "").toUpperCase() : null;
 
+      const rxPowRaw = rxValid   ? (rxRaw.get(bigN)   ?? null) : null;
+      const txPowRaw = txValid   ? (txRaw.get(bigN)   ?? null) : null;
+      const distMRaw = distValid ? (distRaw.get(bigN) ?? null) : null;
+
       onus.push({
         onuId:   `cdp_${bigN}`,
         ponPort: `port-${portIndex}`,
@@ -1496,9 +1584,9 @@ export class RealSnmpClient {
         status,
         type:              null,
         offlineReasonCode: null,
-        rxPowerDbm:        null,
-        txPowerDbm:        null,
-        distanceMeters:    null,
+        rxPowerDbm:        rxPowRaw !== null ? Math.round(rxPowRaw / rxDiv * 10) / 10 : null,
+        txPowerDbm:        txPowRaw !== null ? Math.round(txPowRaw / txDiv * 10) / 10 : null,
+        distanceMeters:    distMRaw,
         rawInstanceOid:    String(bigN),
       });
     }
