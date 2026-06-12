@@ -1,6 +1,6 @@
 ---
 name: EasyPath SNMP quirks
-description: FD1208S-B0 V1.6.0 — two-source ONU discovery: 34592 MAC table (registered) + 17409.2.2.11.2.1.1 col3/col4 (live status). bigN cross-reference confirmed.
+description: FD1208S-B0 V1.6.0 — two-source ONU discovery: 17409.2.3.4 col8 (live status, bigN-indexed, 1=online 2=offline) + 34592 MAC table. Per-PON counts match web UI exactly.
 ---
 
 # EasyPath Ethernet-PON (FD1208S-B0 V1.6.0) SNMP quirks
@@ -11,14 +11,23 @@ description: FD1208S-B0 V1.6.0 — two-source ONU discovery: 34592 MAC table (re
 - sysName: "EasyPath Series PON Switch Access"
 - Detected vendor: "CDATA" (added "easypath" and OID prefix checks to detectVendor())
 
-## ONU discovery — TWO-SOURCE APPROACH (implemented 2026-06-12)
+## ONU discovery — CORRECT TWO-SOURCE APPROACH (verified 2026-06-12, per-PON matches web UI)
 
-### Source A — Registered ONU list (34592 MAC table)
+### Source A — Live operational status (17409.2.3.4 ONU status table)
+**`1.3.6.1.4.1.17409.2.3.4.1.1.8.{bigN}`**
+
+- Index = bigN (IDENTICAL to Source B — direct join, no transformation needed)
+- Value: INTEGER 1=online, 2=offline
+- Covers ALL provisioned ONUs (~356 rows); per-PON counts match web UI exactly
+- Confirmed: PON1=8, PON2=38, PON3=18, PON4=29, PON6=17, PON7=26, PON8=2 (live)
+- **DO NOT use 17409.2.2.11.2.1.1 col3/col4** — that table has only ~146 rows (MPCP subset only) and gives wrong totals (~141 online vs actual 165)
+
+### Source B — Registered ONU list with MAC addresses (34592 MAC table)
 `1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2.{bigN}`
 
 OctetString value = 6-byte ONU MAC address. All provisioned ONUs appear here (~353–356).
 
-### bigN index encoding (4-byte big-endian integer)
+### bigN index encoding (4-byte big-endian integer stored as decimal OID component)
 - byte[0] = 0x01 (OLT group, always 1)
 - byte[1] = 0x00 (reserved)
 - byte[2] = port slot  (13–20 for PON1–PON8 on FD1208S-B0)
@@ -31,32 +40,23 @@ const portIndex = portSlot - 13;         // 0=PON1, …, 7=PON8
 
 PORT_SLOT_MIN=13, PORT_SLOT_MAX=28 (accepts up to 16-port C-DATA variants).
 
-### Source B — Live operational status (17409 EPON registration table)
-`1.3.6.1.4.1.17409.2.2.11.2.1.1.3.{idx1}.{idx2}` — col3, 9-byte OctetString
-- bytes[0..3] = bigN (identical encoding to Source A — same portSlot, onuSlot)
-- `bigN = (b0<<24)|(b1<<16)|(b2<<8)|b3 >>> 0`
-
-`1.3.6.1.4.1.17409.2.2.11.2.1.1.4.{idx1}.{idx2}` — col4, INTEGER status
-- 4 = online, 2 = offline, 3 = transitioning (treat as offline)
-
-**Cross-reference:** match col3 and col4 by shared `{idx1}.{idx2}` OID suffix.
-Derive bigN from col3 bytes → use as key into the registered ONU map from Source A.
-
 ### Merge logic
-For each ONU in Source A (registered):
-- If its bigN appears in Source B with col4=4 → status = "online"
-- Otherwise (absent or col4≠4) → status = "offline"
+Walk Source A first → Map<bigN, "online"|"offline">
+Walk Source B second → for each registered ONU (bigN), look up status from map.
+ONUs in Source B absent from Source A → "offline" (rare edge case).
 
-### Why this table only has ~152 rows (not 353)
-The 17409.2.2.11.2.1.1 table contains ONUs currently tracked by the EPON MPCP layer.
-ONUs that are provisioned but have no active LLID registration don't appear here — they
-are correctly treated as offline in the merge step.
+## Per-PON online count OID (for reference / validation)
+`1.3.6.1.4.1.17409.2.3.3.1.1.8.1.0.{portSlot}` for portSlot 13–20
 
-### 34592 sub-table structure (reference)
-- sub-col 1.2: ~353 × 6-byte OctetString = MAC ← USE THIS for registered list
-- sub-col 1.3, 1.4, 1.5: ~353 × INTEGER=0 (padding/reserved)
-- sub-col 1.6: ~353 × INTEGER ∈ {61, 62, outliers} — service profile ID; NOT status
-- sub-col 1.7: ~353 × INTEGER=1 — constant flag; NOT status
+8 scalar GETs give per-PON online count directly. Sum matches col8=1 count from 17409.2.3.4.
+These are NOT used in the implementation (we derive per-port counts from bigN decoding instead),
+but are useful for validating that the sum of per-port online counts equals total online.
+
+## Dead-end OIDs (do not retry)
+- `17409.2.2.11.2.1.1.3+.4` — only ~146 rows (MPCP subset), gives ~141 online (wrong)
+- `34592.4.1.3.1` (EPON ONU table) — not implemented on this device, 0 rows
+- `34592.5.1.1.1` (PON port table) — not implemented on this device, 0 rows
+- `34592.4.x` and `34592.5.x` subtrees — not implemented on this EasyPath variant
 
 ## Critical: GETBULK maxRepetitions limit
 - maxRepetitions ≤ 40: works fine (~70ms per PDU)
@@ -69,7 +69,6 @@ The FD1208S-B0 firmware returns partial GETBULK responses. Break only when
 
 ## Per-PDU timeout
 - Use `timeoutMs: 5_000` (5s per GETBULK PDU).
-- Do NOT use 10_000: with retries=1, a timeout costs 20s; compound over many PDUs.
 
 ## ONU ID format
 - Format: `cdp_${bigN}` (e.g. `cdp_16780545`)
@@ -77,10 +76,11 @@ The FD1208S-B0 firmware returns partial GETBULK responses. Break only when
 - bigN is the decimal OID suffix integer
 
 ## MAC addresses
-- 6-byte OctetString from sub-col 1.2 of 34592 table
+- 6-byte OctetString from 34592 sub-col 1.2
 - All ~353 ONUs have valid MACs; use `parseMacAddress(vb.value)` directly
 
 ## Implementation location
 `artifacts/api-server/src/backend/snmp/real-snmp-client.ts` — `readEasyPathOnuTable()`
-Walks col3 and col4 in parallel (Promise.all), then walks 34592 MAC table and merges.
-Total SNMP latency: ~2.4 seconds on FD1208S-B0 at 103.111.225.76.
+Phase 1: walks 17409.2.3.4.1.1.8 (col8, ~356 rows) → statusByBigN map
+Phase 2: walks 34592 MAC table → merges status by bigN
+Total SNMP latency: ~2–3 seconds on FD1208S-B0 at 103.111.225.76.

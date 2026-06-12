@@ -1332,27 +1332,33 @@ export class RealSnmpClient {
   /**
    * Discover ONUs from a CDATA FD1208S-B0 / EasyPath Ethernet-PON OLT.
    *
-   * TWO-SOURCE APPROACH (confirmed live on FD1208S-B0 V1.6.0, community=public):
+   * TWO-SOURCE APPROACH (confirmed live on FD1208S-B0 V1.6.0, community=public,
+   * exhaustively verified 2026-06-12 against OLT web UI — per-PON counts match):
    *
-   * Source A — Registered ONU list (34592 MAC table):
+   * Source A — Live operational status (17409.2.3.4 ONU status table):
+   *   1.3.6.1.4.1.17409.2.3.4.1.1.8.{bigN}  →  INTEGER status
+   *     1 = online, 2 = offline
+   *   Index = bigN (SAME encoding as Source B — direct join, no transformation)
+   *   Covers ALL provisioned ONUs (~356 rows); per-PON counts match web UI exactly.
+   *
+   * Source B — Registered ONU list with MAC addresses (34592 MAC table):
    *   1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2.{bigN}  →  6-byte MAC OctetString
-   *   bigN byte[2] = portSlot (13–20 = PON1–PON8), byte[3] = ONU slot
-   *   portIndex = portSlot − 13  (0=PON1, …, 7=PON8)
-   *   Gives all provisioned/registered ONUs (353 on FD1208S-B0 with 8 PON ports).
    *
-   * Source B — Live operational status (17409 EPON registration table):
-   *   col3: 1.3.6.1.4.1.17409.2.2.11.2.1.1.3.{idx1}.{idx2}  →  9-byte OctetString
-   *     bytes[0..3] encode bigN (same encoding as Source A) → port+slot identity
-   *   col4: 1.3.6.1.4.1.17409.2.2.11.2.1.1.4.{idx1}.{idx2}  →  INTEGER status
-   *     4 = online, 2 = offline, other = transitioning (treated offline here)
-   *   Contains only the ONUs currently tracked by the EPON MPCP layer (~152 rows).
+   * bigN index encoding (4-byte big-endian integer, stored as decimal OID component):
+   *   byte[0] = 0x01 (OLT group, always 1)
+   *   byte[1] = 0x00 (reserved)
+   *   byte[2] = portSlot  (13–20 for PON1–PON8 on FD1208S-B0)
+   *   byte[3] = ONU slot within port (1-based)
+   *
+   * Port extraction:
+   *   portSlot  = (bigN >>> 8) & 0xFF   // byte[2] = 13–20
+   *   portIndex = portSlot − 13          // 0-based: 0=PON1, …, 7=PON8
    *
    * Merge:
-   *   For each registered ONU (bigN from Source A):
-   *     – If bigN found in Source B with col4=4  →  status = "online"
-   *     – Otherwise (absent from Source B or col4≠4)  →  status = "offline"
-   *
-   * bigN construction from col3 bytes: bigN = (b0<<24)|(b1<<16)|(b2<<8)|b3  (unsigned)
+   *   Walk Source A first → Map<bigN, "online"|"offline">
+   *   Walk Source B second → for each bigN, look up status in map
+   *   ONUs in Source B absent from Source A are marked "offline"
+   *   (should not occur — both tables contain the same set of provisioned ONUs)
    *
    * Note: FD1208S-B0 rejects GETBULK with maxRepetitions ≥ 50; use BATCH = 20.
    * Safety: GETBULK read-only — no SET operations.
@@ -1365,23 +1371,19 @@ export class RealSnmpClient {
     const PORT_SLOT_MIN = 13;
     const PORT_SLOT_MAX = 28;
 
-    // ── Phase 1: Walk 17409 registration table — col3 (port bytes) + col4 (status)
-    // Result: Map<bigN, "online"|"offline">
-    // Both columns share the same {idx1}.{idx2} index space.
-    // Walk them in parallel; ~152 rows each — well within the 1000-row walk cap.
+    // ── Phase 1: Walk 17409.2.3.4 col8 — live online/offline status per bigN ──
+    //
+    // OID: 1.3.6.1.4.1.17409.2.3.4.1.1.8.{bigN}
+    // Value: INTEGER 1=online, 2=offline
+    // ~356 rows; fits in a single walk (well within 1000-row cap).
+    // bigN index is IDENTICAL to the 34592 MAC table — no join key needed.
 
-    const COL3_ROOT   = "1.3.6.1.4.1.17409.2.2.11.2.1.1.3";
-    const COL4_ROOT   = "1.3.6.1.4.1.17409.2.2.11.2.1.1.4";
-    const COL3_PREFIX = COL3_ROOT + ".";
-    const COL4_PREFIX = COL4_ROOT + ".";
+    const STATUS_ROOT   = "1.3.6.1.4.1.17409.2.3.4.1.1.8";
+    const STATUS_PREFIX = STATUS_ROOT + ".";
 
-    // col3Map: "{idx1}.{idx2}" → bigN derived from OctetString bytes[0..3]
-    const col3Map = new Map<string, number>();
-    // col4Map: "{idx1}.{idx2}" → status integer (4=online)
-    const col4Map = new Map<string, number>();
-
-    const walkCol3 = async (): Promise<void> => {
-      let cursor = COL3_ROOT;
+    const statusByBigN = new Map<number, "online" | "offline">();
+    {
+      let cursor = STATUS_ROOT;
       let errors = 0;
       while (true) {
         let batch: snmp.Varbind[];
@@ -1392,69 +1394,32 @@ export class RealSnmpClient {
           if (++errors >= 3) break;
           continue;
         }
-        const inTree = batch.filter((vb) => vb.oid.startsWith(COL3_PREFIX));
+        const inTree = batch.filter((vb) => vb.oid.startsWith(STATUS_PREFIX));
         if (inTree.length === 0) break;
         for (const vb of inTree) {
-          const suffix = vb.oid.slice(COL3_PREFIX.length);
-          if (!Buffer.isBuffer(vb.value) || vb.value.length < 4) continue;
-          // bigN = bytes[0..3] as unsigned big-endian 32-bit integer
-          const bigN = (
-            (vb.value[0]! << 24) | (vb.value[1]! << 16) |
-            (vb.value[2]! << 8)  |  vb.value[3]!
-          ) >>> 0;
+          const bigNStr = vb.oid.slice(STATUS_PREFIX.length);
+          if (bigNStr.includes(".")) continue;  // expect single-component index
+          const bigN = parseInt(bigNStr, 10);
+          if (!Number.isFinite(bigN) || bigN < 0) continue;
           const portSlot = (bigN >>> 8) & 0xFF;
           if (portSlot < PORT_SLOT_MIN || portSlot > PORT_SLOT_MAX) continue;
-          col3Map.set(suffix, bigN);
-        }
-        const newCursor = inTree[inTree.length - 1]!.oid;
-        if (newCursor === cursor) break;
-        cursor = newCursor;
-      }
-    };
-
-    const walkCol4 = async (): Promise<void> => {
-      let cursor = COL4_ROOT;
-      let errors = 0;
-      while (true) {
-        let batch: snmp.Varbind[];
-        try {
-          batch = await this.snmpGetBulk([cursor], BATCH);
-          errors = 0;
-        } catch {
-          if (++errors >= 3) break;
-          continue;
-        }
-        const inTree = batch.filter((vb) => vb.oid.startsWith(COL4_PREFIX));
-        if (inTree.length === 0) break;
-        for (const vb of inTree) {
-          const suffix    = vb.oid.slice(COL4_PREFIX.length);
-          const statusVal = typeof vb.value === "number"  ? vb.value
-                          : typeof vb.value === "bigint"  ? Number(vb.value)
+          const statusVal = typeof vb.value === "number" ? vb.value
+                          : typeof vb.value === "bigint" ? Number(vb.value)
                           : null;
           if (statusVal === null) continue;
-          col4Map.set(suffix, statusVal);
+          statusByBigN.set(bigN, statusVal === 1 ? "online" : "offline");
         }
         const newCursor = inTree[inTree.length - 1]!.oid;
         if (newCursor === cursor) break;
         cursor = newCursor;
       }
-    };
-
-    await Promise.all([walkCol3(), walkCol4()]);
-
-    // Merge col3 + col4 by shared {idx1}.{idx2} key → bigN → status
-    const statusByBigN = new Map<number, "online" | "offline">();
-    for (const [suffix, bigN] of col3Map) {
-      const statusVal = col4Map.get(suffix);
-      if (statusVal === undefined) continue;  // no matching col4 row — skip
-      statusByBigN.set(bigN, statusVal === 4 ? "online" : "offline");
     }
 
     // ── Phase 2: Walk 34592 MAC table — all registered/provisioned ONUs ────────
 
     const MAC_TABLE_ROOT   = "1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2";
     const MAC_TABLE_PREFIX = MAC_TABLE_ROOT + ".";
-    const MIB_NAME         = "CDataEponOnuMacTable+17409StatusTable";
+    const MIB_NAME         = "CDataEponOnuStatusTable(17409.2.3.4)+MacTable(34592)";
 
     const onus: SnmpOnu[] = [];
     let cursor            = MAC_TABLE_ROOT;
@@ -1495,9 +1460,8 @@ export class RealSnmpClient {
             ? parseMacAddress(vb.value)
             : null;
 
-        // Phase 3 — merge live status from 17409 registration table.
-        // Default = "offline" for any registered ONU absent from the
-        // EPON MPCP registration table or present with status ≠ 4.
+        // Merge live status from 17409.2.3.4 col8 status table.
+        // Default = "offline" for any registered ONU absent from status table.
         const status = statusByBigN.get(bigN) ?? "offline";
 
         onus.push({
@@ -1544,8 +1508,8 @@ export class RealSnmpClient {
       message:
         `Found ${onus.length} registered ONUs` +
         ` (online=${onlineCount}, offline=${offlineCount}).` +
-        ` Status OID: 1.3.6.1.4.1.17409.2.2.11.2.1.1.4.{idx1}.{idx2}` +
-        ` (value 4=online; absent or other=offline).`,
+        ` Status OID: 1.3.6.1.4.1.17409.2.3.4.1.1.8.{bigN}` +
+        ` (value 1=online, 2=offline).`,
       latencyMs: Date.now() - start,
       mibUsed:   MIB_NAME,
     };
