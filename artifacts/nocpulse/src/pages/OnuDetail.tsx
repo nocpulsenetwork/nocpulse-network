@@ -83,7 +83,7 @@ function generateChartData(seed: number, dlBase: number, ulBase: number) {
 }
 
 export default function OnuDetail() {
-  const { onus, olts } = useApiData();
+  const { onus, olts, loading } = useApiData();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [customDescription, setCustomDescription] = useState("");
@@ -118,6 +118,14 @@ export default function OnuDetail() {
   );
 
   if (!onu) {
+    if (loading) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted-foreground/20 border-t-primary" />
+          <p className="text-sm text-muted-foreground">Loading ONU data…</p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
         <AlertTriangle className="h-12 w-12 text-muted-foreground opacity-40" />
@@ -135,7 +143,7 @@ export default function OnuDetail() {
   const parentOlt = olts.find((o) => o.id === onu.oltId);
 
   const displayDescription = Boolean(onu.isReal)
-    ? (customDescription || onu.onuNo || "Unknown ONU")
+    ? (customDescription || onu.description || onu.macAddress || onu.onuNo || "Unknown ONU")
     : (customDescription || onu.description || onu.customerName || onu.onuNo || "Unknown ONU");
 
   // Real ONUs (discovered via SNMP) have placeholder signalLevel/txPower values.
@@ -264,7 +272,8 @@ export default function OnuDetail() {
         { label: "ONU Index",     value: onu.onuNo, mono: true },
         { label: "ONU Type",      value: onu.onuType },
         { label: "Name",          value: onu.description || "N/A" },
-        { label: "MAC / LLID",    value: onu.macAddress || "N/A", mono: true },
+        { label: "MAC / LLID",   value: onu.macAddress || "N/A", mono: true },
+        { label: "Serial No.",   value: onu.macAddress ? onu.macAddress.replace(/:/g, "").toUpperCase() : "N/A", mono: true, note: "EPON LLID MAC (no separate serial on EPON)" },
         { label: "Status",        value: onu.status },
         { label: "Offline Cause", value: onu.lastLogoutReason !== "N/A" ? onu.lastLogoutReason : "None recorded" },
         { label: "Last Seen",     value: "N/A" },

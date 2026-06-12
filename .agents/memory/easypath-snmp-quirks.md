@@ -1,6 +1,6 @@
 ---
 name: EasyPath SNMP quirks
-description: FD1208S-B0 V1.6.0 — two-source ONU discovery: 17409.2.3.4 col8 (live status, bigN-indexed, 1=online 2=offline) + 34592 MAC table. Per-PON counts match web UI exactly.
+description: FD1208S-B0 V1.6.0 — single-table ONU discovery: 17409.2.3.4 col7 (MAC) + col8 (status) walked in parallel. Eliminates 34592 MAC table walk. Per-PON counts match web UI exactly.
 ---
 
 # EasyPath Ethernet-PON (FD1208S-B0 V1.6.0) SNMP quirks
@@ -11,21 +11,34 @@ description: FD1208S-B0 V1.6.0 — two-source ONU discovery: 17409.2.3.4 col8 (l
 - sysName: "EasyPath Series PON Switch Access"
 - Detected vendor: "CDATA" (added "easypath" and OID prefix checks to detectVendor())
 
-## ONU discovery — CORRECT TWO-SOURCE APPROACH (verified 2026-06-12, per-PON matches web UI)
+## ONU discovery — OPTIMISED SINGLE-TABLE APPROACH (verified 2026-06-12)
 
-### Source A — Live operational status (17409.2.3.4 ONU status table)
+Walk **17409.2.3.4** cols 7 and 8 in parallel — both indexed by the same bigN.
+
+### col7 — ONU MAC address
+**`1.3.6.1.4.1.17409.2.3.4.1.1.7.{bigN}`**
+
+- OctetString 6 bytes = hardware ONU MAC address
+- All 356 provisioned ONUs have valid MACs here
+- Format on wire: 6-byte binary; `parseMacAddress(vb.value)` → "AA:BB:CC:DD:EE:FF"
+- Replaces the 34592 MAC table walk (34592 table still works but is redundant)
+
+### col8 — Live online/offline status
 **`1.3.6.1.4.1.17409.2.3.4.1.1.8.{bigN}`**
 
-- Index = bigN (IDENTICAL to Source B — direct join, no transformation needed)
-- Value: INTEGER 1=online, 2=offline
+- INTEGER 1=online, 2=offline
 - Covers ALL provisioned ONUs (~356 rows); per-PON counts match web UI exactly
-- Confirmed: PON1=8, PON2=38, PON3=18, PON4=29, PON6=17, PON7=26, PON8=2 (live)
-- **DO NOT use 17409.2.2.11.2.1.1 col3/col4** — that table has only ~146 rows (MPCP subset only) and gives wrong totals (~141 online vs actual 165)
+- **DO NOT use 17409.2.2.11.2.1.1 col3/col4** — only ~146 rows (MPCP subset, wrong totals)
 
-### Source B — Registered ONU list with MAC addresses (34592 MAC table)
-`1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2.{bigN}`
-
-OctetString value = 6-byte ONU MAC address. All provisioned ONUs appear here (~353–356).
+### Other probed columns of 17409.2.3.4.1.1
+- col1: Gauge32 (bigN itself)
+- col2: OctetString — all null/empty on this firmware
+- col3: INTEGER — type flag (~288 rows only)
+- col4/5/6: IpAddress — all 0.0.0.0
+- col12: OctetString "14.06.06" — manufacture date?
+- col13: OctetString "V6.0.2408E" — ONU firmware version
+- col14: OctetString hex flags (0x010101…)
+- cols 15–21: INTEGER — various counters/flags
 
 ### bigN index encoding (4-byte big-endian integer stored as decimal OID component)
 - byte[0] = 0x01 (OLT group, always 1)
@@ -40,23 +53,33 @@ const portIndex = portSlot - 13;         // 0=PON1, …, 7=PON8
 
 PORT_SLOT_MIN=13, PORT_SLOT_MAX=28 (accepts up to 16-port C-DATA variants).
 
-### Merge logic
-Walk Source A first → Map<bigN, "online"|"offline">
-Walk Source B second → for each registered ONU (bigN), look up status from map.
-ONUs in Source B absent from Source A → "offline" (rare edge case).
+### Implementation
+Walk col7 and col8 via `Promise.all([walkCol7(), walkCol8()])`.
+Build ONU list from statusByBigN map (all 356 entries).
+Look up mac from macByBigN for each bigN.
+serial = mac.replace(/:/g,"").toUpperCase() (EPON has no separate serial; MAC IS the identity).
+
+## ONU description / name
+- **NOT available via SNMP community=public on this device.**
+- OLT stores descriptions in /mnt/cfg/pon.cfg but does not expose via SNMP GET.
+- 17409.2.3.4 has no text-description column. 17409.2.3.2 is interface table (not ONUs).
+- Return `name: null`. UI shows "N/A" for Name field — correct behavior.
+
+## ONU serial number
+- **EPON has no GPON-style serial.** The MAC address IS the ONU's unique identity.
+- Store `serial = mac.replace(/:/g,"").toUpperCase()` (e.g. "00D39F3A0EB8")
+- Frontend `macAddress` = `onu.mac ?? onu.serial ?? ""` — uses MAC with colons for display
+- Serial without colons enables serial-style search (e.g. "00D39F")
 
 ## Per-PON online count OID (for reference / validation)
 `1.3.6.1.4.1.17409.2.3.3.1.1.8.1.0.{portSlot}` for portSlot 13–20
-
-8 scalar GETs give per-PON online count directly. Sum matches col8=1 count from 17409.2.3.4.
-These are NOT used in the implementation (we derive per-port counts from bigN decoding instead),
-but are useful for validating that the sum of per-port online counts equals total online.
 
 ## Dead-end OIDs (do not retry)
 - `17409.2.2.11.2.1.1.3+.4` — only ~146 rows (MPCP subset), gives ~141 online (wrong)
 - `34592.4.1.3.1` (EPON ONU table) — not implemented on this device, 0 rows
 - `34592.5.1.1.1` (PON port table) — not implemented on this device, 0 rows
 - `34592.4.x` and `34592.5.x` subtrees — not implemented on this EasyPath variant
+- `34592.1.3.1.1.2.1.1.2.1.2.{bigN}` (34592 MAC table) — still works but 17409 col7 is faster
 
 ## Critical: GETBULK maxRepetitions limit
 - maxRepetitions ≤ 40: works fine (~70ms per PDU)
@@ -75,12 +98,9 @@ The FD1208S-B0 firmware returns partial GETBULK responses. Break only when
 - "cdp" = C-DATA provisioned entry
 - bigN is the decimal OID suffix integer
 
-## MAC addresses
-- 6-byte OctetString from 34592 sub-col 1.2
-- All ~353 ONUs have valid MACs; use `parseMacAddress(vb.value)` directly
-
 ## Implementation location
 `artifacts/api-server/src/backend/snmp/real-snmp-client.ts` — `readEasyPathOnuTable()`
-Phase 1: walks 17409.2.3.4.1.1.8 (col8, ~356 rows) → statusByBigN map
-Phase 2: walks 34592 MAC table → merges status by bigN
-Total SNMP latency: ~2–3 seconds on FD1208S-B0 at 103.111.225.76.
+Phase 1A: walkCol7 → macByBigN map (col7, MAC, ~356 rows)
+Phase 1B: walkCol8 → statusByBigN map (col8, status, ~356 rows)
+Both in parallel via Promise.all. Build onus[] from statusByBigN.
+Total SNMP latency: ~1.5s on FD1208S-B0 at 103.111.225.76 (down from ~3s).

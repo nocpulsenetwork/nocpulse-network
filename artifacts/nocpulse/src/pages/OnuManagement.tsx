@@ -174,11 +174,13 @@ export default function OnuManagement() {
   const filteredOnus = useMemo(() => {
     return onus.filter((onu) => {
       const term = searchTerm.toLowerCase();
+      const strippedMac = onu.macAddress.replace(/:/g, "").toLowerCase();
       const matchesSearch =
         !term ||
         onu.onuNo.toLowerCase().includes(term) ||
         onu.description.toLowerCase().includes(term) ||
         onu.macAddress.toLowerCase().includes(term) ||
+        strippedMac.includes(term) ||
         onu.clientMac.toLowerCase().includes(term) ||
         onu.customerName.toLowerCase().includes(term) ||
         onu.oltPort.toLowerCase().includes(term) ||
@@ -234,11 +236,13 @@ export default function OnuManagement() {
   const chipBaseOnus = useMemo(() => {
     return onus.filter((o) => {
       const term = searchTerm.toLowerCase();
+      const oStrippedMac = o.macAddress.replace(/:/g, "").toLowerCase();
       const matchesSearch =
         !term ||
         o.onuNo.toLowerCase().includes(term) ||
         o.description.toLowerCase().includes(term) ||
         o.macAddress.toLowerCase().includes(term) ||
+        oStrippedMac.includes(term) ||
         o.clientMac.toLowerCase().includes(term) ||
         o.customerName.toLowerCase().includes(term) ||
         o.oltPort.toLowerCase().includes(term) ||
