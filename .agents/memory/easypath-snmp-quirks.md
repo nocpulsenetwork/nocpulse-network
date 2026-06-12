@@ -76,17 +76,25 @@ serial = mac.replace(/:/g,"").toUpperCase() (EPON has no separate serial; MAC IS
 
 ## ONU optical power + distance (Phase 2 probe)
 
-Added to `readEasyPathOnuTable()` Phase 2 — probes in parallel after Phase 1 col7+col8 walk.
-Candidate columns in same `17409.2.3.4.1.1` table, same bigN index:
-- **col9**: `1.3.6.1.4.1.17409.2.3.4.1.1.9` — candidate RX power (signed INT, 0.1 dBm units)
-- **col10**: `1.3.6.1.4.1.17409.2.3.4.1.1.10` — candidate TX power (signed INT, 0.1 dBm units)
-- **col11**: `1.3.6.1.4.1.17409.2.3.4.1.1.11` — candidate distance (positive INT, meters)
+**Status as of 2026-06-12: WRONG COLUMNS — all telemetry set to null/N/A.**
 
-Validation (defensive — if column returns 0 rows or wrong range → null, "N/A" in UI):
-- Optical: accept values in [-5000, 100]; if median < -500 → assume 0.01 dBm scale (÷100), else 0.1 dBm (÷10)
-- Distance: accept values in [0, 100_000]; if <80% in range → discard column
+Cols 9/10/11 of `17409.2.3.4.1.1` returned wrong values. Col9 gave RX=0.1 dBm when
+OLT web UI shows -12.24 dBm for the same ONU (PON-3, ONU-6). Col9 appears to contain
+a status flag (raw=1) not optical power. The `isOpticalLike` heuristic incorrectly
+accepted it (1 is within [-5000, 100]).
 
-**Status as of 2026-06-12:** Not yet confirmed live. Next step: run discovery, check if cols 9/10/11 return plausible optical data. If 0 rows → OLT doesn't expose optical via these OIDs (will need to probe other subtrees e.g. `17409.2.3.5` or `17409.2.4.*`).
+Known-good OLT web UI values for PON-3 / ONU-6 (bigN=16781062):
+  RX Power : -12.24 dBm → expect raw -1224 (×0.01) or -122 (×0.1)
+  TX Power :   2.70 dBm → expect raw  270 (×0.01) or  27 (×0.1)
+  Distance :    985 m   → expect raw 985
+  Temp     :  29.68 °C  → expect raw 2968 (×0.01) or 297 (×0.1)
+  Duration :   6051 s   → expect raw 6051
+
+Phase 2 probe is disabled (empty Maps returned, no SNMP walk). The correct OID columns
+need to be found by running an SNMP GET on cols 1–45 of `17409.2.3.4.1.1.{col}.16781062`
+from a host with direct SNMP access to 103.111.225.76 (the OLT is unreachable from Replit servers).
+Once the correct col numbers are confirmed, replace the empty-Map stubs in `readEasyPathOnuTable()`
+with the actual walkIntCol calls (TODO comment in code marks the spot).
 
 ## Dead-end OIDs (do not retry)
 - `17409.2.2.11.2.1.1.3+.4` — only ~146 rows (MPCP subset), gives ~141 online (wrong)

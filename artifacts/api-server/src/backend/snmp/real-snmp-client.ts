@@ -1533,11 +1533,22 @@ export class RealSnmpClient {
       return out;
     };
 
-    const [rxRaw, txRaw, distRaw] = await Promise.all([
-      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.9"),
-      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.10"),
-      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.11"),
-    ]);
+    // ── Phase 2: OIDs not yet verified ───────────────────────────────────────
+    // Columns 9/10/11 of 17409.2.3.4.1.1 returned wrong values (col9 gave
+    // 0.1 dBm when the OLT web UI shows -12.24 dBm for the same ONU).
+    // The correct column numbers are unknown until a live SNMP probe is run
+    // from a host with direct SNMP access to the OLT.
+    // All optical telemetry is null (→ "N/A" in UI) until OIDs are confirmed.
+    //
+    // TODO: when the correct OIDs are identified, replace these empty Maps with:
+    //   const [rxRaw, txRaw, distRaw] = await Promise.all([
+    //     walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.??"),  // RX power
+    //     walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.??"),  // TX power
+    //     walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.??"),  // distance
+    //   ]);
+    const rxRaw   = new Map<number, number>();
+    const txRaw   = new Map<number, number>();
+    const distRaw = new Map<number, number>();
 
     // Validate: does the column contain plausible optical power values?
     // EPON ONU RX typical: -8 to -30 dBm → raw -80 to -300 (0.1 dBm scale).
@@ -1583,32 +1594,17 @@ export class RealSnmpClient {
     //   Typical: minutes to days = hundreds to millions of seconds.
     //   Accept column if ≥90% of values are in [0, 10_000_000] AND median > 0.
 
-    const PHASE3_COLS = [15, 16, 17, 18, 19, 20, 21].map(
-      (c) => `1.3.6.1.4.1.17409.2.3.4.1.1.${c}`,
-    );
-    const phase3Maps = await Promise.all(PHASE3_COLS.map(walkIntCol));
-
-    const isTempLike = (m: Map<number, number>): boolean => {
-      const nonZero = Array.from(m.values()).filter((v) => v > 0);
-      if (nonZero.length < 3) return false;
-      return nonZero.filter((v) => v >= 100 && v <= 1500).length / nonZero.length >= 0.7;
-    };
-
-    const isDurLike = (m: Map<number, number>): boolean => {
-      if (m.size < 3) return false;
-      const vals = Array.from(m.values());
-      const inRange = vals.filter((v) => v >= 0 && v <= 10_000_000);
-      if (inRange.length / vals.length < 0.9) return false;
-      const sorted  = [...inRange].sort((a, b) => a - b);
-      const median  = sorted[Math.floor(sorted.length / 2)] ?? 0;
-      return median > 0;
-    };
-
-    const tempColIdx = phase3Maps.findIndex(isTempLike);
-    const tempByBigN = tempColIdx >= 0 ? phase3Maps[tempColIdx]! : new Map<number, number>();
-
-    const durColIdx  = phase3Maps.findIndex((m, i) => i !== tempColIdx && isDurLike(m));
-    const durByBigN  = durColIdx >= 0 ? phase3Maps[durColIdx]! : new Map<number, number>();
+    // ── Phase 3: Temperature / register-duration OIDs not yet verified ───────
+    // Cols 15–21 heuristic probe was implemented but the correct column numbers
+    // for this firmware have not been confirmed against live OLT web UI values.
+    // All fields remain null (→ "N/A" in UI) until OIDs are confirmed.
+    //
+    // TODO: when the correct OIDs are identified, replace these empty Maps with:
+    //   const PHASE3_COLS = [??, ??].map(c => `1.3.6.1.4.1.17409.2.3.4.1.1.${c}`);
+    //   const phase3Maps  = await Promise.all(PHASE3_COLS.map(walkIntCol));
+    //   ... auto-detect temperature and duration columns using isTempLike/isDurLike ...
+    const tempByBigN = new Map<number, number>();
+    const durByBigN  = new Map<number, number>();
 
     const onus: SnmpOnu[] = [];
 
