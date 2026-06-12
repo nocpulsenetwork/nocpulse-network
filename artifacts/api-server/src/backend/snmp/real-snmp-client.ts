@@ -1332,54 +1332,129 @@ export class RealSnmpClient {
   /**
    * Discover ONUs from a CDATA FD1208S-B0 / EasyPath Ethernet-PON OLT.
    *
-   * Uses the enterprise-34592 ONU MAC table (confirmed live on FD1208S-B0
-   * V1.6.0_250227, community=public, 2026-06-08):
+   * TWO-SOURCE APPROACH (confirmed live on FD1208S-B0 V1.6.0, community=public):
    *
-   *   1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2.{bigN}
+   * Source A — Registered ONU list (34592 MAC table):
+   *   1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2.{bigN}  →  6-byte MAC OctetString
+   *   bigN byte[2] = portSlot (13–20 = PON1–PON8), byte[3] = ONU slot
+   *   portIndex = portSlot − 13  (0=PON1, …, 7=PON8)
+   *   Gives all provisioned/registered ONUs (353 on FD1208S-B0 with 8 PON ports).
    *
-   * Each OID has a 4-byte big-endian index (bigN):
-   *   byte[0] = OLT group (always 0x01 on this device)
-   *   byte[1] = 0x00 (reserved)
-   *   byte[2] = port slot  (0x0D–0x14, i.e., 13–20)  →  PON1–PON8
-   *   byte[3] = ONU slot within port (1-based sequential)
+   * Source B — Live operational status (17409 EPON registration table):
+   *   col3: 1.3.6.1.4.1.17409.2.2.11.2.1.1.3.{idx1}.{idx2}  →  9-byte OctetString
+   *     bytes[0..3] encode bigN (same encoding as Source A) → port+slot identity
+   *   col4: 1.3.6.1.4.1.17409.2.2.11.2.1.1.4.{idx1}.{idx2}  →  INTEGER status
+   *     4 = online, 2 = offline, other = transitioning (treated offline here)
+   *   Contains only the ONUs currently tracked by the EPON MPCP layer (~152 rows).
    *
-   * Port mapping:  portIndex = ((bigN >>> 8) & 0xFF) - 13
-   *   portIndex 0 = PON1, …, portIndex 7 = PON8
+   * Merge:
+   *   For each registered ONU (bigN from Source A):
+   *     – If bigN found in Source B with col4=4  →  status = "online"
+   *     – Otherwise (absent from Source B or col4≠4)  →  status = "offline"
    *
-   * The OctetString value is the ONU's 6-byte MAC address.
+   * bigN construction from col3 bytes: bigN = (b0<<24)|(b1<<16)|(b2<<8)|b3  (unsigned)
    *
-   * Why not 17409.2.2.11.2.1.1 (portIdx=1)?
-   *   portIdx=1 exposes only 31 ONUs (PON1–PON3 subset) via SNMP community=public,
-   *   missing all ONUs on PON4–PON8 and most of PON1–PON3.  Confirmed exhaustively:
-   *   portIdx=2–10 are all historical ring-buffers or empty.  The 34592 MAC table
-   *   is the only SNMP path that surfaces all provisioned ONUs.
-   *
-   * Per-ONU online/offline status is not available via community=public on this
-   * firmware.  All provisioned ONUs are reported with status="online".
-   *
+   * Note: FD1208S-B0 rejects GETBULK with maxRepetitions ≥ 50; use BATCH = 20.
    * Safety: GETBULK read-only — no SET operations.
    */
   async readEasyPathOnuTable(limit: number): Promise<ReadOnuTableResult> {
     const start     = Date.now();
     const safeLimit = Math.min(limit, 500);
+    const BATCH     = 20;  // FD1208S-B0 V1.6.0 rejects maxRepetitions ≥ 50
 
-    // ── Walk the 34592 ONU MAC table ──────────────────────────────────────────
-    //
-    // OID: 1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2.{bigN}
-    // Value: 6-byte OctetString = ONU MAC address
-    //
-    // FD1208S-B0 V1.6.0 rejects GETBULK with maxRepetitions ≥ 50.
-    // Use BATCH = 20 (proven safe on this firmware).
+    const PORT_SLOT_MIN = 13;
+    const PORT_SLOT_MAX = 28;
+
+    // ── Phase 1: Walk 17409 registration table — col3 (port bytes) + col4 (status)
+    // Result: Map<bigN, "online"|"offline">
+    // Both columns share the same {idx1}.{idx2} index space.
+    // Walk them in parallel; ~152 rows each — well within the 1000-row walk cap.
+
+    const COL3_ROOT   = "1.3.6.1.4.1.17409.2.2.11.2.1.1.3";
+    const COL4_ROOT   = "1.3.6.1.4.1.17409.2.2.11.2.1.1.4";
+    const COL3_PREFIX = COL3_ROOT + ".";
+    const COL4_PREFIX = COL4_ROOT + ".";
+
+    // col3Map: "{idx1}.{idx2}" → bigN derived from OctetString bytes[0..3]
+    const col3Map = new Map<string, number>();
+    // col4Map: "{idx1}.{idx2}" → status integer (4=online)
+    const col4Map = new Map<string, number>();
+
+    const walkCol3 = async (): Promise<void> => {
+      let cursor = COL3_ROOT;
+      let errors = 0;
+      while (true) {
+        let batch: snmp.Varbind[];
+        try {
+          batch = await this.snmpGetBulk([cursor], BATCH);
+          errors = 0;
+        } catch {
+          if (++errors >= 3) break;
+          continue;
+        }
+        const inTree = batch.filter((vb) => vb.oid.startsWith(COL3_PREFIX));
+        if (inTree.length === 0) break;
+        for (const vb of inTree) {
+          const suffix = vb.oid.slice(COL3_PREFIX.length);
+          if (!Buffer.isBuffer(vb.value) || vb.value.length < 4) continue;
+          // bigN = bytes[0..3] as unsigned big-endian 32-bit integer
+          const bigN = (
+            (vb.value[0]! << 24) | (vb.value[1]! << 16) |
+            (vb.value[2]! << 8)  |  vb.value[3]!
+          ) >>> 0;
+          const portSlot = (bigN >>> 8) & 0xFF;
+          if (portSlot < PORT_SLOT_MIN || portSlot > PORT_SLOT_MAX) continue;
+          col3Map.set(suffix, bigN);
+        }
+        const newCursor = inTree[inTree.length - 1]!.oid;
+        if (newCursor === cursor) break;
+        cursor = newCursor;
+      }
+    };
+
+    const walkCol4 = async (): Promise<void> => {
+      let cursor = COL4_ROOT;
+      let errors = 0;
+      while (true) {
+        let batch: snmp.Varbind[];
+        try {
+          batch = await this.snmpGetBulk([cursor], BATCH);
+          errors = 0;
+        } catch {
+          if (++errors >= 3) break;
+          continue;
+        }
+        const inTree = batch.filter((vb) => vb.oid.startsWith(COL4_PREFIX));
+        if (inTree.length === 0) break;
+        for (const vb of inTree) {
+          const suffix    = vb.oid.slice(COL4_PREFIX.length);
+          const statusVal = typeof vb.value === "number"  ? vb.value
+                          : typeof vb.value === "bigint"  ? Number(vb.value)
+                          : null;
+          if (statusVal === null) continue;
+          col4Map.set(suffix, statusVal);
+        }
+        const newCursor = inTree[inTree.length - 1]!.oid;
+        if (newCursor === cursor) break;
+        cursor = newCursor;
+      }
+    };
+
+    await Promise.all([walkCol3(), walkCol4()]);
+
+    // Merge col3 + col4 by shared {idx1}.{idx2} key → bigN → status
+    const statusByBigN = new Map<number, "online" | "offline">();
+    for (const [suffix, bigN] of col3Map) {
+      const statusVal = col4Map.get(suffix);
+      if (statusVal === undefined) continue;  // no matching col4 row — skip
+      statusByBigN.set(bigN, statusVal === 4 ? "online" : "offline");
+    }
+
+    // ── Phase 2: Walk 34592 MAC table — all registered/provisioned ONUs ────────
 
     const MAC_TABLE_ROOT   = "1.3.6.1.4.1.34592.1.3.1.1.2.1.1.2.1.2";
     const MAC_TABLE_PREFIX = MAC_TABLE_ROOT + ".";
-    const MIB_NAME         = "CDataEponOnuMacTable";
-    const BATCH            = 20;
-
-    // Port slot range observed on this OLT: 13–20 (PON1–PON8).
-    // Accept 13–28 (16 slots) to accommodate larger C-DATA variants.
-    const PORT_SLOT_MIN = 13;
-    const PORT_SLOT_MAX = 28;
+    const MIB_NAME         = "CDataEponOnuMacTable+17409StatusTable";
 
     const onus: SnmpOnu[] = [];
     let cursor            = MAC_TABLE_ROOT;
@@ -1394,57 +1469,55 @@ export class RealSnmpClient {
       } catch (err) {
         consecutiveErrors++;
         if (consecutiveErrors >= 3) {
-          const msg = err instanceof Error ? err.message : "SNMP GETBULK error";
-          globalError = msg;
+          globalError = err instanceof Error ? err.message : "SNMP GETBULK error";
           break;
         }
-        continue;  // retry same cursor on transient UDP loss
+        continue;
       }
 
       const inTree = batch.filter((vb) => vb.oid.startsWith(MAC_TABLE_PREFIX));
-      if (inTree.length === 0) break;  // walked past the MAC table
+      if (inTree.length === 0) break;
 
       for (const vb of inTree) {
         if (onus.length >= safeLimit) break;
 
-        // Extract bigN from the OID suffix (single trailing integer)
         const bigNStr = vb.oid.slice(MAC_TABLE_PREFIX.length);
-        // bigN may contain dots if the firmware uses multi-component indexing;
-        // for this OLT the suffix is always a single decimal integer.
         if (bigNStr.includes(".")) continue;
         const bigN = parseInt(bigNStr, 10);
         if (!Number.isFinite(bigN) || bigN < 0) continue;
 
-        // Decode port from bigN byte[2] (big-endian 4-byte integer)
-        // bigN = 0xAA_BB_CC_DD  →  byte[2] = CC = (bigN >>> 8) & 0xFF
         const portSlot  = (bigN >>> 8) & 0xFF;
-        const portIndex = portSlot - PORT_SLOT_MIN;  // 0-based (0=PON1, 7=PON8)
+        const portIndex = portSlot - PORT_SLOT_MIN;
         if (portSlot < PORT_SLOT_MIN || portSlot > PORT_SLOT_MAX) continue;
 
-        // MAC address from 6-byte OctetString value
         const mac: string | null =
           Buffer.isBuffer(vb.value) && vb.value.length === 6
             ? parseMacAddress(vb.value)
             : null;
 
+        // Phase 3 — merge live status from 17409 registration table.
+        // Default = "offline" for any registered ONU absent from the
+        // EPON MPCP registration table or present with status ≠ 4.
+        const status = statusByBigN.get(bigN) ?? "offline";
+
         onus.push({
-          onuId:   `cdp_${bigN}`,   // "cdp" = C-DATA provisioned
+          onuId:   `cdp_${bigN}`,
           ponPort: `port-${portIndex}`,
           serial:  null,
           mac,
-          name:             null,
-          status:           "online",  // no per-ONU status via community=public
-          type:             null,
+          name:              null,
+          status,
+          type:              null,
           offlineReasonCode: null,
-          rxPowerDbm:       null,
-          txPowerDbm:       null,
-          distanceMeters:   null,
-          rawInstanceOid:   bigNStr,
+          rxPowerDbm:        null,
+          txPowerDbm:        null,
+          distanceMeters:    null,
+          rawInstanceOid:    bigNStr,
         });
       }
 
       const newCursor = inTree[inTree.length - 1]!.oid;
-      if (newCursor === cursor) break;  // no progress guard
+      if (newCursor === cursor) break;
       cursor = newCursor;
     }
 
@@ -1454,12 +1527,14 @@ export class RealSnmpClient {
         vendor:     "CDATA",
         totalFound: 0,
         onus:       [],
-        message:    globalError
-          ?? `GETBULK walk of ${MIB_NAME} returned 0 ONU entries.`,
+        message:    globalError ?? `GETBULK walk of ${MIB_NAME} returned 0 ONU entries.`,
         latencyMs:  Date.now() - start,
         mibUsed:    MIB_NAME,
       };
     }
+
+    const onlineCount  = onus.filter((o) => o.status === "online").length;
+    const offlineCount = onus.filter((o) => o.status === "offline").length;
 
     return {
       success:    true,
@@ -1467,9 +1542,10 @@ export class RealSnmpClient {
       totalFound: onus.length,
       onus,
       message:
-        `Found ${onus.length} ONU${onus.length !== 1 ? "s" : ""} in ${MIB_NAME}` +
-        ` across 8 PON ports (all provisioned; per-ONU online/offline status` +
-        ` not accessible via SNMP community=public on FD1208S-B0 V1.6.0).`,
+        `Found ${onus.length} registered ONUs` +
+        ` (online=${onlineCount}, offline=${offlineCount}).` +
+        ` Status OID: 1.3.6.1.4.1.17409.2.2.11.2.1.1.4.{idx1}.{idx2}` +
+        ` (value 4=online; absent or other=offline).`,
       latencyMs: Date.now() - start,
       mibUsed:   MIB_NAME,
     };
