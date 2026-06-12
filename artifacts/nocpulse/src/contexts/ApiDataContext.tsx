@@ -94,14 +94,22 @@ function decodeOfflineReason(code: number | null | undefined): string {
 function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice {
   // SNMP port-0 → PON-1, port-1 → PON-2, … (0-indexed → 1-indexed)
   const portNum = parseInt(onu.ponPort.replace("port-", ""), 10);
-  const ponPort = `PON-${isNaN(portNum) ? 1 : portNum + 1}`;
+  const portIndex = isNaN(portNum) ? 0 : portNum;
+  const ponPort = `PON-${portIndex + 1}`;
   const status: Status = onu.status === "online" ? "Online" : "Offline";
   // onuId may be "idx1.idx2" (dot-separated) — sanitise for use in URLs and IDs.
   const safeOnuId = onu.onuId.replace(/\./g, "-");
+
+  // C-DATA ONU notation: 0/0/{portIndex}/{onuSlot}
+  // portIndex = 0-based port number; onuSlot = byte[3] of bigN (1-based ONU index on that PON)
+  const bigNParsed = parseInt(onu.onuId.replace(/^cdp_/, ""), 10);
+  const onuSlot = Number.isFinite(bigNParsed) ? (bigNParsed & 0xFF) : 1;
+  const onuNo = `0/0/${portIndex}/${onuSlot}`;
+
   return {
     id:                `${oltId}-onu-${safeOnuId}`,
     oltId,
-    onuNo:             `${ponPort}/${onu.onuId}`,
+    onuNo,
     description:       onu.name ?? "",  // real ONU name/alias from OLT
     distance:          onu.distanceMeters != null
                          ? `${(onu.distanceMeters / 1000).toFixed(2)} km`

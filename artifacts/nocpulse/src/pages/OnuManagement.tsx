@@ -216,16 +216,18 @@ export default function OnuManagement() {
   const activeOlt    = olts.find((o) => o.id === oltFilter);
 
   const availablePonPorts = useMemo(() => {
-    if (oltFilter !== "All OLTs" && activeOlt) {
-      return Array.from({ length: activeOlt.ponPortCount }, (_, i) => `PON-${i + 1}`);
-    }
-    const ports = new Set(onus.map((o) => o.ponPort));
+    // Derive PON ports from the ONUs that belong to the selected OLT.
+    // This works for real discovered OLTs where ponPortCount may be 0/unset.
+    const baseOnus = oltFilter !== "All OLTs"
+      ? onus.filter((o) => o.oltId === oltFilter)
+      : onus;
+    const ports = new Set(baseOnus.map((o) => o.ponPort));
     return Array.from(ports).sort((a, b) => {
       const na = parseInt(a.replace("PON-", ""), 10);
       const nb = parseInt(b.replace("PON-", ""), 10);
       return na - nb;
     });
-  }, [oltFilter, activeOlt]);
+  }, [oltFilter, onus]);
 
   useEffect(() => {
     if (ponFilter !== "All PONs" && !availablePonPorts.includes(ponFilter)) {
@@ -543,7 +545,6 @@ export default function OnuManagement() {
               ) : (
                 paginatedOnus.map((onu) => {
                   const parentOlt = olts.find((o) => o.id === onu.oltId);
-                  const ponNum    = onu.onuNo.split("/")[1] ?? "?";
                   const delta     = onu.signalLevel !== null && onu.lastOfflineRxPower !== null
                     ? parseFloat((onu.signalLevel - onu.lastOfflineRxPower).toFixed(1))
                     : null;
@@ -566,13 +567,15 @@ export default function OnuManagement() {
                     >
                       {/* ONU / PON */}
                       <TableCell className="px-3 py-2">
-                        <div className="font-mono font-semibold text-xs tracking-tight">{onu.onuNo}</div>
+                        <div className="font-mono font-semibold text-xs tracking-tight">
+                          {parentOlt?.name ? `${parentOlt.name} ` : ""}{onu.onuNo}
+                        </div>
                         <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                           <span className="text-[9px] font-mono font-semibold bg-primary/10 text-primary border border-primary/20 rounded px-1 py-px">
                             VLAN {onu.vlanId}
                           </span>
                           <span className="text-[9px] text-muted-foreground bg-muted/50 border border-border/40 rounded px-1 py-px">
-                            PON-{ponNum}
+                            {onu.ponPort}
                           </span>
                           <span className={`text-[9px] font-semibold border rounded px-1 py-px ${getOnuTypeBadgeClass(onu.onuType)}`}>
                             {onu.onuType}
