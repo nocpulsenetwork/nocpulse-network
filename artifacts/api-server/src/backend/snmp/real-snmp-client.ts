@@ -911,15 +911,9 @@ export class RealSnmpClient {
         memPct = Math.round(((rawMemTotal - rawMemFree) / rawMemTotal) * 100);
       }
 
-      // Temperature: may be whole °C or 0.01 °C units
+      // Temperature: 0.1 °C units (e.g. 517 → 51.7 °C)
       if (rawTemp !== undefined) {
-        if (Math.abs(rawTemp) > 120) {
-          // 0.01 °C units (e.g. 2968 → 29.68 °C)
-          temperatureC = parseFloat((rawTemp / 100).toFixed(2));
-        } else {
-          // Whole °C
-          temperatureC = rawTemp;
-        }
+        temperatureC = parseFloat((rawTemp / 10).toFixed(1));
       }
     } catch { /* OIDs not available on this firmware */ }
 
