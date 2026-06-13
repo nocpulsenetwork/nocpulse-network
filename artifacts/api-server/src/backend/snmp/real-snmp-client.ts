@@ -878,32 +878,49 @@ export class RealSnmpClient {
     const MEM_FREE_OID  = "1.3.6.1.4.1.34592.1.3.100.1.8.3.0";
     const TEMP_OID      = "1.3.6.1.4.1.34592.1.3.100.1.8.6.0";
 
+    // Hard deadline: the entire poll must complete within 4 500 ms.
+    // Each SNMP task also has its own 2 s per-PDU timeout, but a sequential
+    // walk of a large interface table can chain many PDUs. The race ensures
+    // the caller always gets a response even if a task stalls mid-walk.
+    const HEALTH_DEADLINE_MS = 4_500;
+    const deadlinePromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("health-poll-deadline")), HEALTH_DEADLINE_MS),
+    );
+
     // Run all three SNMP tasks in parallel.
     // Promise.allSettled — a timeout on one task never blocks the others.
-    const [uptimeResult, scalarsResult, ifResult] = await Promise.allSettled([
+    const [uptimeResult, scalarsResult, ifResult] = await Promise.race([
+      Promise.allSettled([
 
-      // ── Task A: sysUpTime (1 GET) ──────────────────────────────────────
-      this.snmpGet([OID.sysUpTime]),
+        // ── Task A: sysUpTime (1 GET) ────────────────────────────────────
+        this.snmpGet([OID.sysUpTime]),
 
-      // ── Task B: EasyPath V2 MIB scalars (1 GET, 4 OIDs) ───────────────
-      // noSuchObject/noSuchInstance → indexVarbinds drops that varbind → intVal → undefined → null
-      this.snmpGet([CPU_OID, MEM_TOTAL_OID, MEM_FREE_OID, TEMP_OID]),
+        // ── Task B: EasyPath V2 MIB scalars (1 GET, 4 OIDs) ─────────────
+        // noSuchObject/noSuchInstance → indexVarbinds drops that varbind → intVal → undefined → null
+        this.snmpGet([CPU_OID, MEM_TOTAL_OID, MEM_FREE_OID, TEMP_OID]),
 
-      // ── Task C: IF-MIB walk then oper/admin GET (2 round-trips, sequential within this task) ──
-      (async () => {
-        const descrVbs = await this.snmpWalk(OID.ifDescrCol);
-        const ifMap    = new Map<number, string>();
-        for (const vb of descrVbs) {
-          const idx = ifIndexFromOid(vb.oid);
-          if (idx !== null) ifMap.set(idx, stringVal(vb) ?? "");
-        }
-        if (ifMap.size === 0) return { ifMap, sv: {} as Record<string, snmp.Varbind> };
-        const idxList   = [...ifMap.keys()];
-        const operOids  = idxList.map(i => `${OID.ifOperStatusCol}.${i}`);
-        const adminOids = idxList.map(i => `${OID.ifAdminStatusCol}.${i}`);
-        const sv = indexVarbinds(await this.snmpGet([...operOids, ...adminOids]));
-        return { ifMap, sv };
-      })(),
+        // ── Task C: IF-MIB — single bounded GETBULK (one PDU, ~40 reps) ─
+        // Replaces snmpWalk() which chains multiple sequential GETBULK PDUs
+        // and has no bounded total time. One GETBULK with maxRepetitions=40
+        // captures all interfaces on a typical OLT in a single round-trip.
+        (async () => {
+          const bulk   = await this.snmpGetBulk([OID.ifDescrCol], 40);
+          const prefix = OID.ifDescrCol + ".";
+          const ifMap  = new Map<number, string>();
+          for (const vb of bulk) {
+            if (!vb.oid.startsWith(prefix)) break; // left the ifDescr subtree
+            const idx = ifIndexFromOid(vb.oid);
+            if (idx !== null) ifMap.set(idx, stringVal(vb) ?? "");
+          }
+          if (ifMap.size === 0) return { ifMap, sv: {} as Record<string, snmp.Varbind> };
+          const idxList   = [...ifMap.keys()];
+          const operOids  = idxList.map(i => `${OID.ifOperStatusCol}.${i}`);
+          const adminOids = idxList.map(i => `${OID.ifAdminStatusCol}.${i}`);
+          const sv = indexVarbinds(await this.snmpGet([...operOids, ...adminOids]));
+          return { ifMap, sv };
+        })(),
+      ]),
+      deadlinePromise,
     ]);
 
     // ── Extract: uptime ────────────────────────────────────────────────────

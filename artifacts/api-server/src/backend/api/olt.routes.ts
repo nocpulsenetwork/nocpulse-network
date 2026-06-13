@@ -983,7 +983,15 @@ oltRouter.post("/poll-health", async (req: Request, res: Response) => {
   }
 
   const client = new RealSnmpClient({ host: ip, community, port, timeoutMs: 2_000, retries: 0 });
-  const health = await client.getOltHealth();
+
+  let health: OltHealthResult;
+  try {
+    health = await client.getOltHealth();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown SNMP error";
+    res.status(502).json({ error: `Health poll failed: ${msg}`, code: "SNMP_ERROR" });
+    return;
+  }
 
   oltHealthCache.set(oltId, { result: health, expiresAt: Date.now() + HEALTH_CACHE_TTL_MS });
 
