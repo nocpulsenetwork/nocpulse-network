@@ -601,6 +601,35 @@ export class RealSnmpClient {
   }
 
   /**
+   * Fetch the current register duration (onuTimeSinceLastRegister) for one
+   * EasyPath ONU via a single SNMP GET — no caching, always live.
+   *
+   * OID: 1.3.6.1.4.1.17409.2.3.4.1.1.18.{EponDeviceIndex}
+   * EponDeviceIndex = (0x01 << 24) | (portSlot << 8) | onuSlot
+   *
+   * Returns seconds (unsigned Counter32), or null on any error / missing OID.
+   */
+  async fetchRegisterDuration(portSlot: number, onuSlot: number): Promise<number | null> {
+    const e   = (1 * 0x1000000) + (portSlot << 8) + onuSlot;
+    const oid = `1.3.6.1.4.1.17409.2.3.4.1.1.18.${e}`;
+    try {
+      const varbinds = await this.snmpGet([oid]);
+      const flat: snmp.Varbind[] = Array.isArray(varbinds[0])
+        ? (varbinds as unknown as snmp.Varbind[][]).flat()
+        : varbinds;
+      const vb = flat[0];
+      if (!vb || snmp.isVarbindError(vb)) return null;
+      const raw = typeof vb.value === "number" ? vb.value
+                : typeof vb.value === "bigint"  ? Number(vb.value)
+                : null;
+      if (raw === null || !Number.isFinite(raw)) return null;
+      return raw < 0 ? raw + 0x100000000 : raw;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Walk a MIB subtree using GETBULK (v2c) or successive GETNEXTs (v1).
    * Creates and closes its own session.
    *

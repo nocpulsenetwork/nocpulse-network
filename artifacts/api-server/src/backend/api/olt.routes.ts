@@ -700,6 +700,11 @@ oltRouter.post("/test-onu-traffic", async (req: Request, res: Response) => {
 // discovery (the user just clicks "Discover" again).
 const onuDiscoveryCache = new Map<string, OnuDiscoveryResult>();
 
+// OLT connection params — stored alongside the discovery cache so the
+// per-ONU live-uptime endpoint can open a fresh SNMP session without the
+// caller re-supplying credentials.
+const oltConnectionCache = new Map<string, { ip: string; community: string; port: number }>();
+
 // POST /api/olts/discover-onus — manual read-only ONU discovery
 //
 // Connects to an OLT, auto-detects its vendor via sysDescr/sysObjectID, walks
@@ -888,8 +893,9 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
     sysName:       connectivity.sysName        ?? null,
   };
 
-  // ── Cache result by OLT ID ───────────────────────────────────────────────
+  // ── Cache result + connection params by OLT ID ──────────────────────────
   onuDiscoveryCache.set(oltId, result);
+  oltConnectionCache.set(oltId, { ip, community, port });
 
   res.json({
     data: result,
@@ -1077,6 +1083,51 @@ oltRouter.get("/:id/health", (req: Request, res: Response) => {
   res.json({
     data: entry.result,
     meta: { generatedAt: new Date().toISOString(), cachedAt: entry.result.polledAt, cachedUntil: new Date(entry.expiresAt).toISOString() },
+  });
+});
+
+// GET /api/olts/:id/onus/:onuId/uptime — live register duration for one ONU
+//
+// Always performs a fresh SNMP GET; the result is never cached.
+// :onuId must be the URL-safe ONU ID — portSlot and onuSlot separated by a
+// dash, e.g. "15-6" for portSlot=15 onuSlot=6.
+//
+// Requires a prior successful POST /discover-onus for the same OLT ID so
+// that connection params (IP / community / port) are known.
+oltRouter.get("/:id/onus/:onuId/uptime", async (req: Request, res: Response) => {
+  const oltId = req.params["id"] as string;
+  const onuId = req.params["onuId"] as string;
+
+  const conn = oltConnectionCache.get(oltId);
+  if (!conn) {
+    res.status(404).json({
+      error: "No connection params for this OLT — run discover-onus first",
+      code:  "NO_CONN_PARAMS",
+    });
+    return;
+  }
+
+  const parts    = onuId.split("-").map(Number);
+  const portSlot = parts[0];
+  const onuSlot  = parts[1];
+  if (!Number.isFinite(portSlot) || !Number.isFinite(onuSlot)) {
+    res.status(400).json({ error: "Invalid onuId format — expected portSlot-onuSlot (e.g. 15-6)", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const client = new RealSnmpClient({
+    host:      conn.ip,
+    community: conn.community,
+    port:      conn.port,
+    timeoutMs: 5_000,
+    retries:   1,
+  });
+
+  const registerDurationSecs = await client.fetchRegisterDuration(portSlot, onuSlot);
+
+  res.json({
+    data: { registerDurationSecs },
+    meta: { generatedAt: new Date().toISOString(), oltId, onuId },
   });
 });
 

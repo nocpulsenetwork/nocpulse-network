@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useApiData } from "@/contexts/ApiDataContext";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -89,6 +89,7 @@ export default function OnuDetail() {
   const [customDescription, setCustomDescription] = useState("");
   const [editDescOpen, setEditDescOpen] = useState(false);
   const [editDescDraft, setEditDescDraft] = useState("");
+  const [liveRegisterSecs, setLiveRegisterSecs] = useState<number | null>(null);
 
   const id = params?.id;
   const onu = onus.find((o) => o.id === id);
@@ -111,6 +112,26 @@ export default function OnuDetail() {
     return map[onu?.signalStability ?? "Stable"] ?? map["Stable"];
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onu?.signalStability]);
+
+  // Fetch live register duration on every page load for real ONUs.
+  // Never cached — hits the OLT via SNMP on each request.
+  useEffect(() => {
+    if (!onu?.isReal) return;
+    const safeOnuId = onu.id.slice(onu.oltId.length + "-onu-".length);
+    let cancelled = false;
+    fetch(
+      `/api/olts/${encodeURIComponent(onu.oltId)}/onus/${encodeURIComponent(safeOnuId)}/uptime`,
+      { signal: AbortSignal.timeout(6_000) },
+    )
+      .then(r => r.ok ? r.json() as Promise<{ data?: { registerDurationSecs?: number | null } }> : null)
+      .then(json => {
+        if (!cancelled && json?.data?.registerDurationSecs != null) {
+          setLiveRegisterSecs(json.data.registerDurationSecs);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [onu?.id]);
 
   const _preSeed   = onu ? onu.id.charCodeAt(onu.id.length - 1) : 0;
   const _preIsReal = Boolean(onu?.isReal);
@@ -155,6 +176,7 @@ export default function OnuDetail() {
   // Real ONUs (discovered via SNMP) have placeholder signalLevel/txPower values.
   // Gate all signal-derived and mock-generated computations behind this flag.
   const isRealOnu = Boolean(onu.isReal);
+  const uptimeSecs = isRealOnu ? (liveRegisterSecs ?? onu.registerDurationSecs) : null;
 
   const isUp = onu.status !== "Offline";
   const isPoorSignal    = !isRealOnu && onu.signalLevel !== null && onu.signalLevel < -28;
@@ -533,28 +555,21 @@ export default function OnuDetail() {
         </Card>
 
         {/* Uptime / Register Duration */}
-        <Card className={`border-l-4 ${isRealOnu && onu.registerDurationSecs != null ? "border-l-blue-500" : isRealOnu ? "border-l-slate-500" : "border-l-blue-500"}`}>
+        <Card className={`border-l-4 ${isRealOnu && uptimeSecs != null ? "border-l-blue-500" : isRealOnu ? "border-l-slate-500" : "border-l-blue-500"}`}>
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">Uptime</span>
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             {isRealOnu ? (
-              onu.registerDurationSecs != null ? (() => {
-                const secs  = onu.registerDurationSecs!;
-                const days  = Math.floor(secs / 86400);
-                const hours = Math.floor((secs % 86400) / 3600);
-                const mins  = Math.floor((secs % 3600) / 60);
-                const s     = secs % 60;
-                return (
-                  <>
-                    <div className="text-lg font-bold leading-tight font-mono">
-                      {days > 0 ? `${days}d ` : ""}{hours}h {mins}m {s}s
-                    </div>
-                    <div className="mt-1 text-[10px] text-muted-foreground">Since last registration</div>
-                  </>
-                );
-              })() : (
+              uptimeSecs != null ? (
+                <>
+                  <div className="text-lg font-bold leading-tight font-mono">
+                    {Math.floor(uptimeSecs / 86400) > 0 ? `${Math.floor(uptimeSecs / 86400)}d ` : ""}{Math.floor((uptimeSecs % 86400) / 3600)}h {Math.floor((uptimeSecs % 3600) / 60)}m {uptimeSecs % 60}s
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">Since last registration</div>
+                </>
+              ) : (
                 <>
                   <div className="text-lg font-bold leading-tight text-muted-foreground/40">N/A</div>
                   <div className="mt-1 text-[10px] text-muted-foreground">Not available via SNMP</div>
