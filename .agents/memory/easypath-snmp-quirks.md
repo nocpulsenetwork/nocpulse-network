@@ -143,13 +143,42 @@ The FD1208S-B0 firmware returns partial GETBULK responses. Break only when
 - Frontend safeOnuId = onuId.replace(/\./g, "-") → "15-6" (URL/ID safe)
 - `onuSlot = parseInt(onuId.split(".")[1], 10)` — no bit-masking needed
 
+## MIB-confirmed OIDs for optical telemetry (V2 MIB, 2026-06-13)
+
+### onuPonPortOpticalTransmissionPropertyTable — `17409.2.3.4.2.1`
+3-part INDEX: `{EponDeviceIndex, CardIndex, PortIndex}` — for non-modular ONU: CardIndex=0, PortIndex=1
+
+| col | name | OID | units | scale |
+|-----|------|-----|-------|-------|
+| 4 | onuReceivedOpticalPower | `17409.2.3.4.2.1.4.{bigN}.0.1` | centi-dBm | ÷100 |
+| 5 | onuTramsmittedOpticalPower (typo in MIB) | `17409.2.3.4.2.1.5.{bigN}.0.1` | centi-dBm | ÷100 |
+| 6 | onuBiasCurrent | `17409.2.3.4.2.1.6.{bigN}.0.1` | centi-mA | ÷100 |
+| 7 | onuWorkingVoltage | `17409.2.3.4.2.1.7.{bigN}.0.1` | centi-mV | ÷100 |
+| 8 | onuWorkingTemperature | `17409.2.3.4.2.1.8.{bigN}.0.1` | Centi-°C | ÷100 |
+
+bigN here = 32-bit EponDeviceIndex: `(0x01 << 24) | (0x00 << 16) | (portSlot << 8) | onuSlot`
+→ PON-3 ONU-6: portSlot=15, onuSlot=6, bigN=16781062
+
+### onuInfoTable — `17409.2.3.4.1.1`
+1-part INDEX: `{EponDeviceIndex}` (same bigN 32-bit integer)
+
+| col | name | OID | units | scale |
+|-----|------|-----|-------|-------|
+| 15 | onuTestDistance | `17409.2.3.4.1.1.15.{bigN}` | Meters | ×1 |
+| 18 | onuTimeSinceLastRegister | `17409.2.3.4.1.1.18.{bigN}` | seconds | ×1 (Counter32) |
+
+### IMPORTANT: Index encoding discrepancy
+Current Phase 2 code uses TWO-part index `portSlot.onuSlot` (e.g. "15.6") for cols 9/10/11.
+MIB-defined tables use SINGLE 32-bit bigN (e.g. 16781062) OR 3-part bigN.cardIdx.portIdx.
+This suggests the device exposes cols 9/10/11 (optical) at a table that uses a different 2-part index,
+NOT the MIB-spec onuInfoTable (which has single bigN index).
+**Do not assume cols 9/10/11 index format matches MIB — confirm live OIDs against the device.**
+
 ## Phase 3 probe — temperature and register duration
-Same `17409.2.3.4.1.1` table, same bigN index. Walk cols 15–21 in parallel after Phase 2.
-Auto-detect columns by heuristic:
-- **Temperature**: ≥70% of non-zero values in [100, 1500] → divide by 10 for °C
-- **Register duration**: ≥90% of values in [0, 10_000_000], median > 0 → seconds since last registration
-Both mapped to `temperatureC` and `registerDurationSecs` on `SnmpOnu`.
-**Status as of 2026-06-12:** Implemented, not yet confirmed live. If all 7 cols return 0 rows → data is in a different subtree.
+Per MIB: temperature is in optical property table at `17409.2.3.4.2.1.8` (3-part index bigN.0.1),
+NOT in onuInfoTable. onuTestDistance = `17409.2.3.4.1.1.15` with single 32-bit bigN index.
+onuTimeSinceLastRegister = `17409.2.3.4.1.1.18` with single 32-bit bigN index.
+**Status 2026-06-13:** OIDs now MIB-confirmed. Not yet validated live against device.
 
 ## Implementation location
 `artifacts/api-server/src/backend/snmp/real-snmp-client.ts` — `readEasyPathOnuTable()`
