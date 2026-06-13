@@ -1692,30 +1692,10 @@ export class RealSnmpClient {
       targetBigNs.push(bigN);
     }
 
-    // ── Sniff: auto-detect optical table index suffix ────────────────────────
-    // MIB specifies 3-part INDEX {EponDeviceIndex, CardIndex, PortIndex}, but
-    // firmware implementations vary in what sub-index they actually respond to.
-    // Test 4 candidates on the first ONU's RX OID (one extra GET, 4 OIDs).
-    // The first variant that returns a non-error varbind is used for all ONUs.
-    const OPT_SUFFIXES = [".0.1", ".1", ".0", ""] as const;
-    type OptSuffix     = typeof OPT_SUFFIXES[number];
-    let  optSuffix: OptSuffix = ".0.1";   // MIB-spec default — override if sniff differs
-
-    const sniffBigN = targetBigNs[0];
-    if (sniffBigN !== undefined) {
-      const sniffPs  = (sniffBigN >>> 8) & 0xFF;
-      const sniffOs  = sniffBigN & 0xFF;
-      const sniffE   = (1 * 0x1000000) + (sniffPs << 8) + sniffOs;
-      const sniffOids = OPT_SUFFIXES.map((sfx) => `${OPT_BASE}.4.${sniffE}${sfx}`);
-      try {
-        const sniffVbs = await this.snmpGet(sniffOids);
-        for (const vb of sniffVbs) {
-          if (snmp.isVarbindError(vb)) continue;
-          const idx = sniffOids.indexOf(vb.oid);
-          if (idx >= 0) { optSuffix = OPT_SUFFIXES[idx]!; break; }
-        }
-      } catch { /* keep default */ }
-    }
+    // Confirmed via live SNMP walk: EasyPath FD1208S-B0 indexes the optical
+    // property table as {EponDeviceIndex}.0.0 (CardIndex=0, PortIndex=0),
+    // not .0.1 as the MIB documentation implies.
+    const optSuffix = ".0.0";
 
     // Build OID→{bigN, field} lookup for all target ONUs.
     type OptField = "rx" | "tx" | "temp" | "dist" | "dur";
@@ -1749,8 +1729,12 @@ export class RealSnmpClient {
 
     for (const result of batchResults) {
       if (result.status !== "fulfilled") continue;
-      for (const vb of result.value) {
-        if (snmp.isVarbindError(vb)) continue;
+      // net-snmp getBulk may return varbind[][] — flatten one level defensively.
+      const flatVbs: snmp.Varbind[] = Array.isArray(result.value[0])
+        ? (result.value as unknown as snmp.Varbind[][]).flat()
+        : result.value;
+      for (const vb of flatVbs) {
+        if (!vb || snmp.isVarbindError(vb)) continue;
         const meta = oidMeta.get(vb.oid);
         if (!meta) continue;
 
