@@ -873,89 +873,90 @@ export class RealSnmpClient {
     const start    = Date.now();
     const polledAt = new Date().toISOString();
 
-    // ── 1. Uptime ─────────────────────────────────────────────────────────
-    let uptimeSecs: number | null = null;
-    try {
-      const vbs = await this.snmpGet([OID.sysUpTime]);
-      uptimeSecs = timeTicksToSecs(indexVarbinds(vbs)[OID.sysUpTime]) ?? null;
-    } catch { /* leave null */ }
+    const CPU_OID       = "1.3.6.1.4.1.34592.1.3.100.1.8.1.0";
+    const MEM_TOTAL_OID = "1.3.6.1.4.1.34592.1.3.100.1.8.2.0";
+    const MEM_FREE_OID  = "1.3.6.1.4.1.34592.1.3.100.1.8.3.0";
+    const TEMP_OID      = "1.3.6.1.4.1.34592.1.3.100.1.8.6.0";
 
-    // ── 2. EasyPath V2 MIB — CPU / Memory / Temperature ──────────────────
-    // noSuchObject or noSuchInstance → indexVarbinds drops the varbind → intVal → undefined → null
+    // Run all three SNMP tasks in parallel.
+    // Promise.allSettled — a timeout on one task never blocks the others.
+    const [uptimeResult, scalarsResult, ifResult] = await Promise.allSettled([
+
+      // ── Task A: sysUpTime (1 GET) ──────────────────────────────────────
+      this.snmpGet([OID.sysUpTime]),
+
+      // ── Task B: EasyPath V2 MIB scalars (1 GET, 4 OIDs) ───────────────
+      // noSuchObject/noSuchInstance → indexVarbinds drops that varbind → intVal → undefined → null
+      this.snmpGet([CPU_OID, MEM_TOTAL_OID, MEM_FREE_OID, TEMP_OID]),
+
+      // ── Task C: IF-MIB walk then oper/admin GET (2 round-trips, sequential within this task) ──
+      (async () => {
+        const descrVbs = await this.snmpWalk(OID.ifDescrCol);
+        const ifMap    = new Map<number, string>();
+        for (const vb of descrVbs) {
+          const idx = ifIndexFromOid(vb.oid);
+          if (idx !== null) ifMap.set(idx, stringVal(vb) ?? "");
+        }
+        if (ifMap.size === 0) return { ifMap, sv: {} as Record<string, snmp.Varbind> };
+        const idxList   = [...ifMap.keys()];
+        const operOids  = idxList.map(i => `${OID.ifOperStatusCol}.${i}`);
+        const adminOids = idxList.map(i => `${OID.ifAdminStatusCol}.${i}`);
+        const sv = indexVarbinds(await this.snmpGet([...operOids, ...adminOids]));
+        return { ifMap, sv };
+      })(),
+    ]);
+
+    // ── Extract: uptime ────────────────────────────────────────────────────
+    let uptimeSecs: number | null = null;
+    if (uptimeResult.status === "fulfilled") {
+      uptimeSecs = timeTicksToSecs(indexVarbinds(uptimeResult.value)[OID.sysUpTime]) ?? null;
+    }
+
+    // ── Extract: scalars ──────────────────────────────────────────────────
     let cpuPct:       number | null = null;
     let memPct:       number | null = null;
     let temperatureC: number | null = null;
-    try {
-      const CPU_OID       = "1.3.6.1.4.1.34592.1.3.100.1.8.1.0";
-      const MEM_TOTAL_OID = "1.3.6.1.4.1.34592.1.3.100.1.8.2.0";
-      const MEM_FREE_OID  = "1.3.6.1.4.1.34592.1.3.100.1.8.3.0";
-      const TEMP_OID      = "1.3.6.1.4.1.34592.1.3.100.1.8.6.0";
-
-      const pv = indexVarbinds(
-        await this.snmpGet([CPU_OID, MEM_TOTAL_OID, MEM_FREE_OID, TEMP_OID])
-      );
-
+    if (scalarsResult.status === "fulfilled") {
+      const pv          = indexVarbinds(scalarsResult.value);
       const rawCpu      = intVal(pv[CPU_OID]);
       const rawMemTotal = intVal(pv[MEM_TOTAL_OID]);
       const rawMemFree  = intVal(pv[MEM_FREE_OID]);
       const rawTemp     = intVal(pv[TEMP_OID]);
 
-      // CPU: expect a 0–100 percentage
       if (rawCpu !== undefined && rawCpu >= 0 && rawCpu <= 100) cpuPct = rawCpu;
-
-      // Memory: derive used% from total and free (both must be present and total > 0)
       if (
         rawMemTotal !== undefined && rawMemFree !== undefined &&
         rawMemTotal > 0 && rawMemFree >= 0 && rawMemFree <= rawMemTotal
       ) {
         memPct = Math.round(((rawMemTotal - rawMemFree) / rawMemTotal) * 100);
       }
-
-      // Temperature: 0.1 °C units (e.g. 517 → 51.7 °C)
       if (rawTemp !== undefined) {
         temperatureC = parseFloat((rawTemp / 10).toFixed(1));
       }
-    } catch { /* OIDs not available on this firmware */ }
+    }
 
-    // ── 3. Interface status via IF-MIB ────────────────────────────────────
+    // ── Extract: ports ────────────────────────────────────────────────────
     const uplinkPorts:   OltPortStatus[] = [];
     const ethernetPorts: OltPortStatus[] = [];
     const sfpPorts:      OltPortStatus[] = [];
-    try {
-      const descrVbs = await this.snmpWalk(OID.ifDescrCol);
-      const ifMap    = new Map<number, string>();
-      for (const vb of descrVbs) {
-        const idx = ifIndexFromOid(vb.oid);
-        if (idx !== null) ifMap.set(idx, stringVal(vb) ?? "");
+    if (ifResult.status === "fulfilled") {
+      const { ifMap, sv } = ifResult.value;
+      for (const [ifIndex, descr] of ifMap) {
+        if (isPonPort(descr)) continue;
+        const operRaw  = intVal(sv[`${OID.ifOperStatusCol}.${ifIndex}`]);
+        const adminRaw = intVal(sv[`${OID.ifAdminStatusCol}.${ifIndex}`]);
+        const port: OltPortStatus = {
+          ifIndex,
+          description: descr,
+          operStatus:  operStatusToString(operRaw ?? 4),
+          adminStatus: adminRaw === 1 ? "up" : adminRaw === 2 ? "down" : "unknown",
+        };
+        const kind = classifyOltInterface(descr);
+        if      (kind === "uplink")   uplinkPorts.push(port);
+        else if (kind === "ethernet") ethernetPorts.push(port);
+        else if (kind === "sfp")      sfpPorts.push(port);
       }
-
-      if (ifMap.size > 0) {
-        const idxList   = [...ifMap.keys()];
-        const operOids  = idxList.map(i => `${OID.ifOperStatusCol}.${i}`);
-        const adminOids = idxList.map(i => `${OID.ifAdminStatusCol}.${i}`);
-        const sv = indexVarbinds(await this.snmpGet([...operOids, ...adminOids]));
-
-        for (const ifIndex of idxList) {
-          const descr = ifMap.get(ifIndex) ?? "";
-          if (isPonPort(descr)) continue;           // PON ports → ONU discovery handles those
-
-          const operRaw  = intVal(sv[`${OID.ifOperStatusCol}.${ifIndex}`]);
-          const adminRaw = intVal(sv[`${OID.ifAdminStatusCol}.${ifIndex}`]);
-
-          const port: OltPortStatus = {
-            ifIndex,
-            description: descr,
-            operStatus:  operStatusToString(operRaw ?? 4),
-            adminStatus: adminRaw === 1 ? "up" : adminRaw === 2 ? "down" : "unknown",
-          };
-
-          const kind = classifyOltInterface(descr);
-          if      (kind === "uplink")   uplinkPorts.push(port);
-          else if (kind === "ethernet") ethernetPorts.push(port);
-          else if (kind === "sfp")      sfpPorts.push(port);
-        }
-      }
-    } catch { /* IF-MIB walk failed — leave empty arrays */ }
+    }
 
     return {
       uptimeSecs,

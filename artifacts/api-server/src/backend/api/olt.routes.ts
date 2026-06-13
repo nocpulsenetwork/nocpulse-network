@@ -939,22 +939,23 @@ oltRouter.post("/debug-snmp-walk", async (req: Request, res: Response) => {
 // ─── In-memory OLT health cache ──────────────────────────────────────────────
 //
 // Key:   OLT ID string (same key used by onuDiscoveryCache)
-// Value: result of the last successful POST /poll-health call
+// Value: result of the last successful POST /poll-health call + TTL expiry timestamp
 // Lost on server restart — caller re-polls via the "Poll Health" button.
-const oltHealthCache = new Map<string, OltHealthResult>();
+const HEALTH_CACHE_TTL_MS = 60_000; // 60 seconds
+const oltHealthCache = new Map<string, { result: OltHealthResult; expiresAt: number }>();
 
 // POST /api/olts/poll-health — manual read-only OLT health poll
 //
-// Connects to an OLT via SNMP and reads:
+// Connects to an OLT via SNMP and reads (all tasks run in parallel):
 //   • sysUpTime (standard — always available)
-//   • IF-MIB ifDescr + ifOperStatus + ifAdminStatus (standard — port inventory)
-//   • CPU / memory / temperature (CDATA EasyPath proprietary — null if unsupported)
+//   • CPU / memory / temperature (EasyPath V2 MIB — null if noSuchObject/timeout)
+//   • IF-MIB ifDescr + ifOperStatus + ifAdminStatus (port inventory)
 //
 // Safety contract:
 //   • Read-only: SNMP GET + GETBULK walk only — no SET
 //   • One-shot: no interval, no background worker, no persistent session
-//   • Timeout: 3 000 ms, retries: 1
-//   • Stores result only in memory — no database write
+//   • Timeout: 2 000 ms, retries: 0
+//   • Stores result only in memory with 60 s TTL — no database write
 oltRouter.post("/poll-health", async (req: Request, res: Response) => {
   const body = req.body as Record<string, unknown>;
 
@@ -981,26 +982,27 @@ oltRouter.post("/poll-health", async (req: Request, res: Response) => {
     return;
   }
 
-  const client = new RealSnmpClient({ host: ip, community, port, timeoutMs: 3_000, retries: 1 });
+  const client = new RealSnmpClient({ host: ip, community, port, timeoutMs: 2_000, retries: 0 });
   const health = await client.getOltHealth();
 
-  oltHealthCache.set(oltId, health);
+  oltHealthCache.set(oltId, { result: health, expiresAt: Date.now() + HEALTH_CACHE_TTL_MS });
 
   res.json({
     data: health,
-    meta: { host: ip, port, generatedAt: new Date().toISOString(), cached: true },
+    meta: { host: ip, port, generatedAt: new Date().toISOString(), cachedUntil: new Date(Date.now() + HEALTH_CACHE_TTL_MS).toISOString() },
   });
 });
 
-// GET /api/olts/:id/health — return cached OLT health result
+// GET /api/olts/:id/health — return cached OLT health result (60 s TTL)
 //
 // Returns the result of the last successful POST /poll-health call for this OLT,
-// or { data: null } if no health poll has been performed yet.
+// or { data: null } if no poll has been performed or the cached result has expired.
 oltRouter.get("/:id/health", (req: Request, res: Response) => {
   const oltId  = req.params["id"] as string;
-  const cached = oltHealthCache.get(oltId);
+  const entry  = oltHealthCache.get(oltId);
 
-  if (!cached) {
+  if (!entry || Date.now() > entry.expiresAt) {
+    if (entry) oltHealthCache.delete(oltId); // evict expired entry
     res.json({
       data: null,
       meta: { generatedAt: new Date().toISOString(), note: "No health poll performed yet." },
@@ -1009,8 +1011,8 @@ oltRouter.get("/:id/health", (req: Request, res: Response) => {
   }
 
   res.json({
-    data: cached,
-    meta: { generatedAt: new Date().toISOString(), cachedAt: cached.polledAt },
+    data: entry.result,
+    meta: { generatedAt: new Date().toISOString(), cachedAt: entry.result.polledAt, cachedUntil: new Date(entry.expiresAt).toISOString() },
   });
 });
 
