@@ -29,8 +29,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { alarms } from "@/data/mockData";
 import { useRole, type UserRole, ROLE_LABELS } from "@/contexts/RoleContext";
+import { useApiData } from "@/contexts/ApiDataContext";
 
 interface SidebarProps {
   className?: string;
@@ -118,9 +118,8 @@ export function Sidebar({
     },
   ];
 
-  const unacknowledgedAlarmsCount = alarms.filter(
-    (a) => !a.acknowledged,
-  ).length;
+  const { metrics } = useApiData();
+  const unacknowledgedAlarmsCount = metrics.activeAlarms;
 
   const renderNavLinks = (items: NavItem[]) => {
     return items

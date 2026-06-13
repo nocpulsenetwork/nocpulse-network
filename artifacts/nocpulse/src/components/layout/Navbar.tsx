@@ -25,8 +25,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { alarms, onus, olts } from "@/data/mockData";
+import { onus, olts } from "@/data/mockData";
 import { useRole, ROLE_LABELS } from "@/contexts/RoleContext";
+import { useApiData } from "@/contexts/ApiDataContext";
+import { formatDistanceToNow } from "date-fns";
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -176,10 +178,23 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
     }
   };
 
-  /* ── Alarm helpers ─────────────────────────────────────────────────── */
-  const unacknowledgedAlarms = alarms.filter((a) => !a.acknowledged);
-  const activeAlarmsCount = unacknowledgedAlarms.length;
-  const topAlarms = unacknowledgedAlarms.slice(0, 3);
+  /* ── Alarm helpers — single source of truth from alarm engine ──────── */
+  const { alarms: liveAlarms, metrics } = useApiData();
+  const activeAlarms = liveAlarms.filter((a) =>
+    a.alarmStatus !== undefined ? a.alarmStatus === "active" : !a.acknowledged
+  );
+  const activeAlarmsCount = metrics.activeAlarms;
+  const topAlarms = activeAlarms.slice(0, 3);
+
+  const safeRelativeTime = (ts: string) => {
+    try {
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return "recently";
+      return formatDistanceToNow(d, { addSuffix: true });
+    } catch {
+      return "recently";
+    }
+  };
 
   const getSeverityColor = (s: string) =>
     s === "Critical" ? "border-l-red-500 bg-red-500/10 text-red-500"
@@ -393,7 +408,7 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
                       <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${getSeverityColor(alarm.severity)}`}>
                         {alarm.severity}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">2h ago</span>
+                      <span className="text-[10px] text-muted-foreground">{safeRelativeTime(alarm.timestamp)}</span>
                     </div>
                     <span className="font-medium text-sm">{alarm.deviceName}</span>
                     <span className="text-xs text-muted-foreground truncate" title={alarm.description}>
