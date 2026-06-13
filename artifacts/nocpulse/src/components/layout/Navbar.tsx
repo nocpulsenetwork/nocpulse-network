@@ -185,7 +185,7 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
     a.alarmStatus !== undefined ? a.alarmStatus === "active" : !a.acknowledged
   );
   const activeAlarmsCount = metrics.activeAlarms;
-  const topAlarms = activeAlarms.slice(0, 10);
+  const topAlarms = activeAlarms.slice(0, 5);
 
   const safeRelativeTime = (ts: string) => {
     try {
@@ -424,13 +424,13 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
                 </div>
               )}
             </div>
-            {activeAlarmsCount > 0 && (
+            {activeAlarmsCount > 5 && (
               <div className="p-2 border-t border-border/50">
                 <Link
                   href="/alarms"
                   className="block text-center text-xs font-medium text-primary hover:underline py-1"
                 >
-                  View all {activeAlarmsCount} alarms &rarr;
+                  View all alarms ({activeAlarmsCount}) &rarr;
                 </Link>
               </div>
             )}
