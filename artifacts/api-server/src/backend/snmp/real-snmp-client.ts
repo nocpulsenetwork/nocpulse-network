@@ -209,9 +209,9 @@ export interface SnmpOnu {
 
   /**
    * ONU optical module temperature in degrees Celsius, or null when unavailable.
-   * Populated by vendor-specific probes (e.g. EasyPath Phase 3 col walk).
+   * Populated by MIB-confirmed SNMP GET (EasyPath: 17409.2.3.4.2.1.8.{e}.0.1).
    */
-  temperatureC?: number | null;
+  temperatureCelsius?: number | null;
 
   /**
    * Time since the ONU last registered on the PON, in seconds.
@@ -1789,7 +1789,7 @@ export class RealSnmpClient {
         txPowerDbm:           txPowRaw !== null ? txPowRaw / 100 : null,
         distanceMeters:       distMRaw,
         rawInstanceOid:       String(bigN),
-        temperatureC:         tempRaw  !== null ? tempRaw  / 100 : null,
+        temperatureCelsius:   tempRaw  !== null ? tempRaw  / 100 : null,
         registerDurationSecs: durRaw,
       });
     }

@@ -806,7 +806,7 @@ oltRouter.post("/discover-onus", async (req: Request, res: Response) => {
     rxPowerDbm:          o.rxPowerDbm          ?? null,
     txPowerDbm:          o.txPowerDbm          ?? null,
     distanceMeters:      o.distanceMeters       ?? null,
-    temperatureCelsius:  o.temperatureC         ?? null,
+    temperatureCelsius:  o.temperatureCelsius    ?? null,
     registerDurationSecs: o.registerDurationSecs ?? null,
   }));
 
