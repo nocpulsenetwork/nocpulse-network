@@ -1,172 +1,241 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Square, Triangle, Layers, GitBranch, Zap, ChevronDown } from 'lucide-react';
+import { Layers } from 'lucide-react';
+import { Link } from 'wouter';
+import { useApiData } from '@/contexts/ApiDataContext';
 
 const FIBER_COLORS = [
-  { color: 'bg-blue-500',               svgFill: '#3b82f6', name: 'Blue',   core: 1 },
-  { color: 'bg-orange-500',             svgFill: '#f97316', name: 'Orange', core: 2 },
-  { color: 'bg-green-500',              svgFill: '#22c55e', name: 'Green',  core: 3 },
-  { color: 'bg-amber-700',              svgFill: '#92400e', name: 'Brown',  core: 4 },
-  { color: 'bg-gray-400',               svgFill: '#9ca3af', name: 'Slate',  core: 5 },
-  { color: 'bg-white border border-border', svgFill: '#e2e8f0', name: 'White',  core: 6 },
-  { color: 'bg-red-500',                svgFill: '#ef4444', name: 'Red',    core: 7 },
-  { color: 'bg-zinc-900 border border-border', svgFill: '#18181b', name: 'Black',  core: 8 },
-  { color: 'bg-yellow-400',             svgFill: '#facc15', name: 'Yellow', core: 9 },
-  { color: 'bg-violet-500',             svgFill: '#8b5cf6', name: 'Violet', core: 10 },
-  { color: 'bg-rose-300',               svgFill: '#fda4af', name: 'Pink',   core: 11 },
-  { color: 'bg-cyan-300',               svgFill: '#67e8f9', name: 'Aqua',   core: 12 },
+  { color: 'bg-blue-500',                       svgFill: '#3b82f6', name: 'Blue',   core: 1 },
+  { color: 'bg-orange-500',                     svgFill: '#f97316', name: 'Orange', core: 2 },
+  { color: 'bg-green-500',                      svgFill: '#22c55e', name: 'Green',  core: 3 },
+  { color: 'bg-amber-700',                      svgFill: '#92400e', name: 'Brown',  core: 4 },
+  { color: 'bg-gray-400',                       svgFill: '#9ca3af', name: 'Slate',  core: 5 },
+  { color: 'bg-white border border-border',     svgFill: '#e2e8f0', name: 'White',  core: 6 },
+  { color: 'bg-red-500',                        svgFill: '#ef4444', name: 'Red',    core: 7 },
+  { color: 'bg-zinc-900 border border-border',  svgFill: '#18181b', name: 'Black',  core: 8 },
+  { color: 'bg-yellow-400',                     svgFill: '#facc15', name: 'Yellow', core: 9 },
+  { color: 'bg-violet-500',                     svgFill: '#8b5cf6', name: 'Violet', core: 10 },
+  { color: 'bg-rose-300',                       svgFill: '#fda4af', name: 'Pink',   core: 11 },
+  { color: 'bg-cyan-300',                       svgFill: '#67e8f9', name: 'Aqua',   core: 12 },
 ];
 
-const SPLITTERS = [
-  { x: 110, label: 'SP-N1', ratio: '1:8',  ok: true,  usedOut: 6, totalOut: 8  },
-  { x: 210, label: 'SP-N2', ratio: '1:4',  ok: true,  usedOut: 4, totalOut: 4  },
-  { x: 310, label: 'SP-C1', ratio: '1:16', ok: true,  usedOut: 9, totalOut: 16 },
-  { x: 410, label: 'SP-C2', ratio: '1:8',  ok: false, usedOut: 3, totalOut: 8  },
-  { x: 510, label: 'SP-S1', ratio: '1:8',  ok: true,  usedOut: 7, totalOut: 8  },
-  { x: 610, label: 'SP-S2', ratio: '1:4',  ok: true,  usedOut: 2, totalOut: 4  },
-];
+type PonStatus = 'online' | 'degraded' | 'offline' | 'idle';
 
-const JOINT_BOXES = [
-  { x: 155, label: 'JB-01', totalCores: 12, usedCores: 8,  ok: true  },
-  { x: 305, label: 'JB-02', totalCores: 24, usedCores: 18, ok: true  },
-  { x: 455, label: 'JB-03', totalCores: 12, usedCores: 5,  ok: false },
-  { x: 555, label: 'JB-04', totalCores: 8,  usedCores: 6,  ok: true  },
-];
+const PORT_FILL: Record<PonStatus, string> = {
+  online:   '#166534',
+  degraded: '#713f12',
+  offline:  '#7f1d1d',
+  idle:     '#1a2332',
+};
+const PORT_STROKE: Record<PonStatus, string> = {
+  online:   '#22c55e',
+  degraded: '#f59e0b',
+  offline:  '#ef4444',
+  idle:     '#334155',
+};
 
-const AREAS = [
-  { name: 'North Zone',     olts: 2, splitters: 2, joints: 1, km: '12.4', status: 'Operational', totalCores: 36,  usedCores: 28 },
-  { name: 'Central Zone',   olts: 2, splitters: 2, joints: 1, km: '8.7',  status: 'Operational', totalCores: 48,  usedCores: 31 },
-  { name: 'South Zone',     olts: 2, splitters: 2, joints: 1, km: '15.2', status: 'Degraded',    totalCores: 24,  usedCores: 19 },
-  { name: 'East/West Zone', olts: 4, splitters: 2, joints: 1, km: '11.8', status: 'Operational', totalCores: 60,  usedCores: 38 },
-];
+const OLT_SPACING = 120;
+const SVG_MIN_W   = 700;
+const CORE_Y      = 45;
+const BACKBONE_Y  = 95;
+const OLT_CY      = 185;
+const PON_START_Y = OLT_CY + 34;
+const SVG_H       = 360;
 
 export default function FiberMap() {
-  const [expandedArea, setExpandedArea] = useState<string | null>(null);
+  const { olts, onus } = useApiData();
+
+  // Precompute PON port statuses for every OLT (avoids repeated .filter inside SVG render)
+  const oltPonStatuses = useMemo<Record<string, PonStatus[]>>(() => {
+    return Object.fromEntries(olts.map(olt => {
+      const portCount = olt.ponPortCount > 0 ? olt.ponPortCount : 8;
+      const statuses: PonStatus[] = Array.from({ length: portCount }, (_, pi) => {
+        const portName = `PON-${pi + 1}`;
+        const portOnus = onus.filter(o => o.oltId === olt.id && o.ponPort === portName);
+        if (portOnus.some(o => o.status === 'Online'))   return 'online';
+        if (portOnus.some(o => o.status === 'Degraded')) return 'degraded';
+        if (portOnus.length > 0)                         return 'offline';
+        return 'idle';
+      });
+      return [olt.id, statuses];
+    }));
+  }, [olts, onus]);
+
+  const onlineOlts   = olts.filter(o => o.status === 'Online').length;
+  const offlineOlts  = olts.filter(o => o.status === 'Offline').length;
+  const degradedOlts = olts.filter(o => o.status === 'Degraded').length;
+  const totalPons    = olts.reduce((a, o) => a + (o.ponPortCount > 0 ? o.ponPortCount : 8), 0);
+
+  const svgW   = Math.max(SVG_MIN_W, olts.length * OLT_SPACING + 100);
+  const coreX  = svgW / 2;
+  const startX = olts.length > 0 ? (svgW - (olts.length - 1) * OLT_SPACING) / 2 : coreX;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Fiber Map</h1>
-          <p className="text-muted-foreground text-sm">Physical infrastructure visualization — fiber routes, splitters, and joint boxes</p>
+          <h1 className="text-2xl font-bold tracking-tight">Network Map</h1>
+          <p className="text-muted-foreground text-sm">Live OLT topology — real data, updates automatically</p>
+        </div>
+        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" />Online</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block" />Degraded</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500 inline-block" />Offline</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-600 inline-block" />Idle port</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <div className="rounded-xl border border-border/60 bg-[#080d15] backdrop-blur-sm overflow-hidden relative" style={{height: '520px'}}>
-            <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(6,182,212,0.4) 1px, transparent 0)', backgroundSize: '24px 24px' }} />
 
-            {/* Layer legend */}
+        {/* ── SVG topology ── */}
+        <div className="lg:col-span-2">
+          <div
+            className="rounded-xl border border-border/60 bg-[#080d15] backdrop-blur-sm overflow-auto relative"
+            style={{ height: '380px' }}
+          >
+            <div
+              className="absolute inset-0 opacity-10 pointer-events-none"
+              style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgba(6,182,212,0.4) 1px, transparent 0)', backgroundSize: '24px 24px' }}
+            />
+
+            {/* Legend overlay */}
             <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
               {[
-                { color: '#06b6d4', label: 'Data Center / Hub', shape: 'rect' },
-                { color: '#334155', label: 'Backbone Route',    shape: 'line' },
-                { color: '#475569', label: 'Splitter',          shape: 'rect' },
-                { color: '#64748b', label: 'Joint Box',         shape: 'diamond' },
-                { color: '#22c55e', label: 'OLT Node',          shape: 'rect' },
+                { col: '#06b6d4', label: 'Network Core' },
+                { col: '#22c55e', label: 'OLT — Online' },
+                { col: '#f59e0b', label: 'OLT — Degraded' },
+                { col: '#ef4444', label: 'OLT — Offline' },
               ].map(l => (
                 <div key={l.label} className="flex items-center gap-1.5 text-[9px] text-slate-400/80">
-                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: l.color, opacity: 0.8 }} />
+                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: l.col, opacity: 0.8 }} />
+                  {l.label}
+                </div>
+              ))}
+              <div className="mt-1 pt-1 border-t border-slate-700/50 text-[9px] text-slate-500">PON Ports</div>
+              {[
+                { col: '#22c55e', label: 'Active' },
+                { col: '#f59e0b', label: 'Degraded' },
+                { col: '#ef4444', label: 'Problem' },
+                { col: '#334155', label: 'Idle' },
+              ].map(l => (
+                <div key={l.label} className="flex items-center gap-1.5 text-[9px] text-slate-400/80">
+                  <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: l.col, opacity: 0.8 }} />
                   {l.label}
                 </div>
               ))}
             </div>
 
-            <svg className="w-full h-full relative z-10" viewBox="0 0 700 520" preserveAspectRatio="xMidYMid meet">
-              {/* Data Center */}
-              <line x1="350" y1="38" x2="350" y2="90" stroke="#06b6d4" strokeWidth="3" strokeDasharray="6,3" opacity="0.9">
-                <animate attributeName="stroke-dashoffset" values="0;-18" dur="1s" repeatCount="indefinite" />
+            <svg
+              style={{ minWidth: svgW, height: SVG_H }}
+              viewBox={`0 0 ${svgW} ${SVG_H}`}
+              preserveAspectRatio="xMidYMid meet"
+            >
+              {/* Animated uplink line */}
+              <line x1={coreX} y1={CORE_Y + 18} x2={coreX} y2={BACKBONE_Y} stroke="#06b6d4" strokeWidth="2" strokeDasharray="5,2" opacity="0.8">
+                <animate attributeName="stroke-dashoffset" values="0;-14" dur="1s" repeatCount="indefinite" />
               </line>
-              <text x="360" y="68" fill="#06b6d4" fontSize="8" fontFamily="monospace" opacity="0.7">Fiber Uplink</text>
-              <g transform="translate(350,30)">
-                <rect x="-55" y="-18" width="110" height="36" rx="8" fill="hsl(var(--card))" stroke="#06b6d4" strokeWidth="2.5" />
-                <text textAnchor="middle" y="4" fill="#06b6d4" fontSize="10" fontWeight="bold">DATA CENTER</text>
+
+              {/* Network Core node */}
+              <g transform={`translate(${coreX},${CORE_Y})`}>
+                <rect x="-55" y="-18" width="110" height="36" rx="8" fill="#0a1628" stroke="#06b6d4" strokeWidth="2.5" />
+                <text textAnchor="middle" y="5" fill="#06b6d4" fontSize="10" fontFamily="monospace" fontWeight="bold">
+                  NETWORK CORE
+                </text>
               </g>
 
-              {/* Backbone */}
-              <line x1="80" y1="118" x2="630" y2="118" stroke="#1e293b" strokeWidth="2" />
-              <text x="85" y="114" fill="#475569" fontSize="8" fontFamily="monospace">Backbone Ring</text>
+              {/* Backbone horizontal line */}
+              {olts.length > 0 && (
+                <>
+                  <line
+                    x1={startX}
+                    y1={BACKBONE_Y}
+                    x2={startX + (olts.length - 1) * OLT_SPACING}
+                    y2={BACKBONE_Y}
+                    stroke="#1e293b"
+                    strokeWidth="2"
+                  />
+                  <text x={startX - 4} y={BACKBONE_Y - 5} fill="#334155" fontSize="7" fontFamily="monospace" textAnchor="end">
+                    Backbone
+                  </text>
+                </>
+              )}
 
-              {/* Hub nodes */}
-              {[
-                { x: 150, label: 'North Hub' },
-                { x: 350, label: 'Central Exch.' },
-                { x: 550, label: 'South Hub' },
-              ].map(({ x, label }) => (
-                <g key={label} transform={`translate(${x},118)`}>
-                  <rect x="-45" y="-16" width="90" height="32" rx="6" fill="#0f172a" stroke="#06b6d4" strokeWidth="2" />
-                  <text textAnchor="middle" y="4" fill="#94a3b8" fontSize="8" fontWeight="bold">{label}</text>
-                  <circle cx="36" cy="-12" r="4" fill="#22c55e" />
-                </g>
-              ))}
+              {/* Empty state */}
+              {olts.length === 0 && (
+                <text x={coreX} y={SVG_H / 2 + 30} textAnchor="middle" fill="#475569" fontSize="12">
+                  No OLTs — add an OLT in OLT Management
+                </text>
+              )}
 
-              {/* Splitters */}
-              {SPLITTERS.map(({ x, label, ratio, ok, usedOut, totalOut }) => (
-                <g key={label} transform={`translate(${x},208)`}>
-                  <line x1="0" y1="-90" x2="0" y2="-22" stroke={ok ? '#1e293b' : '#7f1d1d'} strokeWidth="1.5" strokeDasharray={ok ? 'none' : '4,2'} />
-                  {/* Connection type label */}
-                  <text x="4" y="-58" fill="#475569" fontSize="7" fontFamily="monospace">{ok ? 'SM-OS2' : 'BREAK'}</text>
-                  <rect x="-30" y="-20" width="60" height="40" rx="4" fill={ok ? '#0f172a' : '#1c0a0a'} stroke={ok ? '#334155' : '#ef4444'} strokeWidth="1.5" />
-                  <text textAnchor="middle" y="-4" fill={ok ? '#64748b' : '#f87171'} fontSize="7" fontWeight="bold">{label}</text>
-                  <text textAnchor="middle" y="7" fill={ok ? '#06b6d4' : '#fca5a5'} fontSize="7">{ratio}</text>
-                  {/* Usage indicator */}
-                  <text textAnchor="middle" y="16" fill={ok ? '#94a3b8' : '#f87171'} fontSize="6">{usedOut}/{totalOut}</text>
-                </g>
-              ))}
+              {/* OLT nodes */}
+              {olts.map((olt, i) => {
+                const x          = startX + i * OLT_SPACING;
+                const portCount  = olt.ponPortCount > 0 ? olt.ponPortCount : 8;
+                const statuses   = oltPonStatuses[olt.id] ?? [];
+                const statusCol  = olt.status === 'Online' ? '#22c55e' : olt.status === 'Offline' ? '#ef4444' : '#f59e0b';
+                const boxFill    = olt.status === 'Online' ? '#061220' : olt.status === 'Offline' ? '#1c0707' : '#1c1200';
 
-              {/* Joint Boxes */}
-              {JOINT_BOXES.map(({ x, label, totalCores, usedCores, ok }) => {
-                const freeCores = totalCores - usedCores;
-                const usedPct = Math.round((usedCores / totalCores) * 100);
+                const cols       = Math.min(portCount, 8);
+                const ponGridW   = cols * 9 - 2;
+                const ponLeft    = x - ponGridW / 2;
+
+                const shortName  = olt.name.length > 11 ? olt.name.slice(0, 10) + '…' : olt.name;
+
                 return (
-                  <g key={label} transform={`translate(${x},328)`}>
-                    <line x1="0" y1="-100" x2="0" y2="-22" stroke={ok ? '#1e293b' : '#7f1d1d'} strokeWidth="1.5" strokeDasharray={ok ? 'none' : '4,2'} />
-                    {/* Fiber break indicator */}
-                    {!ok && (
-                      <g transform="translate(5,-60)">
-                        <rect x="-8" y="-8" width="16" height="16" rx="2" fill="#450a0a" stroke="#ef4444" strokeWidth="1.5" />
-                        <text textAnchor="middle" y="4" fill="#ef4444" fontSize="8" fontWeight="bold">✕</text>
-                      </g>
-                    )}
-                    <polygon points="0,-20 28,0 0,20 -28,0" fill={ok ? '#0f172a' : '#1c0a0a'} stroke={ok ? '#475569' : '#ef4444'} strokeWidth="1.5" />
-                    <text textAnchor="middle" y="-4" fill={ok ? '#94a3b8' : '#f87171'} fontSize="7" fontWeight="bold">{label}</text>
-                    {/* Core usage */}
-                    <text textAnchor="middle" y="6" fill={ok ? '#06b6d4' : '#f87171'} fontSize="6">{usedCores}/{totalCores}c</text>
-                    {/* Free cores label */}
-                    <text x="32" y="-8" fill={freeCores > 0 ? '#22c55e' : '#ef4444'} fontSize="6">{freeCores} free</text>
-                    {/* Mini usage bar */}
-                    <rect x="-18" y="25" width="36" height="4" rx="2" fill="#1e293b" />
-                    <rect x="-18" y="25" width={Math.round(36 * usedPct / 100)} height="4" rx="2" fill={usedPct > 80 ? '#ef4444' : usedPct > 60 ? '#f59e0b' : '#06b6d4'} />
+                  <g key={olt.id}>
+                    {/* Backbone → OLT vertical line */}
+                    <line x1={x} y1={BACKBONE_Y} x2={x} y2={OLT_CY - 30} stroke="#334155" strokeWidth="1.5" />
+
+                    {/* OLT type label on line */}
+                    <text x={x + 3} y={OLT_CY - 18} fill="#334155" fontSize="6.5" fontFamily="monospace">{olt.type}</text>
+
+                    {/* OLT box */}
+                    <rect x={x - 42} y={OLT_CY - 29} width="84" height="54" rx="6" fill={boxFill} stroke={statusCol} strokeWidth="1.5" />
+
+                    {/* Status dot */}
+                    <circle cx={x + 34} cy={OLT_CY - 23} r="4" fill={statusCol} opacity="0.9" />
+
+                    {/* OLT name */}
+                    <text textAnchor="middle" x={x} y={OLT_CY - 13} fill="#94a3b8" fontSize="7.5" fontWeight="bold">{shortName}</text>
+                    {/* Status */}
+                    <text textAnchor="middle" x={x} y={OLT_CY - 2} fill={statusCol} fontSize="7">{olt.status}</text>
+                    {/* IP */}
+                    <text textAnchor="middle" x={x} y={OLT_CY + 9} fill="#475569" fontSize="6.5" fontFamily="monospace">{olt.ip}</text>
+                    {/* Port count */}
+                    <text textAnchor="middle" x={x} y={OLT_CY + 21} fill="#334155" fontSize="6">{portCount}P</text>
+
+                    {/* OLT → PON connector */}
+                    <line x1={x} y1={OLT_CY + 25} x2={x} y2={PON_START_Y - 2} stroke="#1e293b" strokeWidth="1" />
+
+                    {/* PON port squares */}
+                    {statuses.map((st, pi) => {
+                      const col = pi % cols;
+                      const row = Math.floor(pi / cols);
+                      return (
+                        <rect
+                          key={pi}
+                          x={ponLeft + col * 9}
+                          y={PON_START_Y + row * 9}
+                          width="7"
+                          height="7"
+                          rx="1"
+                          fill={PORT_FILL[st]}
+                          stroke={PORT_STROKE[st]}
+                          strokeWidth="0.8"
+                          opacity="0.95"
+                        />
+                      );
+                    })}
                   </g>
                 );
               })}
-
-              {/* OLT Nodes */}
-              {[
-                { x: 110, label: 'OLT-N01', type: 'GPON', ok: true },
-                { x: 210, label: 'OLT-N02', type: 'GPON', ok: true },
-                { x: 310, label: 'OLT-C01', type: 'EPON', ok: true },
-                { x: 410, label: 'OLT-W01', type: 'GPON', ok: true },
-                { x: 510, label: 'OLT-S01', type: 'GPON', ok: true },
-                { x: 610, label: 'OLT-E01', type: 'EPON', ok: true },
-              ].map(({ x, label, type, ok }) => (
-                <g key={label} transform={`translate(${x},430)`}>
-                  <line x1="0" y1="-78" x2="0" y2="-24" stroke={ok ? '#1e293b' : '#7f1d1d'} strokeWidth="1.5" />
-                  <text x="4" y="-52" fill="#334155" fontSize="7" fontFamily="monospace">{type}</text>
-                  <rect x="-30" y="-22" width="60" height="44" rx="5" fill={ok ? '#0f172a' : '#1c0a0a'} stroke={ok ? '#22c55e' : '#ef4444'} strokeWidth="1.5" />
-                  <circle cx="24" cy="-16" r="4" fill={ok ? '#22c55e' : '#ef4444'} />
-                  <text textAnchor="middle" y="-4" fill={ok ? '#64748b' : '#f87171'} fontSize="7" fontWeight="bold">{label}</text>
-                  <text textAnchor="middle" y="8" fill={ok ? '#06b6d4' : '#f87171'} fontSize="7">{type}</text>
-                  <text textAnchor="middle" y="18" fill="#475569" fontSize="6">OLT</text>
-                </g>
-              ))}
             </svg>
           </div>
         </div>
 
+        {/* ── Right panel ── */}
         <div className="space-y-4">
-          {/* Fiber core color legend */}
+          {/* Fiber Core Colors — ITU-T G.652 standard, not mock data */}
           <Card className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -181,119 +250,119 @@ export default function FiberMap() {
                   <div className={`h-3 w-3 rounded-full shrink-0 ${fc.color}`} />
                   <span className="text-xs flex-1">{fc.name}</span>
                   <span className="text-[10px] font-mono text-muted-foreground/60 w-12 text-right">Core {fc.core}</span>
-                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-primary/40" style={{ width: `${30 + fc.core * 5}%` }} />
-                  </div>
                 </div>
               ))}
             </CardContent>
           </Card>
 
-          {/* Infrastructure Status */}
+          {/* Live network summary */}
           <Card className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-semibold">Infrastructure Status</CardTitle>
+              <CardTitle className="text-sm font-semibold">Network Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               {[
-                { icon: GitBranch, label: 'Routes',      value: '8',  sub: '6 active' },
-                { icon: Square,    label: 'Splitters',   value: '6',  sub: `${SPLITTERS.reduce((a,s) => a + s.usedOut, 0)} ports used` },
-                { icon: Triangle,  label: 'Joint Boxes', value: '4',  sub: `${JOINT_BOXES.reduce((a,j) => a + j.usedCores, 0)} cores used` },
-                { icon: Zap,       label: 'Fiber Breaks',value: '1',  sub: 'JB-03 affected', red: true },
-              ].map(({ icon: Icon, label, value, sub, red }) => (
-                <div key={label} className={`flex items-center justify-between text-sm py-1 border-b border-border/40 last:border-0 ${red ? 'text-red-400' : ''}`}>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Icon className={`h-3.5 w-3.5 ${red ? 'text-red-400' : ''}`} />
-                    <span className={red ? 'text-red-400' : ''}>{label}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold">{value}</span>
-                    <p className="text-[10px] text-muted-foreground leading-none mt-0.5">{sub}</p>
-                  </div>
+                { label: 'Total OLTs',     value: olts.length,   color: 'text-foreground'  },
+                { label: 'Online',         value: onlineOlts,    color: 'text-green-400'   },
+                { label: 'Degraded',       value: degradedOlts,  color: 'text-amber-400'   },
+                { label: 'Offline',        value: offlineOlts,   color: 'text-red-400'     },
+                { label: 'Total PON Ports',value: totalPons,     color: 'text-cyan-400'    },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="flex items-center justify-between text-sm py-1 border-b border-border/40 last:border-0">
+                  <span className="text-muted-foreground text-xs">{label}</span>
+                  <span className={`font-bold font-mono ${color}`}>{value}</span>
                 </div>
               ))}
-              {/* Core summary */}
-              <div className="pt-1 space-y-1.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Total Core Usage</p>
-                {(() => {
-                  const total = JOINT_BOXES.reduce((a, j) => a + j.totalCores, 0);
-                  const used = JOINT_BOXES.reduce((a, j) => a + j.usedCores, 0);
-                  const free = total - used;
-                  const pct = Math.round((used / total) * 100);
-                  return (
-                    <>
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">{used} used / {free} free</span>
-                        <span className="font-mono font-bold">{pct}%</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full transition-all ${pct > 80 ? 'bg-red-500' : pct > 60 ? 'bg-amber-500' : 'bg-cyan-500'}`} style={{ width: `${pct}%` }} />
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Area grouping cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {AREAS.map(area => {
-          const freeCores = area.totalCores - area.usedCores;
-          const corePct = Math.round((area.usedCores / area.totalCores) * 100);
-          const isExpanded = expandedArea === area.name;
-          return (
-            <div key={area.name} className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-lg overflow-hidden">
-              <button
-                className="w-full p-4 text-left"
-                onClick={() => setExpandedArea(isExpanded ? null : area.name)}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <h3 className="font-semibold text-sm">{area.name}</h3>
-                  <div className="flex items-center gap-1">
-                    <span className={`text-[10px] px-2 py-0.5 rounded border font-bold uppercase tracking-wider ${area.status === 'Operational' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>{area.status}</span>
-                    <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                  <div><p className="text-muted-foreground">OLTs</p><p className="font-bold">{area.olts}</p></div>
-                  <div><p className="text-muted-foreground">Splitters</p><p className="font-bold">{area.splitters}</p></div>
-                  <div><p className="text-muted-foreground">Joint Boxes</p><p className="font-bold">{area.joints}</p></div>
-                  <div><p className="text-muted-foreground">Fiber Length</p><p className="font-bold">{area.km} km</p></div>
-                </div>
-                {/* Core usage mini-bar */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-muted-foreground">Cores: {area.usedCores}/{area.totalCores}</span>
-                    <span className={`font-mono font-bold ${corePct > 80 ? 'text-red-400' : corePct > 60 ? 'text-amber-400' : 'text-cyan-400'}`}>{freeCores} free</span>
-                  </div>
-                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${corePct > 80 ? 'bg-red-500' : corePct > 60 ? 'bg-amber-500' : 'bg-cyan-500'}`} style={{ width: `${corePct}%` }} />
-                  </div>
-                </div>
-              </button>
-              {isExpanded && (
-                <div className="px-4 pb-4 pt-0 border-t border-border/40 space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground pt-3">Core Detail</p>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-lg p-2 text-center">
-                      <p className="text-2xl font-bold text-cyan-400">{area.usedCores}</p>
-                      <p className="text-muted-foreground text-[10px]">Used cores</p>
+      {/* ── OLT detail cards (replaces fake Zone cards) ── */}
+      {olts.length > 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {olts.map(olt => {
+            const portCount    = olt.ponPortCount > 0 ? olt.ponPortCount : 8;
+            const statuses     = oltPonStatuses[olt.id] ?? [];
+            const onlineCount  = onus.filter(o => o.oltId === olt.id && o.status === 'Online').length;
+            const totalOnus    = onus.filter(o => o.oltId === olt.id).length;
+            const activePorts  = statuses.filter(s => s === 'online').length;
+
+            return (
+              <Link key={olt.id} href={`/olts/${olt.id}`}>
+                <div className="rounded-xl border border-border/60 bg-card/80 backdrop-blur-sm shadow-lg overflow-hidden cursor-pointer hover:border-primary/40 transition-colors">
+                  <div className="p-4">
+                    <div className="flex items-start justify-between mb-3">
+                      <h3 className="font-semibold text-sm truncate max-w-[140px]">{olt.name}</h3>
+                      <span className={`text-[10px] px-2 py-0.5 rounded border font-bold uppercase tracking-wider shrink-0 ml-1 ${
+                        olt.status === 'Online'
+                          ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                          : olt.status === 'Offline'
+                          ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                          : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                      }`}>{olt.status}</span>
                     </div>
-                    <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-2 text-center">
-                      <p className={`text-2xl font-bold ${freeCores > 4 ? 'text-green-400' : 'text-amber-400'}`}>{freeCores}</p>
-                      <p className="text-muted-foreground text-[10px]">Free cores</p>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-3">
+                      <div>
+                        <p className="text-muted-foreground">IP</p>
+                        <p className="font-mono font-bold text-[11px]">{olt.ip}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Type</p>
+                        <p className="font-bold">{olt.type}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">PON Ports</p>
+                        <p className="font-bold">{portCount}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">ONUs</p>
+                        <p className="font-bold">
+                          {onlineCount}
+                          <span className="text-muted-foreground font-normal">/{totalOnus}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* PON port mini grid */}
+                    <div>
+                      <p className="text-[9px] text-muted-foreground mb-1.5 uppercase tracking-wider">PON Ports</p>
+                      <div className="flex flex-wrap gap-0.5">
+                        {statuses.map((st, pi) => (
+                          <div
+                            key={pi}
+                            title={`PON-${pi + 1}: ${st}`}
+                            className={`w-4 h-4 rounded-sm border text-[7px] flex items-center justify-center font-mono font-bold ${
+                              st === 'online'
+                                ? 'bg-green-500/20 border-green-500/40 text-green-400'
+                                : st === 'degraded'
+                                ? 'bg-amber-500/20 border-amber-500/40 text-amber-400'
+                                : st === 'offline'
+                                ? 'bg-red-500/20 border-red-500/40 text-red-400'
+                                : 'bg-slate-500/10 border-slate-500/20 text-slate-500'
+                            }`}
+                          >
+                            {pi + 1}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[9px] text-muted-foreground mt-1.5">
+                        {activePorts} active / {portCount} total
+                      </p>
                     </div>
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Splitter outputs: {area.splitters * 8} max capacity</p>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+              </Link>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-16 rounded-xl border border-border/60 bg-card/40">
+          <p className="text-sm text-muted-foreground">No OLTs configured.</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">Add an OLT in OLT Management — it will appear here automatically.</p>
+        </div>
+      )}
     </div>
   );
 }
