@@ -317,6 +317,62 @@ oltRouter.post("/test-onu-list", async (req: Request, res: Response) => {
   });
 });
 
+// POST /api/olts/diag-optical-index — TEMPORARY: probe 4 index variants for optical OIDs
+//
+// Tests .{bigN}.0.1 / .{bigN}.1 / .{bigN}.0 / .{bigN} for RX/TX/Temp columns
+// against a live OLT and returns raw varbind type+value for each.
+// Remove once the correct index suffix is confirmed.
+oltRouter.post("/diag-optical-index", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+  const ip        = typeof body["ip"]        === "string" ? body["ip"].trim()        : "";
+  const community = typeof body["community"] === "string" ? body["community"].trim() : "";
+  const bigN      = typeof body["bigN"]      === "number" ? body["bigN"]             : 0;
+  const port      = body["port"] !== undefined ? Number(body["port"]) : 161;
+
+  if (!ip || !community || !bigN) {
+    res.status(400).json({ error: "Required: ip, community, bigN" });
+    return;
+  }
+
+  const OPT = "1.3.6.1.4.1.17409.2.3.4.2.1";
+  const cols = { rx: 4, tx: 5, temp: 8 } as const;
+  const suffixes: Record<string, string> = {
+    "dot0dot1": `.${bigN}.0.1`,
+    "dot1":     `.${bigN}.1`,
+    "dot0":     `.${bigN}.0`,
+    "plain":    `.${bigN}`,
+  };
+
+  // Build all 12 OIDs (3 cols × 4 suffixes) for one GET
+  const oids: string[] = [];
+  for (const [, col] of Object.entries(cols)) {
+    for (const [, sfx] of Object.entries(suffixes)) {
+      oids.push(`${OPT}.${col}${sfx}`);
+    }
+  }
+
+  const client = new RealSnmpClient({ host: ip, community, port, timeoutMs: 3_000, retries: 0 });
+  // net-snmp error VarbindTypes: noSuchObject=128, noSuchInstance=129, endOfMibView=130
+  const isSnmpError = (type: number) => type === 128 || type === 129 || type === 130;
+
+  type RawVb = { oid: string; type: number; value: unknown };
+  let vbs: RawVb[];
+  try {
+    vbs = await (client as unknown as { snmpGet(o: string[]): Promise<RawVb[]> }).snmpGet(oids);
+  } catch (e) { res.status(502).json({ error: String(e) }); return; }
+
+  const out: Record<string, { type: number; value: unknown; isError: boolean }> = {};
+  for (const vb of vbs) {
+    out[vb.oid] = {
+      type:    vb.type,
+      value:   typeof vb.value === "bigint" ? Number(vb.value) : vb.value,
+      isError: isSnmpError(vb.type),
+    };
+  }
+
+  res.json({ bigN, oids: out });
+});
+
 // POST /api/olts/test-onu-details — manual read-only ONU detail read
 //
 // Reads detailed attributes for ONE ONU using vendor-specific SNMP MIBs.

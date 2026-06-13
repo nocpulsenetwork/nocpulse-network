@@ -1692,6 +1692,31 @@ export class RealSnmpClient {
       targetBigNs.push(bigN);
     }
 
+    // ── Sniff: auto-detect optical table index suffix ────────────────────────
+    // MIB specifies 3-part INDEX {EponDeviceIndex, CardIndex, PortIndex}, but
+    // firmware implementations vary in what sub-index they actually respond to.
+    // Test 4 candidates on the first ONU's RX OID (one extra GET, 4 OIDs).
+    // The first variant that returns a non-error varbind is used for all ONUs.
+    const OPT_SUFFIXES = [".0.1", ".1", ".0", ""] as const;
+    type OptSuffix     = typeof OPT_SUFFIXES[number];
+    let  optSuffix: OptSuffix = ".0.1";   // MIB-spec default — override if sniff differs
+
+    const sniffBigN = targetBigNs[0];
+    if (sniffBigN !== undefined) {
+      const sniffPs  = (sniffBigN >>> 8) & 0xFF;
+      const sniffOs  = sniffBigN & 0xFF;
+      const sniffE   = (1 * 0x1000000) + (sniffPs << 8) + sniffOs;
+      const sniffOids = OPT_SUFFIXES.map((sfx) => `${OPT_BASE}.4.${sniffE}${sfx}`);
+      try {
+        const sniffVbs = await this.snmpGet(sniffOids);
+        for (const vb of sniffVbs) {
+          if (snmp.isVarbindError(vb)) continue;
+          const idx = sniffOids.indexOf(vb.oid);
+          if (idx >= 0) { optSuffix = OPT_SUFFIXES[idx]!; break; }
+        }
+      } catch { /* keep default */ }
+    }
+
     // Build OID→{bigN, field} lookup for all target ONUs.
     type OptField = "rx" | "tx" | "temp" | "dist" | "dur";
     const oidMeta = new Map<string, { bigN: number; field: OptField }>();
@@ -1702,11 +1727,11 @@ export class RealSnmpClient {
       // 4-byte EponDeviceIndex: byte[0]=OLT(1), byte[1]=card(0), byte[2]=slot, byte[3]=onu
       const e = (1 * 0x1000000) + (portSlot << 8) + onuSlot;   // avoids JS sign issues
 
-      oidMeta.set(`${OPT_BASE}.4.${e}.0.1`,  { bigN, field: "rx"   });
-      oidMeta.set(`${OPT_BASE}.5.${e}.0.1`,  { bigN, field: "tx"   });
-      oidMeta.set(`${OPT_BASE}.8.${e}.0.1`,  { bigN, field: "temp" });
-      oidMeta.set(`${INFO_BASE}.15.${e}`,     { bigN, field: "dist" });
-      oidMeta.set(`${INFO_BASE}.18.${e}`,     { bigN, field: "dur"  });
+      oidMeta.set(`${OPT_BASE}.4.${e}${optSuffix}`,  { bigN, field: "rx"   });
+      oidMeta.set(`${OPT_BASE}.5.${e}${optSuffix}`,  { bigN, field: "tx"   });
+      oidMeta.set(`${OPT_BASE}.8.${e}${optSuffix}`,  { bigN, field: "temp" });
+      oidMeta.set(`${INFO_BASE}.15.${e}`,             { bigN, field: "dist" });
+      oidMeta.set(`${INFO_BASE}.18.${e}`,             { bigN, field: "dur"  });
     }
 
     // Split into batches of 40 OIDs (= 8 ONUs × 5 OIDs) and issue in parallel.
