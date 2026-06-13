@@ -6,9 +6,10 @@ import { formatDistanceToNow } from 'date-fns';
 interface AlarmRowProps {
   alarm: Alarm;
   onAcknowledge?: (id: string) => void;
+  onClick?: () => void;
 }
 
-export function AlarmRow({ alarm, onAcknowledge }: AlarmRowProps) {
+export function AlarmRow({ alarm, onAcknowledge, onClick }: AlarmRowProps) {
   const getSeverityBorder = (severity: string) => {
     switch (severity) {
       case 'Critical': return 'border-l-red-500';
@@ -20,7 +21,10 @@ export function AlarmRow({ alarm, onAcknowledge }: AlarmRowProps) {
   };
 
   return (
-    <div className={`flex items-start justify-between p-4 border-b last:border-0 hover:bg-muted/50 transition-colors border-l-2 ${getSeverityBorder(alarm.severity)} ${!alarm.acknowledged ? 'bg-muted/20' : 'opacity-70'}`}>
+    <div
+      className={`flex items-start justify-between p-4 border-b last:border-0 hover:bg-muted/50 transition-colors border-l-2 ${getSeverityBorder(alarm.severity)} ${!alarm.acknowledged ? 'bg-muted/20' : 'opacity-70'} ${onClick ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+    >
       <div className="flex items-start gap-4">
         <StatusBadge severity={alarm.severity} className="mt-0.5" />
         <div className="space-y-1">
@@ -38,8 +42,8 @@ export function AlarmRow({ alarm, onAcknowledge }: AlarmRowProps) {
         </div>
       </div>
       {onAcknowledge && !alarm.acknowledged && (
-        <button 
-          onClick={() => onAcknowledge(alarm.id)}
+        <button
+          onClick={(e) => { e.stopPropagation(); onAcknowledge(alarm.id); }}
           className="text-xs font-medium text-primary hover:text-primary/80 transition-colors px-3 py-1 rounded-md bg-primary/10 hover:bg-primary/20"
           data-testid={`btn-ack-${alarm.id}`}
         >

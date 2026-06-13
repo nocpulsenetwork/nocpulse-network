@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { AlarmRow } from '@/components/AlarmRow';
+import { getAlarmHref } from '@/lib/alarmNav';
 
 // ─── Extended managed OLT record (OltDevice + verification fields) ───────────
 const MANAGED_OLT_KEY = 'nocpulse-managed-olts';
@@ -1364,15 +1365,21 @@ export default function OltDetail() {
                   <p className="text-[10px] text-muted-foreground/60">This OLT is operating normally</p>
                 </div>
               ) : (
-                unackedAlarms.map(alarm => <AlarmRow key={alarm.id} alarm={alarm} />)
+                unackedAlarms.slice(0, 10).map(alarm => (
+                  <AlarmRow
+                    key={alarm.id}
+                    alarm={alarm}
+                    onClick={() => navigate(getAlarmHref(alarm))}
+                  />
+                ))
               )}
             </div>
 
-            {oltAlarms.length > 0 && (
+            {unackedAlarms.length > 10 && (
               <div className="px-3.5 py-2.5 border-t border-border/40 bg-muted/10">
                 <button onClick={() => navigate('/alarms')}
                   className="text-[11px] text-primary hover:underline underline-offset-2 font-medium flex items-center gap-1">
-                  View all alarms <ChevronRight className="h-3 w-3" />
+                  View all {unackedAlarms.length} alarms <ChevronRight className="h-3 w-3" />
                 </button>
               </div>
             )}
