@@ -29,6 +29,7 @@ import { onus, olts } from "@/data/mockData";
 import { useRole, ROLE_LABELS } from "@/contexts/RoleContext";
 import { useApiData } from "@/contexts/ApiDataContext";
 import { formatDistanceToNow } from "date-fns";
+import { getAlarmHref } from "@/lib/alarmNav";
 
 interface NavbarProps {
   onMenuClick?: () => void;
@@ -184,7 +185,7 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
     a.alarmStatus !== undefined ? a.alarmStatus === "active" : !a.acknowledged
   );
   const activeAlarmsCount = metrics.activeAlarms;
-  const topAlarms = activeAlarms.slice(0, 3);
+  const topAlarms = activeAlarms.slice(0, 10);
 
   const safeRelativeTime = (ts: string) => {
     try {
@@ -400,8 +401,9 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
             <div className="flex flex-col max-h-[300px] overflow-y-auto">
               {topAlarms.length > 0 ? (
                 topAlarms.map((alarm) => (
-                  <div
+                  <Link
                     key={alarm.id}
+                    href={getAlarmHref(alarm)}
                     className={`flex flex-col p-3 border-b border-border/50 hover:bg-muted/50 cursor-pointer ${getSeverityBorder(alarm.severity)}`}
                   >
                     <div className="flex items-center justify-between mb-1">
@@ -414,7 +416,7 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
                     <span className="text-xs text-muted-foreground truncate" title={alarm.description}>
                       {alarm.description}
                     </span>
-                  </div>
+                  </Link>
                 ))
               ) : (
                 <div className="p-4 text-center text-sm text-muted-foreground">

@@ -200,11 +200,12 @@ function AlarmCard({
   onView?: () => void;
 }) {
   const [, navigate] = useLocation();
-  const deviceHref = alarm.deviceId.startsWith('onu-')
-    ? `/onus/${alarm.deviceId}`
-    : alarm.deviceId.startsWith('olt-')
-    ? `/olts/${alarm.deviceId}`
-    : null;
+  const deviceHref =
+    alarm.onuId    ? `/onus/${alarm.onuId}` :
+    alarm.oltId    ? `/olts/${alarm.oltId}` :
+    alarm.deviceId.startsWith('onu-') ? `/onus/${alarm.deviceId}` :
+    alarm.deviceId.startsWith('olt-') ? `/olts/${alarm.deviceId}` :
+    null;
   const [expanded, setExpanded] = useState(false);
 
   const handleToggle = () => {
@@ -260,6 +261,11 @@ function AlarmCard({
                 <span className="font-semibold text-sm">{alarm.deviceName}</span>
                 {alarm.alarmTitle && (
                   <span className="text-xs text-muted-foreground font-medium">{alarm.alarmTitle}</span>
+                )}
+                {deviceHref && (
+                  <span className="text-[10px] font-semibold text-primary/70 tracking-wide">
+                    View device →
+                  </span>
                 )}
                 <SeverityBadge severity={alarm.severity} />
                 <VerifStatusBadge status={alarm.verificationStatus} secondsLeft={secondsLeft} />

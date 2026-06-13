@@ -86,6 +86,8 @@ interface ApiAlarm {
   severity: string;           // "critical" | "warning" | "info"
   status: string;             // "active" | "acknowledged" | "cleared"
   deviceId: string;
+  oltId: string | null;
+  onuId: string | null;
   deviceName: string;
   title: string;
   message: string;
@@ -223,6 +225,8 @@ function transformAlarm(a: ApiAlarm): Alarm {
     id: a.id,
     severity: capitalizeSeverity(a.severity),
     deviceId: a.deviceId,
+    oltId: a.oltId ?? null,
+    onuId: a.onuId ?? null,
     // deviceName shows the device; description shows the alarm detail
     deviceName: a.deviceName,
     timestamp: a.raisedAt,

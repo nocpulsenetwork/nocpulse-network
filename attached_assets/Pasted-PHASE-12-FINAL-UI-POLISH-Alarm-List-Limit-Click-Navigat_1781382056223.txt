@@ -1,0 +1,77 @@
+PHASE 12 FINAL UI POLISH – Alarm List Limit + Click Navigation
+
+Goal:
+Make alarm UI professional, compact, and clickable.
+
+Current Problems:
+- Active alarm list is too large.
+- Notification bell items are not clickable.
+- Alarm rows/cards do not navigate to related OLT/ONU.
+
+Requirements:
+
+1. Active Alarm Preview Limit
+- Dashboard / top active incident preview must show maximum 10 latest active alarms only.
+- If active alarms > 10, show:
+  “View more” or “View all alarms”
+- Clicking “View all alarms” opens /alarms page.
+- Alarm Center page can show full list with filters/pagination.
+
+2. Notification Bell Limit
+- Notification dropdown must show maximum 10 latest active alarms only.
+- Add bottom button:
+  “View all alarms →”
+- Clicking it opens Alarm Center.
+- Remove fake/demo notifications.
+
+3. Alarm Click Navigation
+- Every alarm item must be clickable.
+- If alarm sourceType = olt:
+  open related OLT Details page.
+- If alarm sourceType = onu:
+  open ONU Details page if available.
+- If ONU Details page is not available:
+  open ONU Management filtered by ONU ID/MAC/Serial/Description.
+
+4. Required Alarm Fields
+Each alarm must include:
+- sourceType: olt / onu
+- oltId
+- onuId if available
+- onuMac if available
+- onuSerial if available
+- onuDescription if available
+- targetUrl or routePath
+
+5. Safe Fallback
+- Missing ONU ID but MAC exists → filter by MAC.
+- Missing MAC but Serial exists → filter by serial.
+- Missing ONU target → open related OLT details.
+- Missing all target data → keep user on Alarm Center and show “Device reference not found”.
+
+6. UI Behavior
+- Add cursor pointer on clickable alarms.
+- Add small “View device” text/icon.
+- Keep existing design.
+- Do not redesign full app.
+- Do not break alarm filters/tabs.
+- Mobile responsive.
+
+STRICT RULES:
+- No new SNMP OIDs.
+- No discovery changes.
+- No RX/TX changes.
+- No OLT health changes.
+- No polling changes.
+- Read-only only.
+- Use existing real alarm engine only.
+- No mock/demo alarms.
+
+Acceptance Tests:
+✓ Dashboard/preview shows max 10 alarms.
+✓ Notification bell shows max 10 alarms.
+✓ View all alarms opens Alarm Center.
+✓ Clicking OLT alarm opens correct OLT Details.
+✓ Clicking ONU alarm opens ONU Details or filtered ONU Management.
+✓ Missing ONU ID fallback works by MAC/serial.
+✓ No fake notification remains.

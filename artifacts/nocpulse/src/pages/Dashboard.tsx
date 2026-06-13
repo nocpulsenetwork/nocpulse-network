@@ -13,6 +13,7 @@ import {
   ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell,
 } from 'recharts';
 import { Link, useLocation } from 'wouter';
+import { getAlarmHref } from '@/lib/alarmNav';
 import { formatDistanceToNow } from 'date-fns';
 
 /* ── Static mock data ────────────────────────────────────────────────── */
@@ -504,10 +505,14 @@ export default function Dashboard() {
     { name: 'Offline',  value: offlineOnus,  color: '#ef4444' },
   ];
 
-  /* Sort alarms newest first, show all unacknowledged + some acknowledged */
-  const recentAlarms = [...alarms]
+  /* Active alarms only, newest first, capped at 10 for dashboard preview */
+  const activeAlarmList = alarms.filter(a =>
+    a.alarmStatus !== undefined ? a.alarmStatus === "active" : !a.acknowledged
+  );
+  const recentAlarms = [...activeAlarmList]
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 10);
+  const hasMoreAlarms = activeAlarmList.length > 10;
 
   const oltBar = [...olts]
     .filter(o => o.activeOnus > 0)
@@ -774,11 +779,16 @@ export default function Dashboard() {
           </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-4 space-y-2">
+          {recentAlarms.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No active alarms — all systems operational
+            </div>
+          ) : null}
           {recentAlarms.map(alarm => {
             const sev     = SEV[alarm.severity];
-            const isOlt   = alarm.deviceId.startsWith('olt-');
-            const isOnu   = alarm.deviceId.startsWith('onu-');
-            const href    = isOlt ? `/olts/${alarm.deviceId}` : isOnu ? `/onus/${alarm.deviceId}` : '/alarms';
+            const isOlt   = alarm.oltId != null || alarm.deviceId.startsWith('olt-');
+            const isOnu   = alarm.onuId != null || alarm.deviceId.startsWith('onu-');
+            const href    = getAlarmHref(alarm);
             const SevIcon = alarm.severity === 'Critical' || alarm.severity === 'Major'
               ? AlertTriangle : alarm.severity === 'Minor' ? AlertCircle : InfoIcon;
             const deviceType    = isOlt ? 'OLT' : isOnu ? 'ONU' : 'SYS';
@@ -845,6 +855,14 @@ export default function Dashboard() {
               </Link>
             );
           })}
+          {hasMoreAlarms && (
+            <Link
+              href="/alarms"
+              className="block mt-2 text-center text-xs font-medium text-primary hover:underline py-1.5"
+            >
+              View all {activeAlarmList.length} active alarms →
+            </Link>
+          )}
         </CardContent>
       </Card>
     </div>

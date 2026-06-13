@@ -71,6 +71,8 @@ export interface Alarm {
   alarmStatus?: string;         // "active" | "acknowledged" | "cleared"
   alarmTitle?: string;          // e.g. "ONU Offline"
   alarmType?: string;           // e.g. "link-down"
+  oltId?: string | null;        // OLT ID — used for click navigation to OLT Details
+  onuId?: string | null;        // ONU composite ID — used for click navigation to ONU
   reopenCount?: number;
   clearedAt?: string | null;
   acknowledgedAt?: string | null;
