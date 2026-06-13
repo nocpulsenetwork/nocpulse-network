@@ -1498,11 +1498,15 @@ export class RealSnmpClient {
     // If a column returns 0 rows or values outside plausible range it is
     // silently skipped — corresponding ONU fields stay null (→ "N/A" in UI).
 
+    // DEBUG TARGET: PON-1 ONU-4 → portSlot=13 onuSlot=4 bigN=3332 suffix="13.4"
+    const DBG_BIG_N = 3332;
+
     const walkIntCol = async (colRoot: string): Promise<Map<number, number>> => {
       const prefix = colRoot + ".";
       const out    = new Map<number, number>();
       let cursor   = colRoot;
       let errors   = 0;
+      let firstSuffixLogged = false;
       while (true) {
         let batch: snmp.Varbind[];
         try {
@@ -1513,7 +1517,17 @@ export class RealSnmpClient {
           continue;
         }
         const inTree = batch.filter((vb) => vb.oid.startsWith(prefix));
-        if (inTree.length === 0) break;
+        if (inTree.length === 0) {
+          process.stdout.write(`[DBG-OPTICAL] ${colRoot} — GETBULK returned 0 in-tree rows (cursor=${cursor})\n`);
+          break;
+        }
+        // Log first suffix seen (shows the OID instance format in use)
+        if (!firstSuffixLogged && inTree.length > 0) {
+          firstSuffixLogged = true;
+          const firstSuffix = inTree[0]!.oid.slice(prefix.length);
+          const lastSuffix  = inTree[inTree.length - 1]!.oid.slice(prefix.length);
+          process.stdout.write(`[DBG-OPTICAL] ${colRoot} — first suffix="${firstSuffix}" last suffix="${lastSuffix}" vtype=${typeof inTree[0]!.value} rawVal=${JSON.stringify(inTree[0]!.value)}\n`);
+        }
         for (const vb of inTree) {
           const suffix = vb.oid.slice(prefix.length);
 
@@ -1548,6 +1562,9 @@ export class RealSnmpClient {
           // Sign-extend 32-bit: Gauge32/Counter32 encode negative dBm as unsigned.
           // e.g. raw 4294966072 (0xFFFFFB18) → signed -1224  (= -12.24 dBm × 100)
           if (val > 0x7FFFFFFF) val = val - 0x100000000;
+          if (bigN === DBG_BIG_N) {
+            process.stdout.write(`[DBG-OPTICAL] ${colRoot} — TARGET suffix="${suffix}" bigN=${bigN} rawVal(pre-sign)=${typeof vb.value==="number"?vb.value:typeof vb.value==="bigint"?Number(vb.value):"?"} signedVal=${val}\n`);
+          }
           out.set(bigN, val);
         }
         const lastOid = inTree[inTree.length - 1]!.oid;
@@ -1575,6 +1592,13 @@ export class RealSnmpClient {
       walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.10"),
       walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.11"),
     ]);
+    process.stdout.write(`[DBG-OPTICAL] Maps after walk — rxRaw.size=${rxRaw.size} txRaw.size=${txRaw.size} distRaw.size=${distRaw.size}\n`);
+    process.stdout.write(`[DBG-OPTICAL] TARGET bigN=${DBG_BIG_N} — rxRaw.get=${rxRaw.get(DBG_BIG_N)} txRaw.get=${txRaw.get(DBG_BIG_N)} distRaw.get=${distRaw.get(DBG_BIG_N)}\n`);
+    // Sample first 3 entries of each Map to reveal actual keys
+    const sample = (m: Map<number,number>) => JSON.stringify([...m.entries()].slice(0,3));
+    process.stdout.write(`[DBG-OPTICAL] rxRaw sample: ${sample(rxRaw)}\n`);
+    process.stdout.write(`[DBG-OPTICAL] txRaw sample: ${sample(txRaw)}\n`);
+    process.stdout.write(`[DBG-OPTICAL] distRaw sample: ${sample(distRaw)}\n`);
 
     // Validate: plausible optical power values in the column.
     // Require |val| > 10 to reject status-flag columns (raw 0, 1, 2, …).
@@ -1611,6 +1635,7 @@ export class RealSnmpClient {
     const rxDiv     = rxValid ? dBmDivFromNeg(rxRaw) : 10;
     // TX is positive, so inherit the scale detected from the RX column.
     const txDiv     = txValid ? rxDiv : 10;
+    process.stdout.write(`[DBG-OPTICAL] Validation — rxValid=${rxValid} txValid=${txValid} distValid=${distValid} rxDiv=${rxDiv} txDiv=${txDiv}\n`);
 
     // ── Phase 3: Probe integer cols 15–21 for temperature + register duration ─
     //
@@ -1659,6 +1684,17 @@ export class RealSnmpClient {
 
       const tempRaw  = tempByBigN.get(bigN) ?? null;
       const durRaw   = durByBigN.get(bigN)  ?? null;
+
+      if (bigN === DBG_BIG_N) {
+        const rxDbm  = rxPowRaw  !== null ? Math.round(rxPowRaw  / rxDiv * 10) / 10 : null;
+        const txDbm  = txPowRaw  !== null ? Math.round(txPowRaw  / txDiv * 10) / 10 : null;
+        process.stdout.write(
+          `[DBG-OPTICAL] PER-ONU bigN=${bigN} onuId=${portSlot}.${onuSlot} status=${status}\n` +
+          `  rxPowRaw=${rxPowRaw} rxDiv=${rxDiv} rxPowerDbm=${rxDbm}\n` +
+          `  txPowRaw=${txPowRaw} txDiv=${txDiv} txPowerDbm=${txDbm}\n` +
+          `  distMRaw=${distMRaw}\n`
+        );
+      }
 
       onus.push({
         // Use the explicit two-part SNMP index "portSlot.onuSlot" as the ONU ID.
