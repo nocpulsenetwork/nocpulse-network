@@ -502,10 +502,12 @@ export interface OltPortStatus {
  *   • ethernetPorts — IF-MIB GE/FE interfaces
  *   • sfpPorts      — IF-MIB SFP-labeled interfaces
  *
- * CDATA EasyPath proprietary fields (null when OID not implemented):
- *   • cpuPct        — 1.3.6.1.4.1.17409.1.1.1.5.0
- *   • memPct        — 1.3.6.1.4.1.17409.1.1.1.6.0
- *   • temperatureC  — 1.3.6.1.4.1.17409.1.1.1.7.0
+ * EasyPath V2 MIB proprietary fields (null when OID returns noSuchObject/noSuchInstance):
+ *   • cpuPct        — 1.3.6.1.4.1.34592.1.3.100.1.8.1.0  (CPU utilisation %)
+ *   • memPct        — derived: (memTotal − memFree) / memTotal × 100
+ *                     memTotal: 1.3.6.1.4.1.34592.1.3.100.1.8.2.0
+ *                     memFree:  1.3.6.1.4.1.34592.1.3.100.1.8.3.0
+ *   • temperatureC  — 1.3.6.1.4.1.34592.1.3.100.1.8.6.0
  *
  * Any field that cannot be read returns null — never a fake value.
  */
@@ -878,32 +880,48 @@ export class RealSnmpClient {
       uptimeSecs = timeTicksToSecs(indexVarbinds(vbs)[OID.sysUpTime]) ?? null;
     } catch { /* leave null */ }
 
-    // ── 2. CDATA EasyPath proprietary — CPU / Memory / Temperature ────────
-    // noSuchInstance or any error → indexVarbinds filters it out → intVal → undefined → null
+    // ── 2. EasyPath V2 MIB — CPU / Memory / Temperature ──────────────────
+    // noSuchObject or noSuchInstance → indexVarbinds drops the varbind → intVal → undefined → null
     let cpuPct:       number | null = null;
     let memPct:       number | null = null;
     let temperatureC: number | null = null;
     try {
-      const CPU_OID  = "1.3.6.1.4.1.17409.1.1.1.5.0";
-      const MEM_OID  = "1.3.6.1.4.1.17409.1.1.1.6.0";
-      const TEMP_OID = "1.3.6.1.4.1.17409.1.1.1.7.0";
-      const pv = indexVarbinds(await this.snmpGet([CPU_OID, MEM_OID, TEMP_OID]));
+      const CPU_OID       = "1.3.6.1.4.1.34592.1.3.100.1.8.1.0";
+      const MEM_TOTAL_OID = "1.3.6.1.4.1.34592.1.3.100.1.8.2.0";
+      const MEM_FREE_OID  = "1.3.6.1.4.1.34592.1.3.100.1.8.3.0";
+      const TEMP_OID      = "1.3.6.1.4.1.34592.1.3.100.1.8.6.0";
 
-      const rawCpu  = intVal(pv[CPU_OID]);
-      const rawMem  = intVal(pv[MEM_OID]);
-      const rawTemp = intVal(pv[TEMP_OID]);
+      const pv = indexVarbinds(
+        await this.snmpGet([CPU_OID, MEM_TOTAL_OID, MEM_FREE_OID, TEMP_OID])
+      );
 
-      if (rawCpu  !== undefined && rawCpu  >= 0   && rawCpu  <= 100) cpuPct = rawCpu;
-      if (rawMem  !== undefined && rawMem  >= 0   && rawMem  <= 100) memPct = rawMem;
+      const rawCpu      = intVal(pv[CPU_OID]);
+      const rawMemTotal = intVal(pv[MEM_TOTAL_OID]);
+      const rawMemFree  = intVal(pv[MEM_FREE_OID]);
+      const rawTemp     = intVal(pv[TEMP_OID]);
+
+      // CPU: expect a 0–100 percentage
+      if (rawCpu !== undefined && rawCpu >= 0 && rawCpu <= 100) cpuPct = rawCpu;
+
+      // Memory: derive used% from total and free (both must be present and total > 0)
+      if (
+        rawMemTotal !== undefined && rawMemFree !== undefined &&
+        rawMemTotal > 0 && rawMemFree >= 0 && rawMemFree <= rawMemTotal
+      ) {
+        memPct = Math.round(((rawMemTotal - rawMemFree) / rawMemTotal) * 100);
+      }
+
+      // Temperature: may be whole °C or 0.01 °C units
       if (rawTemp !== undefined) {
-        // Could be 0.01 °C units (e.g. 2968 = 29.68 °C) or whole °C
-        if (rawTemp >= -4000 && rawTemp <= 15000 && Math.abs(rawTemp) > 120) {
+        if (Math.abs(rawTemp) > 120) {
+          // 0.01 °C units (e.g. 2968 → 29.68 °C)
           temperatureC = parseFloat((rawTemp / 100).toFixed(2));
-        } else if (rawTemp >= -40 && rawTemp <= 120) {
+        } else {
+          // Whole °C
           temperatureC = rawTemp;
         }
       }
-    } catch { /* proprietary OIDs not available on this firmware */ }
+    } catch { /* OIDs not available on this firmware */ }
 
     // ── 3. Interface status via IF-MIB ────────────────────────────────────
     const uplinkPorts:   OltPortStatus[] = [];

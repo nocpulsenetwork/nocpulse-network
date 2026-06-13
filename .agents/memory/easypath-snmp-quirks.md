@@ -104,6 +104,20 @@ in case the OLT declares optical columns as Gauge32/Counter32 (unsigned).
 
 Phase 3 (temperature/duration, cols 15–21) — OIDs not yet confirmed. Disabled (null/N/A).
 
+## OLT health OIDs — EasyPath V2 MIB (enterprise 34592)
+
+Confirmed OIDs to use for `getOltHealth()`. All are scalar GETs with `.0` instance suffix:
+
+| Metric       | OID                                    | Notes                          |
+|--------------|----------------------------------------|--------------------------------|
+| CPU %        | `1.3.6.1.4.1.34592.1.3.100.1.8.1.0`  | Expect 0–100 integer           |
+| Mem total    | `1.3.6.1.4.1.34592.1.3.100.1.8.2.0`  | Raw integer (KB or bytes)      |
+| Mem free     | `1.3.6.1.4.1.34592.1.3.100.1.8.3.0`  | Same units as Mem total        |
+| Temperature  | `1.3.6.1.4.1.34592.1.3.100.1.8.6.0`  | Whole °C or 0.01 °C if >120   |
+
+memPct = round((memTotal − memFree) / memTotal × 100). Both OIDs must be present and total > 0.
+Previous OIDs (`17409.1.1.1.5/6/7`) were wrong firmware generation — do NOT use.
+
 ## Dead-end OIDs (do not retry)
 - `17409.2.2.11.2.1.1.3+.4` — only ~146 rows (MPCP subset), gives ~141 online (wrong)
 - `34592.4.1.3.1` (EPON ONU table) — not implemented on this device, 0 rows
