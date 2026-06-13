@@ -7,9 +7,10 @@ interface AlarmRowProps {
   alarm: Alarm;
   onAcknowledge?: (id: string) => void;
   onClick?: () => void;
+  compact?: boolean;
 }
 
-export function AlarmRow({ alarm, onAcknowledge, onClick }: AlarmRowProps) {
+export function AlarmRow({ alarm, onAcknowledge, onClick, compact }: AlarmRowProps) {
   const getSeverityBorder = (severity: string) => {
     switch (severity) {
       case 'Critical': return 'border-l-red-500';
@@ -19,6 +20,42 @@ export function AlarmRow({ alarm, onAcknowledge, onClick }: AlarmRowProps) {
       default: return 'border-l-transparent';
     }
   };
+
+  const getSeverityDot = (severity: string) => {
+    switch (severity) {
+      case 'Critical': return 'bg-red-500';
+      case 'Major': return 'bg-amber-500';
+      case 'Minor': return 'bg-blue-500';
+      case 'Info': return 'bg-slate-400';
+      default: return 'bg-muted';
+    }
+  };
+
+  if (compact) {
+    return (
+      <div
+        className={`flex items-center gap-2 px-2.5 py-2 border-b last:border-0 hover:bg-muted/50 transition-colors border-l-2 ${getSeverityBorder(alarm.severity)} ${!alarm.acknowledged ? 'bg-muted/20' : 'opacity-60'} ${onClick ? 'cursor-pointer' : ''}`}
+        onClick={onClick}
+      >
+        <span className={`shrink-0 h-1.5 w-1.5 rounded-full ${getSeverityDot(alarm.severity)}`} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[13px] font-medium leading-[1.2] truncate">{alarm.deviceName}</span>
+            <span className={`shrink-0 text-[10px] font-bold px-1 py-0.5 rounded leading-none ${
+              alarm.severity === 'Critical' ? 'bg-red-500/15 text-red-400' :
+              alarm.severity === 'Major'    ? 'bg-amber-500/15 text-amber-400' :
+              alarm.severity === 'Minor'    ? 'bg-blue-500/15 text-blue-400' :
+              'bg-muted/50 text-muted-foreground'
+            }`}>{alarm.severity}</span>
+          </div>
+          <p className="text-[12px] text-muted-foreground truncate leading-[1.2]">{alarm.description}</p>
+        </div>
+        <span className="shrink-0 text-[10px] text-muted-foreground/70 whitespace-nowrap">
+          {formatDistanceToNow(new Date(alarm.timestamp), { addSuffix: true })}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div

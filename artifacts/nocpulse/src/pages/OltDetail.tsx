@@ -1355,28 +1355,29 @@ export default function OltDetail() {
               </div>
             )}
 
-            <div className="flex flex-col divide-y divide-border/40">
+            <div className="flex flex-col divide-y divide-border/40 overflow-y-auto" style={{ maxHeight: '420px' }}>
               {unackedAlarms.length === 0 ? (
-                <div className="p-6 flex flex-col items-center gap-2 text-center">
-                  <div className="h-10 w-10 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center">
-                    <Shield className="h-5 w-5 text-green-400" />
+                <div className="p-5 flex flex-col items-center gap-2 text-center">
+                  <div className="h-9 w-9 rounded-full bg-green-500/10 border border-green-500/20 flex items-center justify-center">
+                    <Shield className="h-4 w-4 text-green-400" />
                   </div>
                   <p className="text-xs text-muted-foreground">No active alarms</p>
                   <p className="text-[10px] text-muted-foreground/60">This OLT is operating normally</p>
                 </div>
               ) : (
-                unackedAlarms.slice(0, 10).map(alarm => (
+                unackedAlarms.slice(0, 8).map(alarm => (
                   <AlarmRow
                     key={alarm.id}
                     alarm={alarm}
+                    compact
                     onClick={() => navigate(getAlarmHref(alarm))}
                   />
                 ))
               )}
             </div>
 
-            {unackedAlarms.length > 10 && (
-              <div className="px-3.5 py-2.5 border-t border-border/40 bg-muted/10">
+            {unackedAlarms.length > 8 && (
+              <div className="px-3.5 py-2 border-t border-border/40 bg-muted/10">
                 <button onClick={() => navigate('/alarms')}
                   className="text-[11px] text-primary hover:underline underline-offset-2 font-medium flex items-center gap-1">
                   View all {unackedAlarms.length} alarms <ChevronRight className="h-3 w-3" />
