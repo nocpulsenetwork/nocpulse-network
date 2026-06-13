@@ -153,11 +153,12 @@ export default function OnuManagement() {
   const initialStatus = searchParams.get("status");
   const initialOlt = searchParams.get("olt");
   const initialPon = searchParams.get("pon");
+  const initialSearch = searchParams.get("search");
 
   const normalise = (raw: string | null, fallback: string) =>
     raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : fallback;
 
-  const [searchTerm,      setSearchTerm]      = useState("");
+  const [searchTerm,      setSearchTerm]      = useState(initialSearch ?? "");
   const [statusFilter,    setStatusFilter]    = useState<string>(normalise(initialStatus, "All Status"));
   const [oltFilter,       setOltFilter]       = useState<string>(initialOlt ?? "All OLTs");
   const [ponFilter,       setPonFilter]       = useState<string>(initialPon ?? "All PONs");

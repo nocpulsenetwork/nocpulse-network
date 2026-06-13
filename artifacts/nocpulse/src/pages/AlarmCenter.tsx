@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'wouter';
+import { getAlarmHref, alarmHasDevice } from '@/lib/alarmNav';
 import { type Alarm, NOC_STAFF, type NocStaff } from '@/data/mockData';
 import { useApiData } from '@/contexts/ApiDataContext';
 import { fetchAlarms, fetchAlarmHistory, acknowledgeAlarm } from '@/lib/api';
@@ -200,12 +201,8 @@ function AlarmCard({
   onView?: () => void;
 }) {
   const [, navigate] = useLocation();
-  const deviceHref =
-    alarm.onuId    ? `/onus/${alarm.onuId}` :
-    alarm.oltId    ? `/olts/${alarm.oltId}` :
-    alarm.deviceId.startsWith('onu-') ? `/onus/${alarm.deviceId}` :
-    alarm.deviceId.startsWith('olt-') ? `/olts/${alarm.deviceId}` :
-    null;
+  const deviceHref = getAlarmHref(alarm);
+  const hasDevice  = alarmHasDevice(alarm);
   const [expanded, setExpanded] = useState(false);
 
   const handleToggle = () => {
@@ -248,8 +245,8 @@ function AlarmCard({
         alarm.verificationStatus === 'Resolved'
           ? 'border-green-500/20 border-l-green-500/50 bg-green-500/[0.03]'
           : `border-border/60 ${sty.border} ${sty.bg}`
-      } ${deviceHref ? 'cursor-pointer' : ''}`}
-      onClick={() => { if (deviceHref) navigate(deviceHref); }}
+      } cursor-pointer`}
+      onClick={() => navigate(deviceHref)}
     >
       <div className="p-4 space-y-3">
         {/* Top row */}
@@ -262,7 +259,7 @@ function AlarmCard({
                 {alarm.alarmTitle && (
                   <span className="text-xs text-muted-foreground font-medium">{alarm.alarmTitle}</span>
                 )}
-                {deviceHref && (
+                {hasDevice && (
                   <span className="text-[10px] font-semibold text-primary/70 tracking-wide">
                     View device →
                   </span>

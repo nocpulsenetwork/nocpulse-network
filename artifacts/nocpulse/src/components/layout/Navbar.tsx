@@ -401,22 +401,23 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
             <div className="flex flex-col max-h-[300px] overflow-y-auto">
               {topAlarms.length > 0 ? (
                 topAlarms.map((alarm) => (
-                  <Link
-                    key={alarm.id}
-                    href={getAlarmHref(alarm)}
-                    className={`flex flex-col p-3 border-b border-border/50 hover:bg-muted/50 cursor-pointer ${getSeverityBorder(alarm.severity)}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${getSeverityColor(alarm.severity)}`}>
-                        {alarm.severity}
+                  <DropdownMenuItem key={alarm.id} asChild className="p-0 rounded-none focus:bg-muted/50">
+                    <Link
+                      href={getAlarmHref(alarm)}
+                      className={`flex flex-col p-3 border-b border-border/50 hover:bg-muted/50 cursor-pointer w-full ${getSeverityBorder(alarm.severity)}`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${getSeverityColor(alarm.severity)}`}>
+                          {alarm.severity}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{safeRelativeTime(alarm.timestamp)}</span>
+                      </div>
+                      <span className="font-medium text-sm">{alarm.deviceName}</span>
+                      <span className="text-xs text-muted-foreground truncate" title={alarm.description}>
+                        {alarm.description}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">{safeRelativeTime(alarm.timestamp)}</span>
-                    </div>
-                    <span className="font-medium text-sm">{alarm.deviceName}</span>
-                    <span className="text-xs text-muted-foreground truncate" title={alarm.description}>
-                      {alarm.description}
-                    </span>
-                  </Link>
+                    </Link>
+                  </DropdownMenuItem>
                 ))
               ) : (
                 <div className="p-4 text-center text-sm text-muted-foreground">
@@ -426,12 +427,14 @@ export function Navbar({ onMenuClick, title = "NOCpulse" }: NavbarProps) {
             </div>
             {activeAlarmsCount > 5 && (
               <div className="p-2 border-t border-border/50">
-                <Link
-                  href="/alarms"
-                  className="block text-center text-xs font-medium text-primary hover:underline py-1"
-                >
-                  View all alarms ({activeAlarmsCount}) &rarr;
-                </Link>
+                <DropdownMenuItem asChild className="p-0">
+                  <Link
+                    href="/alarms"
+                    className="block text-center text-xs font-medium text-primary hover:underline py-1 w-full"
+                  >
+                    View all alarms ({activeAlarmsCount}) &rarr;
+                  </Link>
+                </DropdownMenuItem>
               </div>
             )}
           </DropdownMenuContent>

@@ -860,7 +860,7 @@ export default function Dashboard() {
               href="/alarms"
               className="block mt-2 text-center text-xs font-medium text-primary hover:underline py-1.5"
             >
-              View all {activeAlarmList.length} active alarms →
+              View more ({activeAlarmList.length} active alarms) →
             </Link>
           )}
         </CardContent>
