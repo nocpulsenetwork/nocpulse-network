@@ -1,8 +1,9 @@
 - [OLT test-connection API shape](olt-test-connection.md) — endpoint accepts `{ip, community, port}` (NOT snmpCommunity/snmpPort), returns `{data:{success,vendor,model,sysName,latencyMs,message}}`.
 - [ONU discovery architecture](onu-discovery-arch.md) — POST /discover-onus → in-memory Map cache → GET /:id/onus/real; frontend reads cache, never polls directly.
 - [Vendor adapter pattern](vendor-adapter-pattern.md) — VendorAdapter interface + C-DATA EPON/GPON split: NEVER assume all C-DATA are GPON; use detectCdataPonType() first.
-- [OltDetail real vs demo split](oltdetail-real-demo.md) — `isRealOlt = managed !== null`; display* vars override summary card counts; mock ONU mini-cards gated on `!isRealOlt`.
+- [OltDetail real vs demo split](oltdetail-real-demo.md) — `isRealOlt = managed !== null`; OLT alarms now filter by `a.deviceId === olt.id` for all OLTs (real + demo); no managed guard needed.
 - [net-snmp getBulk 2D array](netsnmp-getbulk-structure.md) — getBulk callback returns mixed flat/nested structure; must flatten before use.
 - [EasyPath SNMP quirks](easypath-snmp-quirks.md) — FD1208S-B0 V1.6.0: ONU discovery uses 34592 MAC table (NOT 17409 portIdx=1 which only has 31 ONUs); bigN byte[2]-13 = port; BATCH=20.
 - [ONU ID format and context refresh](onu-id-context-refresh.md) — EasyPath onuId is "idx1.idx2" (sanitise dots to dashes for IDs/URLs); ApiDataContext exposes `refreshRealOnus(oltId)` so OltDetail can merge fresh SNMP data after discovery.
 - [EasyPath identity columns](easypath-identity-cols.md) — Phase 3 probes COL2=name, COL5=MAC, COL6=type, COL9=offlineReason in `.17409.2.2.11.2.1.1`; results are best-effort (null if column absent); `bufToPrintableAscii` filters non-printable OCTET STRINGs.
+- [Unified alarm store — Phase 12](alarm-store-unified.md) — All alarm counts (bell, sidebar, dashboard, OLT detail, ONU mgmt) come from one store; offline ONU alarms are state-based false positives — REMOVE them; threshold alarms run on ONLINE ONUs only.

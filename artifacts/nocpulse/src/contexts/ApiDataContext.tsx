@@ -4,9 +4,9 @@
  * Rules:
  *  - Single fetch on mount via Promise.all; no intervals for OLTs/ONUs
  *  - Alarms refresh every 30 s so badges/counts stay in sync with AlarmCenter
- *  - Starts with mock data synchronously so pages never render empty
+ *  - Starts with empty alarms so badge always reflects real engine count
  *  - On API success: replaces data with live backend data
- *  - On API failure: keeps mock data, sets error for debugging
+ *  - On API failure: keeps OLT/ONU mock data; alarm count stays at real value
  *
  * Real OLT support:
  *  - Reads managed OLTs from localStorage (written by OltDetail when user adds a real OLT)
@@ -30,7 +30,6 @@ import { fetchOlts, fetchOnus, fetchAlarms } from "@/lib/api";
 import {
   olts as mockOlts,
   onus as mockOnus,
-  alarms as mockAlarms,
   type OltDevice,
   type OnuDevice,
   type Alarm,
@@ -247,7 +246,7 @@ function buildMetrics(
   };
 }
 
-const mockMetrics = buildMetrics(mockOlts, mockOnus, mockAlarms);
+const mockMetrics = buildMetrics(mockOlts, mockOnus, []);
 
 const ApiDataContext = createContext<ApiDataContextValue | null>(null);
 
@@ -255,7 +254,7 @@ export function ApiDataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ApiDataState>({
     olts: mockOlts,
     onus: mockOnus,
-    alarms: mockAlarms,
+    alarms: [],
     metrics: mockMetrics,
     loading: true,
     error: null,

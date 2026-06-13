@@ -259,9 +259,7 @@ export default function OltDetail() {
   const onlineOnus     = connectedOnus.filter(o => o.status === 'Online');
   const offlineOnus    = connectedOnus.filter(o => o.status === 'Offline');
   const degradedOnus   = connectedOnus.filter(o => o.status === 'Degraded');
-  // For real (managed) OLTs, we have no real alarm tracking — show 0 to avoid
-  // false matches from mock/demo alarms belonging to other OLTs.
-  const oltAlarms      = managed !== null ? [] : alarms.filter(a => a.deviceId === olt.id || a.deviceName === olt.name || a.deviceName.includes(olt.name));
+  const oltAlarms      = alarms.filter(a => a.deviceId === olt.id);
   const unackedAlarms  = oltAlarms.filter(a => !a.acknowledged);
   const criticalAlarms = unackedAlarms.filter(a => a.severity === 'Critical');
   const majorAlarms    = unackedAlarms.filter(a => a.severity === 'Major');

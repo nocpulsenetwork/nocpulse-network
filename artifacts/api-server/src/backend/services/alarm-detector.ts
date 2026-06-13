@@ -341,25 +341,12 @@ export function detectOnuGroupAlarms(
   const out: DetectedAlarm[] = [];
   const ts = discovery.discoveredAt;
 
-  // ── Grouped offline alarm (ONE per OLT, not per ONU) ──────────────────
-  if (discovery.offlineOnus > 0) {
-    const count = discovery.offlineOnus;
-    out.push({
-      id: `olt-${oltId}-onus-offline`,
-      oltId,
-      onuId: null,
-      deviceName: oltLabel,
-      type: "link-down" as AlarmType,
-      severity: "critical" as const,
-      title: `${count} ONU${count > 1 ? "s" : ""} Offline`,
-      message: `${oltLabel}: ${count} ONU${count > 1 ? "s" : ""} offline out of ${discovery.totalOnus} total (${discovery.onlineOnus} online).`,
-      createdAt: ts,
-      source: "read-only",
-    });
-  }
-
-  // ── Individual threshold alarms (RX power, temperature) ───────────────
-  for (const onu of discovery.onus) {
+  // ── Individual threshold alarms — ONLINE ONUs only ────────────────────
+  // Offline ONU state at discovery time does NOT generate alarms (those ONUs
+  // were already offline when the snapshot was taken — not a live transition).
+  // Threshold alarms (RX power, temperature) for offline ONUs are also
+  // suppressed: their readings are stale and would produce false positives.
+  for (const onu of discovery.onus.filter(o => o.status === "online")) {
     const label = onu.name ?? onu.serial ?? `ONU ${onu.ponPort}/${onu.onuId}`;
     const onuFullId = `${oltId}-${onu.ponPort}-${onu.onuId}`;
     const base = {

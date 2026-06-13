@@ -29,6 +29,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Bell,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link, useLocation } from "wouter";
@@ -145,7 +146,7 @@ type ConfirmAction = { type: "reboot" | "disable" | "enable"; onuId: string } | 
 
 export default function OnuManagement() {
   const { can } = usePermissions();
-  const { onus, olts } = useApiData();
+  const { onus, olts, alarms } = useApiData();
   const [, setLocation] = useLocation();
 
   const searchParams = new URLSearchParams(window.location.search);
@@ -282,6 +283,11 @@ export default function OnuManagement() {
     return pages;
   };
 
+  const onuAlarmCount = alarms.filter(a =>
+    (a.alarmStatus !== undefined ? a.alarmStatus === "active" : !a.acknowledged) &&
+    (a.alarmType === "low-rx-power" || (a.alarmTitle ?? "").startsWith("ONU"))
+  ).length;
+
   const QUICK_CHIPS = [
     { label: "All",         status: "All Status", stability: "All",         color: "border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary",         activeColor: "bg-primary/10 border-primary/50 text-primary" },
     { label: "Online",      status: "Online",      stability: "All",         color: "border-border/60 text-muted-foreground hover:border-green-500/40 hover:text-green-400",    activeColor: "bg-green-500/10 border-green-500/50 text-green-400" },
@@ -340,6 +346,24 @@ export default function OnuManagement() {
       </div>
 
       <PermissionBanner context="ONU Management — device monitoring and configuration" />
+
+      {/* ONU alarm indicator — real alarm engine count */}
+      {onuAlarmCount > 0 ? (
+        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-amber-500/30 bg-amber-500/5">
+          <Bell className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+          <span className="text-xs font-medium text-amber-400">
+            {onuAlarmCount} active ONU alarm{onuAlarmCount !== 1 ? "s" : ""}
+          </span>
+          <Link href="/alarms" className="ml-auto text-[11px] font-medium text-primary hover:underline shrink-0">
+            View in Alarm Center →
+          </Link>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-green-500/20 bg-green-500/5">
+          <Bell className="h-3.5 w-3.5 text-green-400 shrink-0" />
+          <span className="text-xs font-medium text-green-400">No active ONU alarms</span>
+        </div>
+      )}
 
       {/* Active filter chips */}
       {hasActiveFilters && (
