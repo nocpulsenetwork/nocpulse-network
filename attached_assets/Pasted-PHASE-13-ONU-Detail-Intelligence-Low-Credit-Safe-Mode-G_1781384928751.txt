@@ -1,0 +1,102 @@
+PHASE 13 – ONU Detail Intelligence (Low Credit Safe Mode)
+
+GOAL:
+Enhance ONU Details page using ONLY existing real monitoring data already collected by the system.
+
+IMPORTANT:
+This is a SMALL SAFE IMPLEMENTATION.
+DO NOT redesign pages.
+DO NOT rewrite backend.
+DO NOT modify working modules.
+
+STRICT RULES:
+
+* Do NOT add new SNMP OIDs.
+* Do NOT modify ONU discovery.
+* Do NOT modify RX/TX collection logic.
+* Do NOT modify OLT health collection.
+* Do NOT change polling intervals.
+* Read-only only.
+* No fake/generated values.
+* Missing data must show "N/A" or "Unknown".
+* Reuse existing APIs, cache, alarms, and snapshots whenever possible.
+
+ONLY ADD THESE 5 SMALL CARDS TO ONU DETAILS PAGE:
+
+1. Current Optical Reading
+   Use existing data only:
+
+* RX Power
+* TX Power
+* Temperature
+* Distance
+* Last Updated
+
+If unavailable → show N/A.
+
+2. Last Disconnect
+   Use existing offline/disconnect information:
+
+* Last Disconnect Time
+* Disconnect Reason
+* How long ago
+
+If unavailable → show N/A.
+
+3. Network Quality
+   Show status only:
+
+* Good
+* Warning
+* Critical
+* Unknown
+
+Rules:
+
+* Critical = ONU Offline OR Critical Alarm exists.
+* Warning = Warning Alarm exists.
+* Good = Online and no active alarms.
+* Unknown = insufficient data.
+
+DO NOT create scores (e.g., 95/100).
+
+4. Activity Timeline (Maximum 5 Events)
+   Reuse existing alarms/status changes only:
+
+* Online
+* Offline
+* Alarm Created
+* Alarm Cleared
+
+Show latest 5 events only.
+
+If no events → "No recent activity".
+
+5. Compact UI
+
+* Match existing card style.
+* Keep layout consistent.
+* No large panels.
+* Mobile responsive.
+* Dark/light mode compatible.
+
+BACKEND:
+
+* Reuse existing /api/onus/:id/details endpoint if possible.
+* Extend existing response only if absolutely necessary.
+* Avoid creating new services.
+
+ACCEPTANCE:
+✓ No new SNMP OIDs added.
+✓ Existing discovery unaffected.
+✓ Existing alarms unaffected.
+✓ Existing dashboard unaffected.
+✓ ONU Details page enhanced using existing data only.
+✓ Missing data shows N/A.
+✓ No fake information displayed.
+
+IMPORTANT:
+Implement using MINIMAL CHANGES ONLY.
+Avoid refactoring.
+Avoid rewriting working code.
+Preserve current stability.

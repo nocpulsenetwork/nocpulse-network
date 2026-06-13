@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { useParams, useLocation, Link } from "wouter";
 import { useApiData } from "@/contexts/ApiDataContext";
 import { StatusBadge } from "@/components/StatusBadge";
@@ -83,7 +84,7 @@ function generateChartData(seed: number, dlBase: number, ulBase: number) {
 }
 
 export default function OnuDetail() {
-  const { onus, olts, loading } = useApiData();
+  const { onus, olts, alarms, loading } = useApiData();
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const [customDescription, setCustomDescription] = useState("");
@@ -247,6 +248,55 @@ export default function OnuDetail() {
           : disconnectResolved
             ? "Signal recovered after reconnect. No action required."
             : "ONU offline. Investigate fiber path and customer premises.";
+
+  // ── Phase 13: per-ONU alarm intelligence ────────────────────────────────
+  const onuAlarms = alarms.filter(
+    (a) => a.deviceId === onu.id || a.onuId === onu.id
+  );
+  const activeOnuAlarms = onuAlarms.filter(
+    (a) => (a.alarmStatus !== undefined ? a.alarmStatus === "active" : !a.acknowledged)
+  );
+  const networkQuality: "Good" | "Warning" | "Critical" | "Unknown" =
+    onu.status === "Offline"
+      ? "Critical"
+      : activeOnuAlarms.some((a) => a.severity === "Critical")
+      ? "Critical"
+      : activeOnuAlarms.some((a) => a.severity === "Major")
+      ? "Warning"
+      : onu.status === "Online"
+      ? "Good"
+      : "Unknown";
+  const alarmTimelineEvents = [...onuAlarms]
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 5)
+    .map((a) => ({
+      key: a.id,
+      Icon:
+        a.alarmStatus === "cleared"
+          ? ShieldCheck
+          : a.severity === "Critical"
+          ? AlertTriangle
+          : Bell,
+      color:
+        a.alarmStatus === "cleared"
+          ? "text-green-400 bg-green-500/10 border-green-500/20"
+          : a.severity === "Critical"
+          ? "text-red-400 bg-red-500/10 border-red-500/20"
+          : a.severity === "Major"
+          ? "text-amber-400 bg-amber-500/10 border-amber-500/20"
+          : "text-blue-400 bg-blue-500/10 border-blue-500/20",
+      label:
+        a.alarmStatus === "cleared"
+          ? "Alarm cleared"
+          : a.severity === "Critical"
+          ? "Critical alarm"
+          : a.severity === "Major"
+          ? "Major alarm"
+          : "Alert",
+      detail: a.description,
+      time: formatDistanceToNow(new Date(a.timestamp), { addSuffix: true }),
+    }));
+  // ── end Phase 13 ─────────────────────────────────────────────────────────
 
   const aiSuggestions =
     onu.lastLogoutReason === "Power Loss"
@@ -822,10 +872,19 @@ export default function OnuDetail() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             {isRealOnu ? (
-              <div className="flex flex-col items-center justify-center h-28 gap-2 text-muted-foreground/50">
-                <Signal className="h-8 w-8 opacity-30" />
-                <span className="text-xs">Optical OIDs not yet polled</span>
-                <span className="text-[10px] text-muted-foreground/60">RX / TX values will appear after SNMP optical poll</span>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+                {([
+                  { label: "RX Power",    value: onu.signalLevel !== null ? `${onu.signalLevel} dBm` : "N/A" },
+                  { label: "TX Power",    value: onu.txPower     !== null ? `${onu.txPower} dBm`     : "N/A" },
+                  { label: "Temperature", value: onu.temperatureCelsius != null ? `${onu.temperatureCelsius} °C` : "N/A" },
+                  { label: "Distance",    value: onu.distance   ?? "N/A" },
+                  { label: "Last Sync",   value: onu.lastSync   ?? "N/A" },
+                ] as { label: string; value: string }[]).map(({ label, value }) => (
+                  <div key={label}>
+                    <div className="text-muted-foreground mb-0.5">{label}</div>
+                    <div className="font-medium text-foreground/90">{value}</div>
+                  </div>
+                ))}
               </div>
             ) : (
               <>
@@ -923,10 +982,37 @@ export default function OnuDetail() {
         </CardHeader>
         <CardContent className="px-4 pb-4">
           {isRealOnu ? (
-            <div className="flex flex-col items-center justify-center h-24 gap-2 text-muted-foreground/50">
-              <Gauge className="h-8 w-8 opacity-30" />
-              <span className="text-xs">Quality metrics not available for real ONUs yet</span>
-              <span className="text-[10px] text-muted-foreground/60">Requires SNMP ping, loss, and optical OID polling</span>
+            <div className="flex items-center gap-4 py-2">
+              <div className={`h-12 w-12 rounded-full flex items-center justify-center border shrink-0 ${
+                networkQuality === "Good"     ? "bg-green-500/10 border-green-500/20"  :
+                networkQuality === "Warning"  ? "bg-amber-500/10 border-amber-500/20" :
+                networkQuality === "Critical" ? "bg-red-500/10   border-red-500/20"   :
+                                                "bg-slate-500/10 border-slate-500/20"
+              }`}>
+                {networkQuality === "Good"     ? <CheckCircle2  className="h-6 w-6 text-green-400"          /> :
+                 networkQuality === "Warning"  ? <AlertTriangle className="h-6 w-6 text-amber-400"          /> :
+                 networkQuality === "Critical" ? <AlertTriangle className="h-6 w-6 text-red-400"            /> :
+                                                 <Gauge          className="h-6 w-6 text-muted-foreground"  />}
+              </div>
+              <div>
+                <div className={`text-xl font-bold leading-none ${
+                  networkQuality === "Good"     ? "text-green-500"         :
+                  networkQuality === "Warning"  ? "text-amber-500"         :
+                  networkQuality === "Critical" ? "text-red-500"           :
+                                                  "text-muted-foreground"
+                }`}>{networkQuality}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {networkQuality === "Good"
+                    ? "Online — no active alarms"
+                    : networkQuality === "Warning"
+                    ? `${activeOnuAlarms.length} active alarm${activeOnuAlarms.length !== 1 ? "s" : ""}`
+                    : networkQuality === "Critical"
+                    ? onu.status === "Offline"
+                      ? "ONU is offline"
+                      : `${activeOnuAlarms.filter((a) => a.severity === "Critical").length} critical alarm${activeOnuAlarms.filter((a) => a.severity === "Critical").length !== 1 ? "s" : ""}`
+                    : "Insufficient data to determine quality"}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="space-y-1">
@@ -1004,11 +1090,37 @@ export default function OnuDetail() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             {isRealOnu ? (
-              <div className="flex flex-col items-center justify-center h-28 gap-2 text-muted-foreground/50">
-                <Bell className="h-8 w-8 opacity-30" />
-                <span className="text-xs">No event history available</span>
-                <span className="text-[10px] text-muted-foreground/60">Activity log is not collected for real ONUs yet</span>
-              </div>
+              alarmTimelineEvents.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-20 gap-2 text-muted-foreground/50">
+                  <Bell className="h-6 w-6 opacity-30" />
+                  <span className="text-xs">No recent activity</span>
+                </div>
+              ) : (
+                <div className="space-y-0">
+                  {alarmTimelineEvents.map((entry, idx) => {
+                    const Icon = entry.Icon;
+                    return (
+                      <div key={entry.key} className="flex items-start gap-3">
+                        <div className="flex flex-col items-center shrink-0">
+                          <div className={`h-7 w-7 rounded-full border flex items-center justify-center ${entry.color}`}>
+                            <Icon className="h-3.5 w-3.5" />
+                          </div>
+                          {idx < alarmTimelineEvents.length - 1 && (
+                            <div className="w-px h-5 bg-border/50 my-0.5" />
+                          )}
+                        </div>
+                        <div className="pb-3 flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-medium">{entry.label}</span>
+                            <span className="text-[10px] text-muted-foreground shrink-0">{entry.time}</span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">{entry.detail}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
             ) : (
               <div className="space-y-0">
                 {timelineEvents.map((entry, idx) => {
@@ -1047,10 +1159,23 @@ export default function OnuDetail() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             {isRealOnu ? (
-              <div className="flex flex-col items-center justify-center h-28 gap-2 text-muted-foreground/50">
-                <WifiOff className="h-8 w-8 opacity-30" />
-                <span className="text-xs">Disconnect history not available</span>
-                <span className="text-[10px] text-muted-foreground/60">Event log not collected for real ONUs</span>
+              <div className="space-y-3">
+                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${disconnectResolved ? "bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/25" : "bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/25"}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${disconnectResolved ? "bg-green-500" : "bg-red-500"}`} />
+                  {disconnectResolved ? "Resolved" : "Active Fault"}
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  {([
+                    { label: "Last Disconnect", value: onu.lastLogoutTime !== "N/A" ? onu.lastLogoutTime : "N/A" },
+                    { label: "Reason",           value: onu.lastLogoutReason !== "N/A" ? onu.lastLogoutReason : "N/A" },
+                    { label: "How Long Ago",     value: onu.lastLogoutTime !== "N/A" && disconnectDuration ? disconnectDuration : "N/A" },
+                  ] as { label: string; value: string }[]).map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground shrink-0">{label}</span>
+                      <span className="font-medium text-right">{value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : onu.lastLogoutTime !== "N/A" ? (
               <div className="space-y-3">
