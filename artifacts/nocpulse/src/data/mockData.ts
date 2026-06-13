@@ -1,6 +1,8 @@
 export type Status = 'Online' | 'Offline' | 'Degraded';
 export type Severity = 'Critical' | 'Major' | 'Minor' | 'Info';
-export type SignalStability = 'Stable' | 'Weak Signal' | 'High Loss' | 'Unstable' | 'Offline';
+export type SignalStability =
+  | 'Too High' | 'Excellent' | 'Good' | 'Normal' | 'Abnormal' | 'Bad'
+  | 'Stable' | 'Weak Signal' | 'High Loss' | 'Unstable' | 'Offline';
 export type OnuType = 'GPON' | 'EPON' | 'XPON';
 export type OltMode = 'GPON' | 'EPON' | 'BOTH';
 

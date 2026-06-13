@@ -143,10 +143,13 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
     vlanId:            0,
     oltPort:           onu.ponPort,
     lastOfflineRxPower: null,
-    signalStability:   status === "Offline"                             ? "Offline"
-                         : onu.rxPowerDbm != null && onu.rxPowerDbm <= -29 ? "High Loss"
-                         : onu.rxPowerDbm != null && onu.rxPowerDbm <= -27 ? "Unstable"
-                         : onu.rxPowerDbm != null && onu.rxPowerDbm <= -25 ? "Weak Signal"
+    signalStability:   status === "Offline"                                 ? "Offline"
+                         : onu.rxPowerDbm != null && onu.rxPowerDbm >  -8  ? "Too High"
+                         : onu.rxPowerDbm != null && onu.rxPowerDbm >= -18 ? "Excellent"
+                         : onu.rxPowerDbm != null && onu.rxPowerDbm >= -22 ? "Good"
+                         : onu.rxPowerDbm != null && onu.rxPowerDbm >= -25 ? "Normal"
+                         : onu.rxPowerDbm != null && onu.rxPowerDbm >= -27 ? "Abnormal"
+                         : onu.rxPowerDbm != null                           ? "Bad"
                          : "Stable",
     onuType:           "EPON",
     isReal:            true,

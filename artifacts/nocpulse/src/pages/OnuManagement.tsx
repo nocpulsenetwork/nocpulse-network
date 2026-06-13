@@ -64,11 +64,15 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 const getRxStyle = (power: number | null) => {
   if (power === null)
     return { text: "text-muted-foreground/50", bg: "bg-muted/30", border: "border-border/30" };
-  if (power > -24)
+  if (power > -8)
+    return { text: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/25" };
+  if (power >= -18)
     return { text: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/25" };
-  if (power >= -27)
+  if (power >= -22)
+    return { text: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/25" };
+  if (power >= -25)
     return { text: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-yellow-500/25" };
-  if (power >= -30)
+  if (power >= -27)
     return { text: "text-orange-400", bg: "bg-orange-500/10", border: "border-orange-500/25" };
   return { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/25" };
 };
@@ -96,21 +100,29 @@ const getReasonBadgeColor = (reason: string) => {
 
 const getStabilityStyle = (stability: SignalStability) => {
   switch (stability) {
+    case "Too High":    return "bg-purple-500/10 text-purple-400 border-purple-500/20";
+    case "Excellent":   return "bg-green-500/10 text-green-400 border-green-500/20";
+    case "Good":        return "bg-green-500/10 text-green-400 border-green-500/20";
+    case "Normal":      return "bg-yellow-400/10 text-yellow-400 border-yellow-400/20";
+    case "Abnormal":    return "bg-orange-500/10 text-orange-400 border-orange-500/20";
+    case "Bad":         return "bg-red-500/10 text-red-400 border-red-500/20";
+    case "Offline":     return "bg-slate-500/10 text-slate-400 border-slate-500/20";
     case "Stable":      return "bg-green-500/10 text-green-400 border-green-500/20";
     case "Weak Signal": return "bg-yellow-400/10 text-yellow-400 border-yellow-400/20";
-    case "Unstable":    return "bg-amber-500/10 text-amber-400 border-amber-500/20";
+    case "Unstable":    return "bg-orange-500/10 text-orange-400 border-orange-500/20";
     case "High Loss":   return "bg-red-500/10 text-red-400 border-red-500/20";
-    case "Offline":     return "bg-slate-500/10 text-slate-400 border-slate-500/20";
   }
 };
 
 const getAutoStability = (onu: { status: string; signalLevel: number | null }): SignalStability | null => {
   if (onu.status === "Offline") return "Offline";
-  if (onu.signalLevel === null) return null;  // no optical data — do not label signal quality
-  if (onu.signalLevel <= -29) return "High Loss";
-  if (onu.signalLevel <= -27) return "Unstable";
-  if (onu.signalLevel <= -25) return "Weak Signal";
-  return "Stable";
+  if (onu.signalLevel === null) return null;
+  if (onu.signalLevel > -8)   return "Too High";
+  if (onu.signalLevel >= -18) return "Excellent";
+  if (onu.signalLevel >= -22) return "Good";
+  if (onu.signalLevel >= -25) return "Normal";
+  if (onu.signalLevel >= -27) return "Abnormal";
+  return "Bad";
 };
 
 const STATUS_CONFIG = {

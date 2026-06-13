@@ -96,11 +96,17 @@ export default function OnuDetail() {
   // ── Hooks must be declared before any early return (React rules of hooks) ─
   const stabilityConfig = useMemo(() => {
     const map: Record<string, { color: string; bg: string; border: string; badge: string; label: string; desc: string }> = {
-      Stable:        { color: "text-green-500", bg: "bg-green-500/10", border: "border-l-green-500", badge: "bg-green-500/10 text-green-500 border-green-500/20",   label: "Stable",       desc: "Signal consistent within ±0.5 dBm" },
-      "Weak Signal": { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-l-amber-400", badge: "bg-amber-500/10 text-amber-400 border-amber-500/20",   label: "Weak Signal",  desc: "RX near warning threshold" },
-      Unstable:      { color: "text-amber-500", bg: "bg-amber-500/10", border: "border-l-amber-500", badge: "bg-amber-500/10 text-amber-500 border-amber-500/20",   label: "Unstable",     desc: "Signal varies ±2–4 dBm" },
-      "High Loss":   { color: "text-red-500",   bg: "bg-red-500/10",   border: "border-l-red-500",   badge: "bg-red-500/10 text-red-500 border-red-500/20",         label: "High Loss",    desc: "Sustained decline — OTDR recommended" },
-      Offline:       { color: "text-slate-400", bg: "bg-slate-500/10", border: "border-l-slate-500", badge: "bg-slate-500/10 text-slate-400 border-slate-500/20",   label: "Offline",      desc: "No optical signal detected" },
+      "Too High":    { color: "text-purple-400", bg: "bg-purple-500/10", border: "border-l-purple-500", badge: "bg-purple-500/10 text-purple-400 border-purple-500/20", label: "Too High",  desc: "Signal too strong — check for connector reflections" },
+      Excellent:     { color: "text-green-500",  bg: "bg-green-500/10",  border: "border-l-green-500",  badge: "bg-green-500/10 text-green-500 border-green-500/20",   label: "Excellent", desc: "Optimal signal (−8 to −18 dBm)" },
+      Good:          { color: "text-green-400",  bg: "bg-green-500/10",  border: "border-l-green-400",  badge: "bg-green-500/10 text-green-400 border-green-400/20",   label: "Good",      desc: "Good signal (−18 to −22 dBm)" },
+      Normal:        { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-l-yellow-400", badge: "bg-yellow-500/10 text-yellow-400 border-yellow-400/20", label: "Normal",   desc: "Acceptable signal (−22 to −25 dBm)" },
+      Abnormal:      { color: "text-orange-400", bg: "bg-orange-500/10", border: "border-l-orange-400", badge: "bg-orange-500/10 text-orange-400 border-orange-400/20", label: "Abnormal", desc: "Marginal signal — check fiber (−25 to −27 dBm)" },
+      Bad:           { color: "text-red-500",    bg: "bg-red-500/10",    border: "border-l-red-500",    badge: "bg-red-500/10 text-red-500 border-red-500/20",           label: "Bad",       desc: "Poor signal — OTDR recommended (below −27 dBm)" },
+      Offline:       { color: "text-slate-400",  bg: "bg-slate-500/10",  border: "border-l-slate-500",  badge: "bg-slate-500/10 text-slate-400 border-slate-500/20",   label: "Offline",   desc: "No optical signal detected" },
+      Stable:        { color: "text-green-500",  bg: "bg-green-500/10",  border: "border-l-green-500",  badge: "bg-green-500/10 text-green-500 border-green-500/20",   label: "Stable",    desc: "Signal consistent within ±0.5 dBm" },
+      "Weak Signal": { color: "text-yellow-400", bg: "bg-yellow-500/10", border: "border-l-yellow-400", badge: "bg-yellow-500/10 text-yellow-400 border-yellow-400/20", label: "Weak Signal", desc: "RX near warning threshold" },
+      Unstable:      { color: "text-orange-400", bg: "bg-orange-500/10", border: "border-l-orange-400", badge: "bg-orange-500/10 text-orange-400 border-orange-400/20", label: "Unstable",  desc: "Signal varies ±2–4 dBm" },
+      "High Loss":   { color: "text-red-500",    bg: "bg-red-500/10",    border: "border-l-red-500",    badge: "bg-red-500/10 text-red-500 border-red-500/20",           label: "High Loss", desc: "Sustained decline — OTDR recommended" },
     };
     return map[onu?.signalStability ?? "Stable"] ?? map["Stable"];
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -408,7 +414,11 @@ export default function OnuDetail() {
         <Card className={`border-l-4 ${
           isRealOnu
             ? (onu.signalLevel !== null
-                ? (onu.signalLevel <= -29 ? "border-l-red-500" : onu.signalLevel <= -27 ? "border-l-amber-500" : "border-l-green-500")
+                ? (onu.signalLevel > -8   ? "border-l-purple-500"
+                 : onu.signalLevel >= -22 ? "border-l-green-500"
+                 : onu.signalLevel >= -25 ? "border-l-yellow-500"
+                 : onu.signalLevel >= -27 ? "border-l-orange-500"
+                 :                          "border-l-red-500")
                 : "border-l-slate-500")
             : (isPoorSignal ? "border-l-red-500" : isWarningSignal ? "border-l-amber-500" : "border-l-green-500")
         }`}>
@@ -420,7 +430,7 @@ export default function OnuDetail() {
             {isRealOnu ? (
               onu.signalLevel !== null ? (
                 <>
-                  <div className={`text-xl font-bold ${onu.signalLevel <= -29 ? "text-red-400" : onu.signalLevel <= -27 ? "text-amber-400" : "text-green-400"}`}>
+                  <div className={`text-xl font-bold ${onu.signalLevel > -8 ? "text-purple-400" : onu.signalLevel >= -22 ? "text-green-400" : onu.signalLevel >= -25 ? "text-yellow-400" : onu.signalLevel >= -27 ? "text-orange-400" : "text-red-400"}`}>
                     {onu.signalLevel.toFixed(1)} <span className="text-xs font-normal text-muted-foreground">dBm</span>
                   </div>
                   <div className="mt-1 text-[10px] text-muted-foreground">Live from SNMP</div>
