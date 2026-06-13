@@ -73,6 +73,26 @@ interface RealOnuData {
   sysName?: string | null;
 }
 
+interface OltPortStatus {
+  ifIndex: number;
+  description: string;
+  operStatus: 'up' | 'down' | 'testing' | 'unknown';
+  adminStatus: 'up' | 'down' | 'unknown';
+}
+
+interface OltHealthData {
+  uptimeSecs:    number | null;
+  cpuPct:        number | null;
+  memPct:        number | null;
+  temperatureC:  number | null;
+  uplinkPorts:   OltPortStatus[];
+  ethernetPorts: OltPortStatus[];
+  sfpPorts:      OltPortStatus[];
+  polledAt:  string;
+  latencyMs: number;
+  source: 'live-snmp';
+}
+
 /** Format seconds into a human-readable uptime string: "14d 3h 22m". */
 function fmtUptime(secs: number): string {
   const d = Math.floor(secs / 86400);
@@ -144,6 +164,11 @@ export default function OltDetail() {
   const [discoverLoading, setDiscoverLoading] = useState(false);
   const [discoverError, setDiscoverError] = useState<string | null>(null);
 
+  // OLT health state — populated by POST /api/olts/poll-health
+  const [oltHealth, setOltHealth]         = useState<OltHealthData | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError]     = useState<string | null>(null);
+
   useEffect(() => {
     if (!params?.id) return;
     setManaged(loadManagedOlt(params.id));
@@ -151,6 +176,11 @@ export default function OltDetail() {
     fetch(`/api/olts/${encodeURIComponent(params.id)}/onus/real`)
       .then(r => r.json() as Promise<{ data?: { hasData?: boolean } }>)
       .then(j => { if (j.data?.hasData) setRealOnus(j.data as RealOnuData); })
+      .catch(() => null);
+    // Load any previously cached OLT health result
+    fetch(`/api/olts/${encodeURIComponent(params.id)}/health`)
+      .then(r => r.json() as Promise<{ data?: OltHealthData | null }>)
+      .then(j => { if (j.data) setOltHealth(j.data); })
       .catch(() => null);
   }, [params?.id]);
 
@@ -182,6 +212,34 @@ export default function OltDetail() {
       setDiscoverError(e instanceof Error ? e.message : 'Network error');
     } finally {
       setDiscoverLoading(false);
+    }
+  }
+
+  async function handlePollHealth() {
+    if (!managed) return;
+    setHealthLoading(true);
+    setHealthError(null);
+    try {
+      const resp = await fetch('/api/olts/poll-health', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          id:        managed.id,
+          ip:        managed.ip,
+          community: managed.community,
+          port:      managed.snmpPort,
+        }),
+      });
+      const j = await resp.json() as { data?: OltHealthData; error?: string };
+      if (!resp.ok || !j.data) {
+        setHealthError(j.error ?? 'Health poll failed — check OLT connectivity.');
+      } else {
+        setOltHealth(j.data);
+      }
+    } catch (e) {
+      setHealthError(e instanceof Error ? e.message : 'Network error');
+    } finally {
+      setHealthLoading(false);
     }
   }
 
@@ -388,9 +446,13 @@ export default function OltDetail() {
                 <span className="inline-flex items-center gap-1 text-xs">
                   <Clock className="h-3 w-3 shrink-0" />
                   <span className="font-medium text-foreground/80">
-                    {isRealOlt && realOnus?.sysUpTimeSecs != null
-                      ? fmtUptime(realOnus.sysUpTimeSecs)
-                      : isRealOlt ? 'N/A' : olt.uptime}
+                    {isRealOlt
+                      ? (oltHealth?.uptimeSecs != null
+                          ? fmtUptime(oltHealth.uptimeSecs)
+                          : realOnus?.sysUpTimeSecs != null
+                            ? fmtUptime(realOnus.sysUpTimeSecs)
+                            : 'N/A')
+                      : olt.uptime}
                   </span>
                 </span>
               </div>
@@ -554,6 +616,42 @@ export default function OltDetail() {
                 <p className="text-[11px] text-muted-foreground">{realOnus.message}</p>
               )}
             </div>
+
+            {/* OLT Health — manual trigger, read-only SNMP */}
+            <div className="px-4 pb-4 border-t border-border/20 pt-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">OLT Health</span>
+                  {oltHealth && (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-green-500/10 text-green-400 border-green-500/20">
+                      <Database className="h-2.5 w-2.5" /> Live SNMP · {format(new Date(oltHealth.polledAt), 'HH:mm:ss')}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => void handlePollHealth()}
+                  disabled={healthLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-green-500/10 border-green-500/30 text-green-400 hover:bg-green-500/20"
+                >
+                  {healthLoading
+                    ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Polling…</>
+                    : <><Activity className="h-3.5 w-3.5" /> {oltHealth ? 'Re-poll Health' : 'Poll Health'}</>
+                  }
+                </button>
+              </div>
+              {healthError && (
+                <p className="text-[11px] text-red-400 flex items-center gap-1.5">
+                  <XCircle className="h-3.5 w-3.5 shrink-0" /> {healthError}
+                </p>
+              )}
+              {oltHealth && (
+                <p className="text-[11px] text-muted-foreground">
+                  {oltHealth.uptimeSecs !== null ? `Uptime: ${fmtUptime(oltHealth.uptimeSecs)} · ` : ''}
+                  {oltHealth.uplinkPorts.length + oltHealth.ethernetPorts.length + oltHealth.sfpPorts.length} port{oltHealth.uplinkPorts.length + oltHealth.ethernetPorts.length + oltHealth.sfpPorts.length !== 1 ? 's' : ''} discovered · {oltHealth.latencyMs}ms
+                </p>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -690,10 +788,28 @@ export default function OltDetail() {
             <span className="text-xs font-semibold text-muted-foreground">CPU Usage</span>
           </div>
           {isRealOlt ? (
-            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
-              <span className="text-2xl font-bold">—</span>
-              <span className="text-[10px]">Not polled via SNMP</span>
-            </div>
+            oltHealth?.cpuPct != null ? (
+              <div className="flex items-center gap-4">
+                <Gauge value={oltHealth.cpuPct} label="CPU" colorClass={getResColor(oltHealth.cpuPct, false)} />
+                <div className="flex-1 space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px]">
+                      <span className="text-muted-foreground">Load</span>
+                      <span className="font-mono font-bold">{oltHealth.cpuPct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${oltHealth.cpuPct > 80 ? 'bg-red-500' : oltHealth.cpuPct > 60 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${oltHealth.cpuPct}%` }} />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-green-400/70">Live SNMP</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+                <span className="text-2xl font-bold">N/A</span>
+                <span className="text-[10px]">{healthLoading ? 'Polling…' : 'Poll health to load'}</span>
+              </div>
+            )
           ) : (
             <div className="flex items-center gap-4">
               <Gauge value={olt.cpu} label="CPU" colorClass={getResColor(olt.cpu, false)} />
@@ -720,10 +836,28 @@ export default function OltDetail() {
             <span className="text-xs font-semibold text-muted-foreground">Memory</span>
           </div>
           {isRealOlt ? (
-            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
-              <span className="text-2xl font-bold">—</span>
-              <span className="text-[10px]">Not polled via SNMP</span>
-            </div>
+            oltHealth?.memPct != null ? (
+              <div className="flex items-center gap-4">
+                <Gauge value={oltHealth.memPct} label="RAM" colorClass={getResColor(oltHealth.memPct, false)} />
+                <div className="flex-1 space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px]">
+                      <span className="text-muted-foreground">Used</span>
+                      <span className="font-mono font-bold">{oltHealth.memPct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${oltHealth.memPct > 80 ? 'bg-red-500' : oltHealth.memPct > 60 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${oltHealth.memPct}%` }} />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-green-400/70">Live SNMP</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+                <span className="text-2xl font-bold">N/A</span>
+                <span className="text-[10px]">{healthLoading ? 'Polling…' : 'Poll health to load'}</span>
+              </div>
+            )
           ) : (
             <div className="flex items-center gap-4">
               <Gauge value={olt.memory} label="RAM" colorClass={getResColor(olt.memory, false)} />
@@ -750,10 +884,29 @@ export default function OltDetail() {
             <span className="text-xs font-semibold text-muted-foreground">Temperature</span>
           </div>
           {isRealOlt ? (
-            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
-              <span className="text-2xl font-bold">—</span>
-              <span className="text-[10px]">Not polled via SNMP</span>
-            </div>
+            oltHealth?.temperatureC != null ? (
+              <div className="flex items-center gap-4">
+                <Gauge value={Math.round(oltHealth.temperatureC)} max={80} label="Temp" unit="°C" colorClass={getResColor(Math.round(oltHealth.temperatureC), true)} />
+                <div className="flex-1 space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px]">
+                      <span className="text-muted-foreground">Celsius</span>
+                      <span className="font-mono font-bold">{oltHealth.temperatureC.toFixed(2)}°C</span>
+                    </div>
+                    <div className="h-1.5 bg-muted/50 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${oltHealth.temperatureC > 55 ? 'bg-red-500' : oltHealth.temperatureC > 45 ? 'bg-amber-500' : 'bg-green-500'}`}
+                        style={{ width: `${Math.min(100, (oltHealth.temperatureC / 80) * 100)}%` }} />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-green-400/70">Live SNMP</p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+                <span className="text-2xl font-bold">N/A</span>
+                <span className="text-[10px]">{healthLoading ? 'Polling…' : 'Poll health to load'}</span>
+              </div>
+            )
           ) : (
             <div className="flex items-center gap-4">
               <Gauge value={olt.temperature} max={80} label="Temp" unit="°C" colorClass={getResColor(olt.temperature, true)} />
@@ -782,10 +935,27 @@ export default function OltDetail() {
             {!isRealOlt && <span className="ml-auto"><UplinkBadge status={olt.uplinkStatus} /></span>}
           </div>
           {isRealOlt ? (
-            <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
-              <span className="text-2xl font-bold">—</span>
-              <span className="text-[10px]">Not polled via SNMP</span>
-            </div>
+            oltHealth && oltHealth.uplinkPorts.length > 0 ? (
+              <div className="space-y-1.5">
+                {oltHealth.uplinkPorts.map(p => (
+                  <div key={p.ifIndex} className="flex items-center justify-between p-2 rounded-lg bg-muted/20 border border-border/40">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <ArrowUp className={`h-3 w-3 shrink-0 ${p.operStatus === 'up' ? 'text-green-400' : 'text-red-400'}`} />
+                      <span className="text-[11px] font-mono truncate">{p.description}</span>
+                    </div>
+                    <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${p.operStatus === 'up' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                      {p.operStatus}
+                    </span>
+                  </div>
+                ))}
+                <p className="text-[10px] text-green-400/70">Live SNMP</p>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-16 gap-1 text-muted-foreground/40">
+                <span className="text-2xl font-bold">N/A</span>
+                <span className="text-[10px]">{healthLoading ? 'Polling…' : 'Poll health to load'}</span>
+              </div>
+            )
           ) : (
             <>
               <div className="flex items-center gap-2 mb-3 p-2.5 rounded-lg bg-muted/20 border border-border/40">

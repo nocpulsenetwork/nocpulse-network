@@ -483,6 +483,45 @@ export interface ReadOnuTrafficResult {
   mibUsed: string;
 }
 
+// ─── OLT health types ─────────────────────────────────────────────────────
+
+/** Operational status of a single OLT network port, read from IF-MIB. */
+export interface OltPortStatus {
+  ifIndex: number;
+  description: string;
+  operStatus: "up" | "down" | "testing" | "unknown";
+  adminStatus: "up" | "down" | "unknown";
+}
+
+/**
+ * OLT-level health metrics returned by `getOltHealth()`.
+ *
+ * Standard fields (always attempted):
+ *   • uptimeSecs    — sysUpTime.0 (standard, always available)
+ *   • uplinkPorts   — IF-MIB 10G/uplink-named interfaces
+ *   • ethernetPorts — IF-MIB GE/FE interfaces
+ *   • sfpPorts      — IF-MIB SFP-labeled interfaces
+ *
+ * CDATA EasyPath proprietary fields (null when OID not implemented):
+ *   • cpuPct        — 1.3.6.1.4.1.17409.1.1.1.5.0
+ *   • memPct        — 1.3.6.1.4.1.17409.1.1.1.6.0
+ *   • temperatureC  — 1.3.6.1.4.1.17409.1.1.1.7.0
+ *
+ * Any field that cannot be read returns null — never a fake value.
+ */
+export interface OltHealthResult {
+  uptimeSecs:    number | null;
+  cpuPct:        number | null;
+  memPct:        number | null;
+  temperatureC:  number | null;
+  uplinkPorts:   OltPortStatus[];
+  ethernetPorts: OltPortStatus[];
+  sfpPorts:      OltPortStatus[];
+  polledAt:  string;
+  latencyMs: number;
+  source: "live-snmp";
+}
+
 // ─── Custom error types ────────────────────────────────────────────────────
 
 export class SnmpTimeoutError extends Error {
@@ -814,6 +853,110 @@ export class RealSnmpClient {
     }
 
     return ponPorts;
+  }
+
+  /**
+   * Collect OLT-level health metrics via read-only SNMP.
+   *
+   * Standard OIDs (always attempted):
+   *   • sysUpTime.0  — device uptime
+   *   • IF-MIB ifDescr + ifOperStatus + ifAdminStatus — port inventory
+   *
+   * Proprietary OIDs (CDATA EasyPath 1.3.6.1.4.1.17409 enterprise tree):
+   *   • CPU / memory / temperature — attempted; null if noSuchInstance
+   *
+   * Does NOT throw. All errors are caught; unreadable fields return null.
+   */
+  async getOltHealth(): Promise<OltHealthResult> {
+    const start    = Date.now();
+    const polledAt = new Date().toISOString();
+
+    // ── 1. Uptime ─────────────────────────────────────────────────────────
+    let uptimeSecs: number | null = null;
+    try {
+      const vbs = await this.snmpGet([OID.sysUpTime]);
+      uptimeSecs = timeTicksToSecs(indexVarbinds(vbs)[OID.sysUpTime]) ?? null;
+    } catch { /* leave null */ }
+
+    // ── 2. CDATA EasyPath proprietary — CPU / Memory / Temperature ────────
+    // noSuchInstance or any error → indexVarbinds filters it out → intVal → undefined → null
+    let cpuPct:       number | null = null;
+    let memPct:       number | null = null;
+    let temperatureC: number | null = null;
+    try {
+      const CPU_OID  = "1.3.6.1.4.1.17409.1.1.1.5.0";
+      const MEM_OID  = "1.3.6.1.4.1.17409.1.1.1.6.0";
+      const TEMP_OID = "1.3.6.1.4.1.17409.1.1.1.7.0";
+      const pv = indexVarbinds(await this.snmpGet([CPU_OID, MEM_OID, TEMP_OID]));
+
+      const rawCpu  = intVal(pv[CPU_OID]);
+      const rawMem  = intVal(pv[MEM_OID]);
+      const rawTemp = intVal(pv[TEMP_OID]);
+
+      if (rawCpu  !== undefined && rawCpu  >= 0   && rawCpu  <= 100) cpuPct = rawCpu;
+      if (rawMem  !== undefined && rawMem  >= 0   && rawMem  <= 100) memPct = rawMem;
+      if (rawTemp !== undefined) {
+        // Could be 0.01 °C units (e.g. 2968 = 29.68 °C) or whole °C
+        if (rawTemp >= -4000 && rawTemp <= 15000 && Math.abs(rawTemp) > 120) {
+          temperatureC = parseFloat((rawTemp / 100).toFixed(2));
+        } else if (rawTemp >= -40 && rawTemp <= 120) {
+          temperatureC = rawTemp;
+        }
+      }
+    } catch { /* proprietary OIDs not available on this firmware */ }
+
+    // ── 3. Interface status via IF-MIB ────────────────────────────────────
+    const uplinkPorts:   OltPortStatus[] = [];
+    const ethernetPorts: OltPortStatus[] = [];
+    const sfpPorts:      OltPortStatus[] = [];
+    try {
+      const descrVbs = await this.snmpWalk(OID.ifDescrCol);
+      const ifMap    = new Map<number, string>();
+      for (const vb of descrVbs) {
+        const idx = ifIndexFromOid(vb.oid);
+        if (idx !== null) ifMap.set(idx, stringVal(vb) ?? "");
+      }
+
+      if (ifMap.size > 0) {
+        const idxList   = [...ifMap.keys()];
+        const operOids  = idxList.map(i => `${OID.ifOperStatusCol}.${i}`);
+        const adminOids = idxList.map(i => `${OID.ifAdminStatusCol}.${i}`);
+        const sv = indexVarbinds(await this.snmpGet([...operOids, ...adminOids]));
+
+        for (const ifIndex of idxList) {
+          const descr = ifMap.get(ifIndex) ?? "";
+          if (isPonPort(descr)) continue;           // PON ports → ONU discovery handles those
+
+          const operRaw  = intVal(sv[`${OID.ifOperStatusCol}.${ifIndex}`]);
+          const adminRaw = intVal(sv[`${OID.ifAdminStatusCol}.${ifIndex}`]);
+
+          const port: OltPortStatus = {
+            ifIndex,
+            description: descr,
+            operStatus:  operStatusToString(operRaw ?? 4),
+            adminStatus: adminRaw === 1 ? "up" : adminRaw === 2 ? "down" : "unknown",
+          };
+
+          const kind = classifyOltInterface(descr);
+          if      (kind === "uplink")   uplinkPorts.push(port);
+          else if (kind === "ethernet") ethernetPorts.push(port);
+          else if (kind === "sfp")      sfpPorts.push(port);
+        }
+      }
+    } catch { /* IF-MIB walk failed — leave empty arrays */ }
+
+    return {
+      uptimeSecs,
+      cpuPct,
+      memPct,
+      temperatureC,
+      uplinkPorts,
+      ethernetPorts,
+      sfpPorts,
+      polledAt,
+      latencyMs: Date.now() - start,
+      source: "live-snmp",
+    };
   }
 
   /**
@@ -1498,15 +1641,11 @@ export class RealSnmpClient {
     // If a column returns 0 rows or values outside plausible range it is
     // silently skipped — corresponding ONU fields stay null (→ "N/A" in UI).
 
-    // DEBUG TARGET: PON-1 ONU-4 → portSlot=13 onuSlot=4 bigN=3332 suffix="13.4"
-    const DBG_BIG_N = 3332;
-
     const walkIntCol = async (colRoot: string): Promise<Map<number, number>> => {
       const prefix = colRoot + ".";
       const out    = new Map<number, number>();
       let cursor   = colRoot;
       let errors   = 0;
-      let firstSuffixLogged = false;
       while (true) {
         let batch: snmp.Varbind[];
         try {
@@ -1518,15 +1657,7 @@ export class RealSnmpClient {
         }
         const inTree = batch.filter((vb) => vb.oid.startsWith(prefix));
         if (inTree.length === 0) {
-          process.stdout.write(`[DBG-OPTICAL] ${colRoot} — GETBULK returned 0 in-tree rows (cursor=${cursor})\n`);
           break;
-        }
-        // Log first suffix seen (shows the OID instance format in use)
-        if (!firstSuffixLogged && inTree.length > 0) {
-          firstSuffixLogged = true;
-          const firstSuffix = inTree[0]!.oid.slice(prefix.length);
-          const lastSuffix  = inTree[inTree.length - 1]!.oid.slice(prefix.length);
-          process.stdout.write(`[DBG-OPTICAL] ${colRoot} — first suffix="${firstSuffix}" last suffix="${lastSuffix}" vtype=${typeof inTree[0]!.value} rawVal=${JSON.stringify(inTree[0]!.value)}\n`);
         }
         for (const vb of inTree) {
           const suffix = vb.oid.slice(prefix.length);
@@ -1562,9 +1693,6 @@ export class RealSnmpClient {
           // Sign-extend 32-bit: Gauge32/Counter32 encode negative dBm as unsigned.
           // e.g. raw 4294966072 (0xFFFFFB18) → signed -1224  (= -12.24 dBm × 100)
           if (val > 0x7FFFFFFF) val = val - 0x100000000;
-          if (bigN === DBG_BIG_N) {
-            process.stdout.write(`[DBG-OPTICAL] ${colRoot} — TARGET suffix="${suffix}" bigN=${bigN} rawVal(pre-sign)=${typeof vb.value==="number"?vb.value:typeof vb.value==="bigint"?Number(vb.value):"?"} signedVal=${val}\n`);
-          }
           out.set(bigN, val);
         }
         const lastOid = inTree[inTree.length - 1]!.oid;
@@ -1592,14 +1720,6 @@ export class RealSnmpClient {
       walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.10"),
       walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.11"),
     ]);
-    process.stdout.write(`[DBG-OPTICAL] Maps after walk — rxRaw.size=${rxRaw.size} txRaw.size=${txRaw.size} distRaw.size=${distRaw.size}\n`);
-    process.stdout.write(`[DBG-OPTICAL] TARGET bigN=${DBG_BIG_N} — rxRaw.get=${rxRaw.get(DBG_BIG_N)} txRaw.get=${txRaw.get(DBG_BIG_N)} distRaw.get=${distRaw.get(DBG_BIG_N)}\n`);
-    // Sample first 3 entries of each Map to reveal actual keys
-    const sample = (m: Map<number,number>) => JSON.stringify([...m.entries()].slice(0,3));
-    process.stdout.write(`[DBG-OPTICAL] rxRaw sample: ${sample(rxRaw)}\n`);
-    process.stdout.write(`[DBG-OPTICAL] txRaw sample: ${sample(txRaw)}\n`);
-    process.stdout.write(`[DBG-OPTICAL] distRaw sample: ${sample(distRaw)}\n`);
-
     // Validate: plausible optical power values in the column.
     // Require |val| > 10 to reject status-flag columns (raw 0, 1, 2, …).
     // Accept range [-5000, 2000] to cover both 0.1 dBm and 0.01 dBm encodings
@@ -1635,8 +1755,6 @@ export class RealSnmpClient {
     const rxDiv     = rxValid ? dBmDivFromNeg(rxRaw) : 10;
     // TX is positive, so inherit the scale detected from the RX column.
     const txDiv     = txValid ? rxDiv : 10;
-    process.stdout.write(`[DBG-OPTICAL] Validation — rxValid=${rxValid} txValid=${txValid} distValid=${distValid} rxDiv=${rxDiv} txDiv=${txDiv}\n`);
-
     // ── Phase 3: Probe integer cols 15–21 for temperature + register duration ─
     //
     // Same 17409.2.3.4.1.1 table, same bigN index.  Walk all candidate columns
@@ -1684,17 +1802,6 @@ export class RealSnmpClient {
 
       const tempRaw  = tempByBigN.get(bigN) ?? null;
       const durRaw   = durByBigN.get(bigN)  ?? null;
-
-      if (bigN === DBG_BIG_N) {
-        const rxDbm  = rxPowRaw  !== null ? Math.round(rxPowRaw  / rxDiv * 10) / 10 : null;
-        const txDbm  = txPowRaw  !== null ? Math.round(txPowRaw  / txDiv * 10) / 10 : null;
-        process.stdout.write(
-          `[DBG-OPTICAL] PER-ONU bigN=${bigN} onuId=${portSlot}.${onuSlot} status=${status}\n` +
-          `  rxPowRaw=${rxPowRaw} rxDiv=${rxDiv} rxPowerDbm=${rxDbm}\n` +
-          `  txPowRaw=${txPowRaw} txDiv=${txDiv} txPowerDbm=${txDbm}\n` +
-          `  distMRaw=${distMRaw}\n`
-        );
-      }
 
       onus.push({
         // Use the explicit two-part SNMP index "portSlot.onuSlot" as the ONU ID.
@@ -2271,6 +2378,17 @@ function isPonPort(descr: string): boolean {
     d.includes("10g-epon") ||
     (d.includes("pon") && !d.includes("component"))
   );
+}
+
+/** Classify a non-PON interface into a display category for OLT health. */
+function classifyOltInterface(descr: string): "uplink" | "ethernet" | "sfp" | "other" {
+  const d = descr.toLowerCase();
+  if (d.includes("10ge") || d.includes("xge") || d.startsWith("ten") ||
+      d.includes("uplink") || d.includes("10g-eth")) return "uplink";
+  if (d.includes("sfp")) return "sfp";
+  if (d.includes("ge") || d.includes("gigabit") || d.includes("ethernet") ||
+      d.startsWith("eth") || d.startsWith("fe") || d.startsWith("fastethernet")) return "ethernet";
+  return "other";
 }
 
 /** Classify a net-snmp error into a typed error subclass. */

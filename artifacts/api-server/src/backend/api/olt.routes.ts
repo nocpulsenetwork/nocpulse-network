@@ -36,6 +36,7 @@ import {
   type ReadOnuDetailResult,
   type ReadOnuOpticalResult,
   type ReadOnuTrafficResult,
+  type OltHealthResult,
 } from "../snmp/real-snmp-client";
 import type {
   OnuDiscoveryResult,
@@ -932,6 +933,84 @@ oltRouter.post("/debug-snmp-walk", async (req: Request, res: Response) => {
       generatedAt: new Date().toISOString(),
       note:        "Debug tool — read-only SNMP walk. Remove before production deploy.",
     },
+  });
+});
+
+// ─── In-memory OLT health cache ──────────────────────────────────────────────
+//
+// Key:   OLT ID string (same key used by onuDiscoveryCache)
+// Value: result of the last successful POST /poll-health call
+// Lost on server restart — caller re-polls via the "Poll Health" button.
+const oltHealthCache = new Map<string, OltHealthResult>();
+
+// POST /api/olts/poll-health — manual read-only OLT health poll
+//
+// Connects to an OLT via SNMP and reads:
+//   • sysUpTime (standard — always available)
+//   • IF-MIB ifDescr + ifOperStatus + ifAdminStatus (standard — port inventory)
+//   • CPU / memory / temperature (CDATA EasyPath proprietary — null if unsupported)
+//
+// Safety contract:
+//   • Read-only: SNMP GET + GETBULK walk only — no SET
+//   • One-shot: no interval, no background worker, no persistent session
+//   • Timeout: 3 000 ms, retries: 1
+//   • Stores result only in memory — no database write
+oltRouter.post("/poll-health", async (req: Request, res: Response) => {
+  const body = req.body as Record<string, unknown>;
+
+  if (typeof body["id"] !== "string" || !body["id"].trim()) {
+    res.status(400).json({ error: "Missing required field: id", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["ip"] !== "string" || !body["ip"].trim()) {
+    res.status(400).json({ error: "Missing required field: ip", code: "INVALID_INPUT" });
+    return;
+  }
+  if (typeof body["community"] !== "string" || !body["community"].trim()) {
+    res.status(400).json({ error: "Missing required field: community", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const oltId     = (body["id"] as string).trim();
+  const ip        = (body["ip"] as string).trim();
+  const community = (body["community"] as string).trim();
+  const port      = body["port"] !== undefined ? Number(body["port"]) : 161;
+
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    res.status(400).json({ error: "Invalid port: must be 1–65535", code: "INVALID_INPUT" });
+    return;
+  }
+
+  const client = new RealSnmpClient({ host: ip, community, port, timeoutMs: 3_000, retries: 1 });
+  const health = await client.getOltHealth();
+
+  oltHealthCache.set(oltId, health);
+
+  res.json({
+    data: health,
+    meta: { host: ip, port, generatedAt: new Date().toISOString(), cached: true },
+  });
+});
+
+// GET /api/olts/:id/health — return cached OLT health result
+//
+// Returns the result of the last successful POST /poll-health call for this OLT,
+// or { data: null } if no health poll has been performed yet.
+oltRouter.get("/:id/health", (req: Request, res: Response) => {
+  const oltId  = req.params["id"] as string;
+  const cached = oltHealthCache.get(oltId);
+
+  if (!cached) {
+    res.json({
+      data: null,
+      meta: { generatedAt: new Date().toISOString(), note: "No health poll performed yet." },
+    });
+    return;
+  }
+
+  res.json({
+    data: cached,
+    meta: { generatedAt: new Date().toISOString(), cachedAt: cached.polledAt },
   });
 });
 
