@@ -932,7 +932,7 @@ export default function OnuDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
-            {onu.lastOfflineRxPower !== null ? (
+            {!isRealOnu && onu.lastOfflineRxPower !== null ? (
               <>
                 <div className="flex items-end gap-3 mb-3 flex-wrap">
                   <div>
@@ -1168,7 +1168,7 @@ export default function OnuDetail() {
                   {([
                     { label: "Last Disconnect", value: onu.lastLogoutTime !== "N/A" ? onu.lastLogoutTime : "N/A" },
                     { label: "Reason",           value: onu.lastLogoutReason !== "N/A" ? onu.lastLogoutReason : "N/A" },
-                    { label: "How Long Ago",     value: onu.lastLogoutTime !== "N/A" && disconnectDuration ? disconnectDuration : "N/A" },
+                    { label: "How Long Ago",     value: onu.lastLogoutTime !== "N/A" ? (() => { try { return formatDistanceToNow(new Date(onu.lastLogoutTime), { addSuffix: true }); } catch { return "N/A"; } })() : "N/A" },
                   ] as { label: string; value: string }[]).map(({ label, value }) => (
                     <div key={label} className="flex items-center justify-between gap-2">
                       <span className="text-muted-foreground shrink-0">{label}</span>
