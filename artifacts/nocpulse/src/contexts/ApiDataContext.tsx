@@ -95,6 +95,16 @@ function decodeOfflineReason(code: number | null | undefined): string {
   return EPON_OFFLINE_REASON[code] ?? `Code-${code}`;
 }
 
+/** Format seconds → "14d 3h 22m" / "3h 42m" / "15m" */
+function fmtUptime(secs: number): string {
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice {
   // portIndex: SNMP ponPort is "port-N" where N is 0-based port index (port-0 = PON-1)
   const portNum   = parseInt(onu.ponPort.replace("port-", ""), 10);
@@ -128,7 +138,7 @@ function transformDiscoveredOnu(oltId: string, onu: RawDiscoveredOnu): OnuDevice
     bandwidth:         "N/A",
     lastLogoutTime:    "N/A",
     lastLogoutReason:  decodeOfflineReason(onu.offlineReasonCode),
-    onlineDuration:    "N/A",
+    onlineDuration:    onu.registerDurationSecs != null ? fmtUptime(onu.registerDurationSecs) : "N/A",
     ponPort,
     vlanId:            0,
     oltPort:           onu.ponPort,
