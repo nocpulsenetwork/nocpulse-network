@@ -61,6 +61,7 @@ interface RealOnuData {
     name: string | null;
     mac: string | null;
     offlineReasonCode: number | null;
+    rxPowerDbm: number | null;
   }>;
   discoveredAt: string;
   latencyMs: number;
@@ -313,6 +314,13 @@ export default function OltDetail() {
           const online  = p?.online  ?? 0;
           const offline = (p?.offline ?? 0) + (p?.unknown ?? 0);
           const total   = online + offline;
+          const portKey = `port-${portNum - 1}`;
+          const onlineWithRx = realOnus.onus.filter(
+            o => o.ponPort === portKey && o.status === 'online' && o.rxPowerDbm != null
+          );
+          const avgRx = onlineWithRx.length > 0
+            ? (onlineWithRx.reduce((s, o) => s + o.rxPowerDbm!, 0) / onlineWithRx.length).toFixed(2)
+            : '--';
           return {
             id:       portNum,
             name:     `PON-${portNum}`,
@@ -321,7 +329,7 @@ export default function OltDetail() {
             offline,
             degraded: 0,
             status:   (online > 0 ? 'Active' : total > 0 ? 'Degraded' : 'Idle') as 'Active' | 'Degraded' | 'Idle',
-            avgRx:    '--',
+            avgRx,
           };
         });
       })()
@@ -344,9 +352,9 @@ export default function OltDetail() {
       degraded: degradedCount,
       status:   portStatus as 'Active' | 'Degraded' | 'Idle',
       avgRx:    (() => {
-        const withRx = portOnus.filter(o => o.signalLevel !== null);
+        const withRx = portOnus.filter(o => o.status === 'Online' && o.signalLevel !== null);
         return withRx.length > 0
-          ? (withRx.reduce((s, o) => s + (o.signalLevel as number), 0) / withRx.length).toFixed(1)
+          ? (withRx.reduce((s, o) => s + (o.signalLevel as number), 0) / withRx.length).toFixed(2)
           : '--';
       })(),
     };
@@ -1173,8 +1181,15 @@ export default function OltDetail() {
                       <TableCell className="font-mono text-xs py-2.5 text-center text-green-400 font-semibold">{port.online}</TableCell>
                       <TableCell className={`font-mono text-xs py-2.5 text-center font-semibold ${port.degraded > 0 ? 'text-amber-400' : 'text-muted-foreground'}`}>{port.degraded}</TableCell>
                       <TableCell className={`font-mono text-xs py-2.5 text-center font-semibold ${port.offline > 0 ? 'text-red-400' : 'text-muted-foreground'}`}>{port.offline}</TableCell>
-                      <TableCell className={`font-mono text-xs py-2.5 font-semibold ${port.total > 0 ? (parseFloat(port.avgRx) < -27 ? 'text-red-400' : parseFloat(port.avgRx) < -24 ? 'text-amber-400' : 'text-green-400') : 'text-muted-foreground'}`}>
-                        {port.total > 0 ? `${port.avgRx} dBm` : '—'}
+                      <TableCell className={`font-mono text-xs py-2.5 font-semibold ${
+                        port.avgRx === '--' ? 'text-muted-foreground'
+                        : parseFloat(port.avgRx) > -8   ? 'text-purple-400'
+                        : parseFloat(port.avgRx) >= -22 ? 'text-green-400'
+                        : parseFloat(port.avgRx) >= -25 ? 'text-yellow-400'
+                        : parseFloat(port.avgRx) >= -27 ? 'text-orange-400'
+                        : 'text-red-400'
+                      }`}>
+                        {port.avgRx !== '--' ? `${port.avgRx} dBm` : '—'}
                       </TableCell>
                       <TableCell className="text-right py-2.5 px-4">
                         <Button
