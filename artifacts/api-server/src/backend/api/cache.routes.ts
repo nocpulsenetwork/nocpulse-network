@@ -95,18 +95,58 @@ cacheRouter.get("/onus", (_req: Request, res: Response) => {
 });
 
 // GET /api/cache/alarms — detected alarm list snapshot
+// Derives alarms from whatever live OLT/ONU snapshots are available.
+// Falls back to an empty list with stale:true if no poll has run yet.
 cacheRouter.get("/alarms", (_req: Request, res: Response) => {
+  // Try the pre-computed alarm snapshot first (written by polling engine if configured).
   const snap = alarmListStore.read("all");
   if (snap) {
     res.json(snap);
     return;
   }
-  const alarms: DetectedAlarm[] = detectAllAlarms(MOCK_OLTS, MOCK_ONUS);
-  const fallback: Snapshot<DetectedAlarm[]> = {
+
+  // Build from whichever live snapshot stores have data.
+  let olts: UniversalOLT[] = [];
+  const listSnap = oltListStore.read("all");
+  if (listSnap?.data.length) {
+    olts = listSnap.data;
+  } else {
+    for (const key of oltDetailStore.keys()) {
+      const s = oltDetailStore.read(key);
+      if (s?.data) olts.push(s.data);
+    }
+  }
+
+  let onus: UniversalONU[] = [];
+  const onuAllSnap = onuListStore.read("all");
+  if (onuAllSnap?.data.length) {
+    onus = onuAllSnap.data;
+  } else {
+    for (const key of onuListStore.keys()) {
+      if (key === "all") continue;
+      const s = onuListStore.read(key);
+      if (s?.data?.length) onus = onus.concat(s.data);
+    }
+  }
+
+  if (olts.length === 0 && onus.length === 0) {
+    // Nothing polled yet — return empty, stale.
+    const fallback: Snapshot<DetectedAlarm[]> = {
+      data: [],
+      lastUpdated: new Date().toISOString(),
+      source: MOCK_SOURCE,
+      stale: true,
+    };
+    res.json(fallback);
+    return;
+  }
+
+  const alarms: DetectedAlarm[] = detectAllAlarms(olts, onus);
+  const live: Snapshot<DetectedAlarm[]> = {
     data: alarms,
     lastUpdated: new Date().toISOString(),
-    source: MOCK_SOURCE,
-    stale: true,
+    source: "manual-polling",
+    stale: false,
   };
-  res.json(fallback);
+  res.json(live);
 });

@@ -67,6 +67,15 @@ export interface Alarm {
   timestamp: string;
   description: string;
   acknowledged: boolean;
+  // Extended fields populated from the real backend (optional — not present in mock data)
+  alarmStatus?: string;         // "active" | "acknowledged" | "cleared"
+  alarmTitle?: string;          // e.g. "ONU Offline"
+  alarmType?: string;           // e.g. "link-down"
+  reopenCount?: number;
+  clearedAt?: string | null;
+  acknowledgedAt?: string | null;
+  acknowledgedBy?: string | null;
+  backendHistory?: import('@/lib/api').ApiAlarmHistoryEvent[];
 }
 
 export const olts: OltDevice[] = [

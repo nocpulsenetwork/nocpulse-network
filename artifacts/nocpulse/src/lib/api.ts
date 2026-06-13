@@ -72,14 +72,29 @@ interface ApiONU {
   lastOnlineTime: string | null;
 }
 
+export interface ApiAlarmHistoryEvent {
+  eventId: string;
+  timestamp: string;
+  action: string;
+  actor: string;
+  note?: string;
+}
+
 interface ApiAlarm {
   id: string;
-  severity: string;
-  acknowledged: boolean;
+  type: string;
+  severity: string;           // "critical" | "warning" | "info"
+  status: string;             // "active" | "acknowledged" | "cleared"
   deviceId: string;
   deviceName: string;
-  description: string;
-  timestamp: string;
+  title: string;
+  message: string;
+  raisedAt: string;
+  clearedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+  reopenCount: number;
+  history: ApiAlarmHistoryEvent[];
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -97,7 +112,8 @@ function capitalizeSeverity(s: string): Severity {
     major: "Major",
     minor: "Minor",
     info: "Info",
-    warning: "Info",
+    // Alarm detector uses "warning" for threshold breaches — show as Major
+    warning: "Major",
   };
   return map[s.toLowerCase()] ?? "Info";
 }
@@ -207,10 +223,20 @@ function transformAlarm(a: ApiAlarm): Alarm {
     id: a.id,
     severity: capitalizeSeverity(a.severity),
     deviceId: a.deviceId,
+    // deviceName shows the device; description shows the alarm detail
     deviceName: a.deviceName,
-    timestamp: a.timestamp,
-    description: a.description,
-    acknowledged: a.acknowledged,
+    timestamp: a.raisedAt,
+    description: `[${a.title}] ${a.message}`,
+    acknowledged: a.status === "acknowledged" || a.status === "cleared",
+    // Extended backend fields
+    alarmStatus: a.status,
+    alarmTitle: a.title,
+    alarmType: a.type,
+    reopenCount: a.reopenCount ?? 0,
+    clearedAt: a.clearedAt ?? null,
+    acknowledgedAt: a.acknowledgedAt ?? null,
+    acknowledgedBy: a.acknowledgedBy ?? null,
+    backendHistory: a.history ?? [],
   };
 }
 
@@ -241,4 +267,27 @@ export async function fetchOnus(): Promise<OnuDevice[]> {
 export async function fetchAlarms(): Promise<Alarm[]> {
   const resp = await apiFetch<ApiAlarm>("/alarms");
   return resp.data.map(transformAlarm);
+}
+
+export async function fetchAlarmHistory(): Promise<Alarm[]> {
+  const resp = await apiFetch<ApiAlarm>("/alarms/history");
+  return resp.data.map(transformAlarm);
+}
+
+export async function acknowledgeAlarm(id: string, by: string): Promise<void> {
+  await fetch(`/api/alarms/${encodeURIComponent(id)}/acknowledge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ by }),
+    signal: AbortSignal.timeout(5_000),
+  });
+}
+
+export async function clearAlarmApi(id: string, by: string): Promise<void> {
+  await fetch(`/api/alarms/${encodeURIComponent(id)}/clear`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ by }),
+    signal: AbortSignal.timeout(5_000),
+  });
 }

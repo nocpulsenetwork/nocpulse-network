@@ -834,7 +834,7 @@ export default function Dashboard() {
                   {/* Time (fades out) + "Open details →" (fades in) on hover */}
                   <div className="hidden sm:block relative shrink-0 w-32 text-right">
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap group-hover:opacity-0 transition-opacity duration-100">
-                      {formatDistanceToNow(new Date(alarm.timestamp), { addSuffix: true })}
+                      {(() => { try { const d = new Date(alarm.timestamp); return isNaN(d.getTime()) ? 'just now' : formatDistanceToNow(d, { addSuffix: true }); } catch { return 'just now'; } })()}
                     </span>
                     <span className="absolute inset-0 flex items-center justify-end gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150 text-primary font-semibold text-[11px] whitespace-nowrap">
                       Open details <ChevronRight className="h-3.5 w-3.5 shrink-0" />

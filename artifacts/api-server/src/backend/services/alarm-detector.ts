@@ -33,6 +33,8 @@ export interface DetectedAlarm {
   id: string;
   oltId: string | null;
   onuId: string | null;
+  /** Human-readable device name (OLT name or ONU identifier). */
+  deviceName: string;
   type: AlarmType;
   severity: DetectedAlarmSeverity;
   title: string;
@@ -48,6 +50,7 @@ export function detectOltAlarms(olt: UniversalOLT): DetectedAlarm[] {
   const base = {
     oltId: olt.id,
     onuId: null,
+    deviceName: olt.name,
     source: "read-only" as const,
     createdAt: olt.lastPolled,
   };
@@ -123,9 +126,11 @@ export function detectOltAlarms(olt: UniversalOLT): DetectedAlarm[] {
 
 export function detectOnuAlarms(onu: UniversalONU): DetectedAlarm[] {
   const out: DetectedAlarm[] = [];
+  const label = onu.name || onu.id;
   const base = {
     oltId: onu.oltId,
     onuId: onu.id,
+    deviceName: label,
     source: "read-only" as const,
     createdAt: onu.lastPolled,
   };
@@ -139,7 +144,7 @@ export function detectOnuAlarms(onu: UniversalONU): DetectedAlarm[] {
         type: "dying-gasp",
         severity: "critical",
         title: "ONU Dying Gasp — Power Loss",
-        message: `${onu.name} sent a dying-gasp signal before going offline. Reason: ${onu.lastOfflineReason ?? "unknown"}.`,
+        message: `${label} sent a dying-gasp signal before going offline. Reason: ${onu.lastOfflineReason ?? "unknown"}.`,
       });
     } else if (
       reason.includes("los") ||
@@ -152,7 +157,7 @@ export function detectOnuAlarms(onu: UniversalONU): DetectedAlarm[] {
         type: "los",
         severity: "critical",
         title: "ONU LOS — Loss of Signal",
-        message: `${onu.name} is offline due to loss of optical signal on port ${onu.oltPort}. Reason: ${onu.lastOfflineReason ?? "unknown"}.`,
+        message: `${label} is offline due to loss of optical signal on port ${onu.oltPort}. Reason: ${onu.lastOfflineReason ?? "unknown"}.`,
       });
     } else {
       out.push({
@@ -161,7 +166,7 @@ export function detectOnuAlarms(onu: UniversalONU): DetectedAlarm[] {
         type: "link-down",
         severity: "critical",
         title: "ONU Offline",
-        message: `${onu.name} (${onu.ipAddress}) is offline. Last reason: ${onu.lastOfflineReason ?? "unknown"}.`,
+        message: `${label} on port ${onu.oltPort} is offline. Last reason: ${onu.lastOfflineReason ?? "unknown"}.`,
       });
     }
   }
@@ -175,7 +180,7 @@ export function detectOnuAlarms(onu: UniversalONU): DetectedAlarm[] {
         severity: "critical",
         title: "ONU RX Power Critical",
         message:
-          `${onu.name} RX power is ${onu.rxPower} dBm, below the critical threshold of ${RX_POWER_CRIT_DBM} dBm.` +
+          `${label} RX power is ${onu.rxPower} dBm, below the critical threshold of ${RX_POWER_CRIT_DBM} dBm.` +
           (onu.distance != null ? ` Distance: ${(onu.distance / 1000).toFixed(1)} km.` : ""),
       });
     } else if (onu.rxPower < RX_POWER_WARN_DBM) {
@@ -185,7 +190,7 @@ export function detectOnuAlarms(onu: UniversalONU): DetectedAlarm[] {
         type: "low-rx-power",
         severity: "warning",
         title: "ONU RX Power Low",
-        message: `${onu.name} RX power is ${onu.rxPower} dBm, below the warning threshold of ${RX_POWER_WARN_DBM} dBm.`,
+        message: `${label} RX power is ${onu.rxPower} dBm, below the warning threshold of ${RX_POWER_WARN_DBM} dBm.`,
       });
     }
   }
@@ -197,20 +202,13 @@ export function detectOnuAlarms(onu: UniversalONU): DetectedAlarm[] {
       type: "high-temp",
       severity: "warning",
       title: "ONU High Temperature",
-      message: `${onu.name} transceiver temperature is ${onu.temperature}°C, above the ${ONU_TEMP_WARN_C}°C threshold.`,
+      message: `${label} transceiver temperature is ${onu.temperature}°C, above the ${ONU_TEMP_WARN_C}°C threshold.`,
     });
   }
 
-  if (onu.status === "online" && onu.rxRateBps === null && onu.txRateBps === null) {
-    out.push({
-      ...base,
-      id: `onu-${onu.id}-traffic-unavail`,
-      type: "unknown",
-      severity: "info",
-      title: "ONU Traffic Data Unavailable",
-      message: `${onu.name} is online but traffic counters are not available from the adapter.`,
-    });
-  }
+  // Note: "traffic unavailable" info alarm intentionally omitted —
+  // the EasyPath adapter does not provide per-ONU traffic counters, so it
+  // would fire for every online ONU (~274 entries) and add no actionable value.
 
   return out;
 }

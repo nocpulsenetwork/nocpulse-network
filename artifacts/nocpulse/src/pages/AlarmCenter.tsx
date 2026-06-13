@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { type Alarm, NOC_STAFF, type NocStaff } from '@/data/mockData';
 import { useApiData } from '@/contexts/ApiDataContext';
+import { fetchAlarms, fetchAlarmHistory, acknowledgeAlarm } from '@/lib/api';
 import { PermissionBanner } from '@/components/PermissionBanner';
 import { usePermissions } from '@/lib/permissions';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,7 +12,7 @@ import { formatDistanceToNow } from 'date-fns';
 import {
   XCircle, AlertTriangle, AlertCircle, Info, CheckCircle2, Bell,
   RefreshCw, RotateCcw, ChevronDown, ChevronUp, Clock,
-  User, AlertOctagon, Activity, ShieldCheck, ShieldAlert,
+  User, AlertOctagon, Activity, ShieldCheck, ShieldAlert, History,
 } from 'lucide-react';
 
 const VERIFICATION_DELAY_MS = 8000;
@@ -46,26 +47,76 @@ function shouldResolveOnVerification(alarm: EnrichedAlarm): boolean {
   return true;
 }
 
+function safeTimestamp(ts: string | undefined | null): string {
+  if (!ts) return new Date().toISOString();
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
 function buildInitialHistory(alarm: Alarm): HistoryEntry[] {
+  // Prefer backend history when available
+  if (alarm.backendHistory?.length) {
+    return alarm.backendHistory.map((e, idx) => ({
+      id: e.eventId ?? `${alarm.id}-bh-${idx}`,
+      timestamp: safeTimestamp(e.timestamp),
+      action: e.action,
+      actor: e.actor,
+      note: e.note,
+      type: inferEntryType(e.action),
+    }));
+  }
+  const ts = safeTimestamp(alarm.timestamp);
   const base: HistoryEntry[] = [{
     id: `${alarm.id}-h0`,
-    timestamp: alarm.timestamp,
+    timestamp: ts,
     action: 'Alarm triggered',
     actor: 'System',
     type: 'trigger',
   }];
   if (alarm.acknowledged) {
-    const ackTime = new Date(new Date(alarm.timestamp).getTime() + 900000).toISOString();
-    const vTime = new Date(new Date(alarm.timestamp).getTime() + 908000).toISOString();
-    const rTime = new Date(new Date(alarm.timestamp).getTime() + 916000).toISOString();
+    const base0Ms = new Date(ts).getTime();
+    const ackTime = new Date(base0Ms + 900000).toISOString();
+    const vTime   = new Date(base0Ms + 908000).toISOString();
+    const rTime   = new Date(base0Ms + 916000).toISOString();
     base.push(
       { id: `${alarm.id}-h1`, timestamp: ackTime, action: 'Acknowledged', actor: NOC_STAFF[0].name, actorRole: NOC_STAFF[0].role, type: 'acknowledge' },
-      { id: `${alarm.id}-h2`, timestamp: vTime, action: 'Auto-verification started', actor: 'System', type: 'verify_start' },
-      { id: `${alarm.id}-h3`, timestamp: rTime, action: 'Verification passed — issue confirmed resolved', actor: 'System (Auto-Verify)', type: 'verify_pass' },
+      { id: `${alarm.id}-h2`, timestamp: vTime,   action: 'Auto-verification started', actor: 'System', type: 'verify_start' },
+      { id: `${alarm.id}-h3`, timestamp: rTime,   action: 'Verification passed — issue confirmed resolved', actor: 'System (Auto-Verify)', type: 'verify_pass' },
     );
   }
   return base;
 }
+
+function inferEntryType(action: string): HistoryEntry['type'] {
+  const a = action.toLowerCase();
+  if (a.includes('raised') || a.includes('triggered')) return 'trigger';
+  if (a.includes('acknowledged')) return 'acknowledge';
+  if (a.includes('verify') && a.includes('start')) return 'verify_start';
+  if (a.includes('passed') || a.includes('resolved')) return 'verify_pass';
+  if (a.includes('failed') || a.includes('persists')) return 'verify_fail';
+  if (a.includes('re-open') || a.includes('reopen')) return 'reopen';
+  return 'info';
+}
+
+function toEnriched(a: Alarm): EnrichedAlarm {
+  const vs = (() => {
+    if (a.alarmStatus === 'acknowledged') return 'Verifying';
+    if (a.alarmStatus === 'cleared' || a.acknowledged) return 'Resolved';
+    return 'Active';
+  })() as VerificationStatus;
+  return {
+    ...a,
+    // Normalize timestamp so AlarmCard never receives an invalid date string
+    timestamp: safeTimestamp(a.timestamp),
+    verificationStatus: vs,
+    resolvedBy: vs === 'Resolved' ? NOC_STAFF[0] : undefined,
+    resolvedAt: vs === 'Resolved' ? Date.now() - 3600000 : undefined,
+    reopenCount: a.reopenCount ?? 0,
+    history: buildInitialHistory(a),
+  };
+}
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
 function StaffAvatar({ initials }: { initials: string }) {
   return (
@@ -78,9 +129,9 @@ function StaffAvatar({ initials }: { initials: string }) {
 function SeverityBadge({ severity }: { severity: Alarm['severity'] }) {
   const cls = {
     Critical: 'bg-red-500/10 text-red-400 border-red-500/20',
-    Major: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
-    Minor: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    Info: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+    Major:    'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    Minor:    'bg-blue-500/10 text-blue-400 border-blue-500/20',
+    Info:     'bg-slate-500/10 text-slate-400 border-slate-500/20',
   }[severity];
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${cls}`}>
@@ -119,13 +170,13 @@ function VerifStatusBadge({ status, secondsLeft }: { status: VerificationStatus;
 
 function HistoryEntryIcon({ type }: { type: HistoryEntry['type'] }) {
   const cfg: Record<HistoryEntry['type'], { icon: React.ElementType; cls: string }> = {
-    trigger: { icon: AlertOctagon, cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
-    acknowledge: { icon: CheckCircle2, cls: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' },
-    verify_start: { icon: RefreshCw, cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
-    verify_pass: { icon: ShieldCheck, cls: 'text-green-400 bg-green-500/10 border-green-500/20' },
-    verify_fail: { icon: ShieldAlert, cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
-    reopen: { icon: RotateCcw, cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
-    info: { icon: Info, cls: 'text-slate-400 bg-slate-500/10 border-slate-500/20' },
+    trigger:      { icon: AlertOctagon, cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
+    acknowledge:  { icon: CheckCircle2, cls: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/20' },
+    verify_start: { icon: RefreshCw,    cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
+    verify_pass:  { icon: ShieldCheck,  cls: 'text-green-400 bg-green-500/10 border-green-500/20' },
+    verify_fail:  { icon: ShieldAlert,  cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
+    reopen:       { icon: RotateCcw,    cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
+    info:         { icon: Info,         cls: 'text-slate-400 bg-slate-500/10 border-slate-500/20' },
   };
   const { icon: Icon, cls } = cfg[type];
   return (
@@ -173,11 +224,14 @@ function AlarmCard({
     ? Math.min(100, Math.max(0, ((VERIFICATION_DELAY_MS - (alarm.verificationDeadline - Date.now())) / VERIFICATION_DELAY_MS) * 100))
     : 0;
 
+  // Suppress tick warning
+  void tick;
+
   const severityStyles = {
-    Critical: { border: 'border-l-red-500', bg: isActionable ? 'bg-red-500/5' : 'bg-card/50', icon: XCircle, iconColor: 'text-red-400' },
-    Major: { border: 'border-l-amber-500', bg: isActionable ? 'bg-amber-500/5' : 'bg-card/50', icon: AlertTriangle, iconColor: 'text-amber-400' },
-    Minor: { border: 'border-l-blue-500', bg: isActionable ? 'bg-blue-500/5' : 'bg-card/50', icon: AlertCircle, iconColor: 'text-blue-400' },
-    Info: { border: 'border-l-slate-500', bg: 'bg-card/50', icon: Info, iconColor: 'text-slate-400' },
+    Critical: { border: 'border-l-red-500',   bg: isActionable ? 'bg-red-500/5'    : 'bg-card/50', icon: XCircle,       iconColor: 'text-red-400' },
+    Major:    { border: 'border-l-amber-500',  bg: isActionable ? 'bg-amber-500/5'  : 'bg-card/50', icon: AlertTriangle, iconColor: 'text-amber-400' },
+    Minor:    { border: 'border-l-blue-500',   bg: isActionable ? 'bg-blue-500/5'   : 'bg-card/50', icon: AlertCircle,   iconColor: 'text-blue-400' },
+    Info:     { border: 'border-l-slate-500',  bg: 'bg-card/50',                                    icon: Info,          iconColor: 'text-slate-400' },
   };
   const sty = severityStyles[alarm.severity];
   const SevIcon = sty.icon;
@@ -203,9 +257,10 @@ function AlarmCard({
             <SevIcon className={`h-4 w-4 shrink-0 mt-0.5 ${sty.iconColor}`} />
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className={`font-semibold text-sm ${deviceHref ? 'group-hover:text-primary' : ''}`}>
-                  {alarm.deviceName}
-                </span>
+                <span className="font-semibold text-sm">{alarm.deviceName}</span>
+                {alarm.alarmTitle && (
+                  <span className="text-xs text-muted-foreground font-medium">{alarm.alarmTitle}</span>
+                )}
                 <SeverityBadge severity={alarm.severity} />
                 <VerifStatusBadge status={alarm.verificationStatus} secondsLeft={secondsLeft} />
                 {alarm.reopenCount > 0 && (
@@ -331,9 +386,7 @@ function AlarmCard({
         {alarm.verificationStatus === 'Resolved' && alarm.resolvedBy && (
           <div className="ml-7 flex items-center gap-2">
             <ShieldCheck className="h-3.5 w-3.5 text-green-400 shrink-0" />
-            <span className="text-[11px] text-green-400">
-              Verified clear by system
-            </span>
+            <span className="text-[11px] text-green-400">Verified clear by system</span>
             <span className="text-[11px] text-muted-foreground">·</span>
             <StaffAvatar initials={alarm.resolvedBy.initials} />
             <span className="text-[11px] text-muted-foreground">
@@ -352,6 +405,12 @@ function AlarmCard({
             <>
               <span>·</span>
               <span className="text-red-400 font-medium">{alarm.reopenCount} reopen{alarm.reopenCount > 1 ? 's' : ''}</span>
+            </>
+          )}
+          {alarm.clearedAt && (
+            <>
+              <span>·</span>
+              <span className="text-green-400">Cleared {formatDistanceToNow(new Date(alarm.clearedAt), { addSuffix: true })}</span>
             </>
           )}
         </div>
@@ -383,9 +442,9 @@ function AlarmCard({
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    {entry.actor !== 'System' && entry.actor !== 'System (Auto-Verify)' && (
+                    {entry.actor !== 'System' && entry.actor !== 'System (Auto-Verify)' && entry.actor !== 'System (Auto-clear)' && (
                       <span className="h-4 w-4 rounded-full bg-primary/20 text-[8px] font-bold text-primary flex items-center justify-center">
-                        {entry.actor.split(' ').map(w => w[0]).join('').slice(0, 2)}
+                        {entry.actor.split(' ').map((w: string) => w[0]).join('').slice(0, 2)}
                       </span>
                     )}
                     <span className="text-[10px] text-muted-foreground font-medium">{entry.actor}</span>
@@ -417,31 +476,61 @@ function EmptyState({ icon: Icon, message }: { icon: React.ElementType; message:
   );
 }
 
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 export default function AlarmCenter() {
   const { can } = usePermissions();
   const { alarms: apiAlarms } = useApiData();
   const [tick, setTick] = useState(0);
-  const [enriched, setEnriched] = useState<EnrichedAlarm[]>(() =>
-    apiAlarms.map(a => ({
-      ...a,
-      verificationStatus: (a.acknowledged ? 'Resolved' : 'Active') as VerificationStatus,
-      resolvedBy: a.acknowledged ? NOC_STAFF[0] : undefined,
-      resolvedAt: a.acknowledged ? Date.now() - 3600000 : undefined,
-      reopenCount: 0,
-      history: buildInitialHistory(a),
-    }))
-  );
-  useEffect(() => {
-    setEnriched(apiAlarms.map(a => ({
-      ...a,
-      verificationStatus: (a.acknowledged ? 'Resolved' : 'Active') as VerificationStatus,
-      resolvedBy: a.acknowledged ? NOC_STAFF[0] : undefined,
-      resolvedAt: a.acknowledged ? Date.now() - 3600000 : undefined,
-      reopenCount: 0,
-      history: buildInitialHistory(a),
-    })));
-  }, [apiAlarms]);
 
+  // Local enriched state — updated from apiAlarms and direct refreshes
+  const [enriched, setEnriched] = useState<EnrichedAlarm[]>([]);
+  // History (cleared alarms) — loaded once and refreshed every 30s
+  const [historyAlarms, setHistoryAlarms] = useState<Alarm[]>([]);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Convert Alarm[] → EnrichedAlarm[], preserving any local verification state
+  const mergeEnriched = useCallback((incoming: Alarm[]) => {
+    setEnriched(prev => {
+      const prevById = new Map(prev.map(a => [a.id, a]));
+      return incoming.map(a => {
+        const existing = prevById.get(a.id);
+        // Keep verification state if alarm is actively being verified (in-flight)
+        if (existing && (existing.verificationStatus === 'Verifying' || existing.verificationStatus === 'Re-opened')) {
+          return { ...existing, severity: a.severity, description: a.description };
+        }
+        return toEnriched(a);
+      });
+    });
+  }, []);
+
+  // Initial sync from context
+  useEffect(() => {
+    if (apiAlarms.length > 0) mergeEnriched(apiAlarms);
+  }, [apiAlarms, mergeEnriched]);
+
+  // Direct refresh — called periodically and on manual refresh button
+  const doRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const [live, hist] = await Promise.allSettled([fetchAlarms(), fetchAlarmHistory()]);
+      if (live.status === 'fulfilled') mergeEnriched(live.value);
+      if (hist.status === 'fulfilled') setHistoryAlarms(hist.value);
+      setLastRefresh(new Date());
+    } finally {
+      setRefreshing(false);
+    }
+  }, [mergeEnriched]);
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    doRefresh();
+    const interval = setInterval(doRefresh, 30_000);
+    return () => clearInterval(interval);
+  }, [doRefresh]);
+
+  // 1-second timer for verification progress
   useEffect(() => {
     const timer = setInterval(() => {
       setTick(t => t + 1);
@@ -466,13 +555,7 @@ export default function AlarmCenter() {
               verificationDeadline: undefined,
               history: [
                 ...alarm.history,
-                {
-                  id: `${alarm.id}-vpass-${now}`,
-                  timestamp: nowIso,
-                  action: 'Verification passed — issue confirmed resolved',
-                  actor: 'System (Auto-Verify)',
-                  type: 'verify_pass' as const,
-                },
+                { id: `${alarm.id}-vpass-${now}`, timestamp: nowIso, action: 'Verification passed — issue confirmed resolved', actor: 'System (Auto-Verify)', type: 'verify_pass' as const },
               ],
             };
           } else {
@@ -484,31 +567,19 @@ export default function AlarmCenter() {
               reopenCount: alarm.reopenCount + 1,
               history: [
                 ...alarm.history,
-                {
-                  id: `${alarm.id}-vfail-${now}`,
-                  timestamp: nowIso,
-                  action: 'Verification failed — issue still detected by system',
-                  actor: 'System (Auto-Verify)',
-                  type: 'verify_fail' as const,
-                },
-                {
-                  id: `${alarm.id}-reopen-${now}`,
-                  timestamp: nowIso,
-                  action: `Alarm re-opened (occurrence ${alarm.reopenCount + 1})`,
-                  actor: 'System',
-                  type: 'reopen' as const,
-                },
+                { id: `${alarm.id}-vfail-${now}`, timestamp: nowIso, action: 'Verification failed — issue still detected by system', actor: 'System (Auto-Verify)', type: 'verify_fail' as const },
+                { id: `${alarm.id}-reopen-${now}`, timestamp: nowIso, action: `Alarm re-opened (occurrence ${alarm.reopenCount + 1})`, actor: 'System', type: 'reopen' as const },
               ],
             };
           }
         });
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, []);
 
-  const handleAcknowledge = (id: string, staffId: string) => {
+  // Acknowledge — updates local state immediately AND calls backend
+  const handleAcknowledge = useCallback((id: string, staffId: string) => {
     const staff = NOC_STAFF.find(s => s.id === staffId) ?? NOC_STAFF[0];
     const deadline = Date.now() + VERIFICATION_DELAY_MS;
     const nowIso = new Date().toISOString();
@@ -524,25 +595,17 @@ export default function AlarmCenter() {
         verificationDeadline: deadline,
         history: [
           ...a.history,
-          {
-            id: `${a.id}-ack-${Date.now()}`,
-            timestamp: nowIso,
-            action: 'Acknowledged',
-            actor: staff.name,
-            actorRole: staff.role,
-            type: 'acknowledge' as const,
-          },
-          {
-            id: `${a.id}-vs-${Date.now()}`,
-            timestamp: nowIso,
-            action: `Auto-verification scheduled in ${VERIFICATION_DELAY_MS / 1000}s`,
-            actor: 'System',
-            type: 'verify_start' as const,
-          },
+          { id: `${a.id}-ack-${Date.now()}`, timestamp: nowIso, action: 'Acknowledged', actor: staff.name, actorRole: staff.role, type: 'acknowledge' as const },
+          { id: `${a.id}-vs-${Date.now()}`, timestamp: nowIso, action: `Auto-verification scheduled in ${VERIFICATION_DELAY_MS / 1000}s`, actor: 'System', type: 'verify_start' as const },
         ],
       };
     }));
-  };
+
+    // Fire-and-forget to backend — UI is already updated optimistically
+    acknowledgeAlarm(id, staff.name).catch(() => {
+      // If backend fails, the next 30s refresh will re-sync state
+    });
+  }, []);
 
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
   const markViewed = (id: string) => setViewedIds(prev => new Set([...prev, id]));
@@ -555,26 +618,27 @@ export default function AlarmCenter() {
   const bySev = (arr: EnrichedAlarm[]) =>
     severityFilter === 'All' ? arr : arr.filter(a => a.severity === severityFilter);
 
-  const active = enriched.filter(a => a.verificationStatus === 'Active' || a.verificationStatus === 'Re-opened');
-  const verifying = enriched.filter(a => a.verificationStatus === 'Verifying');
-  const resolved = enriched.filter(a => a.verificationStatus === 'Resolved');
-  const inProgressCount = verifying.length;
+  const active      = enriched.filter(a => a.verificationStatus === 'Active' || a.verificationStatus === 'Re-opened');
+  const verifying   = enriched.filter(a => a.verificationStatus === 'Verifying');
+  const resolved    = enriched.filter(a => a.verificationStatus === 'Resolved');
 
   const criticalCount = active.filter(a => a.severity === 'Critical').length;
-  const majorCount = active.filter(a => a.severity === 'Major').length;
-  const minorCount = active.filter(a => a.severity === 'Minor').length;
-  const infoCount = enriched.filter(a => a.severity === 'Info').length;
+  const majorCount    = active.filter(a => a.severity === 'Major').length;
+  const minorCount    = active.filter(a => a.severity === 'Minor').length;
+  const infoCount     = enriched.filter(a => a.severity === 'Info').length;
   const reopenedCount = active.filter(a => a.verificationStatus === 'Re-opened').length;
 
   const allActiveAndVerifying = [...active, ...verifying];
 
-  // Sorted + filtered display slices
   const displayAll      = bySev(sortByTime(allActiveAndVerifying));
   const displayCritical = sortByTime(allActiveAndVerifying).filter(a => a.severity === 'Critical');
   const displayWarning  = sortByTime(allActiveAndVerifying).filter(a => a.severity === 'Major' || a.severity === 'Minor');
   const displayVerify   = bySev(sortByTime(verifying));
   const displayInfo     = sortByTime(enriched.filter(a => a.severity === 'Info'));
   const displayResolved = bySev(sortByTime(resolved));
+
+  // History tab (backend-cleared alarms)
+  const historyEnriched = historyAlarms.map(toEnriched);
 
   return (
     <div className="space-y-6 max-w-5xl">
@@ -583,12 +647,24 @@ export default function AlarmCenter() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Alarm Center</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Enterprise NOC alarm management with automated verification
+            Real-time NOC alarm management with automated verification
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 border border-border/60 rounded-lg px-3 py-2">
-          <RefreshCw className="h-3 w-3" />
-          Auto-verify: {VERIFICATION_DELAY_MS / 1000}s after acknowledgement
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={doRefresh}
+            disabled={refreshing}
+            className="gap-1.5 text-xs h-8"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </Button>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/30 border border-border/60 rounded-lg px-3 py-2">
+            <Clock className="h-3 w-3" />
+            {lastRefresh ? `Updated ${formatDistanceToNow(lastRefresh, { addSuffix: true })}` : 'Loading…'}
+          </div>
         </div>
       </div>
 
@@ -628,6 +704,12 @@ export default function AlarmCenter() {
           <ShieldCheck className="h-3.5 w-3.5 text-green-400" />
           <span className="text-xs font-semibold text-green-400">{resolved.length} Resolved</span>
         </div>
+        {historyAlarms.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/30 border border-border/40">
+            <History className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-semibold text-muted-foreground">{historyAlarms.length} History</span>
+          </div>
+        )}
       </div>
 
       {/* Severity filter bar */}
@@ -661,12 +743,13 @@ export default function AlarmCenter() {
       <Tabs defaultValue="all" className="w-full">
         <TabsList className="bg-transparent border-b border-border/60 rounded-none h-auto p-0 gap-0 w-full justify-start mb-6">
           {[
-            { value: 'all', label: 'All Active', count: allActiveAndVerifying.length, countCls: 'bg-primary/15 text-primary', activeBorder: 'data-[state=active]:border-primary' },
-            { value: 'critical', label: 'Critical', count: criticalCount, countCls: 'bg-red-500/20 text-red-400', activeBorder: 'data-[state=active]:border-red-500' },
-            { value: 'warning', label: 'Warning', count: majorCount + minorCount, countCls: 'bg-amber-500/20 text-amber-400', activeBorder: 'data-[state=active]:border-amber-500' },
-            { value: 'inprogress', label: 'In Progress', count: inProgressCount, countCls: 'bg-amber-500/20 text-amber-400', activeBorder: 'data-[state=active]:border-amber-400' },
-            { value: 'info', label: 'Info', count: infoCount, countCls: 'bg-slate-500/20 text-slate-400', activeBorder: 'data-[state=active]:border-slate-400' },
-            { value: 'solved', label: 'Solved', count: resolved.length, countCls: 'bg-green-500/15 text-green-400', activeBorder: 'data-[state=active]:border-green-500' },
+            { value: 'all',        label: 'All Active', count: allActiveAndVerifying.length, countCls: 'bg-primary/15 text-primary',       activeBorder: 'data-[state=active]:border-primary' },
+            { value: 'critical',   label: 'Critical',   count: criticalCount,                 countCls: 'bg-red-500/20 text-red-400',        activeBorder: 'data-[state=active]:border-red-500' },
+            { value: 'warning',    label: 'Warning',    count: majorCount + minorCount,        countCls: 'bg-amber-500/20 text-amber-400',    activeBorder: 'data-[state=active]:border-amber-500' },
+            { value: 'inprogress', label: 'In Progress', count: verifying.length,             countCls: 'bg-amber-500/20 text-amber-400',    activeBorder: 'data-[state=active]:border-amber-400' },
+            { value: 'info',       label: 'Info',       count: infoCount,                     countCls: 'bg-slate-500/20 text-slate-400',    activeBorder: 'data-[state=active]:border-slate-400' },
+            { value: 'solved',     label: 'Solved',     count: resolved.length,               countCls: 'bg-green-500/15 text-green-400',    activeBorder: 'data-[state=active]:border-green-500' },
+            { value: 'history',    label: 'History',    count: historyAlarms.length,           countCls: 'bg-muted/50 text-muted-foreground', activeBorder: 'data-[state=active]:border-muted-foreground' },
           ].map(tab => (
             <TabsTrigger
               key={tab.value}
@@ -744,7 +827,7 @@ export default function AlarmCenter() {
           )}
         </TabsContent>
 
-        {/* SOLVED */}
+        {/* SOLVED (local verification only) */}
         <TabsContent value="solved" className="space-y-3 m-0">
           {displayResolved.length === 0 ? (
             <EmptyState icon={Activity} message={severityFilter !== 'All' ? `No resolved ${severityFilter} alarms` : 'No solved alarms yet'} />
@@ -755,6 +838,23 @@ export default function AlarmCenter() {
                 {displayResolved.length} alarm{displayResolved.length > 1 ? 's' : ''} verified and solved — all passed auto-verification check
               </div>
               {displayResolved.map(alarm => (
+                <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* HISTORY (backend-cleared alarms) */}
+        <TabsContent value="history" className="space-y-3 m-0">
+          {historyEnriched.length === 0 ? (
+            <EmptyState icon={History} message="No cleared alarms in history — history grows as alarms are auto-cleared by the system" />
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/20 border border-border/40 text-[11px] text-muted-foreground">
+                <History className="h-3.5 w-3.5" />
+                {historyEnriched.length} cleared alarm{historyEnriched.length > 1 ? 's' : ''} — conditions that no longer exist in the live network snapshot
+              </div>
+              {historyEnriched.map(alarm => (
                 <AlarmCard key={alarm.id} alarm={alarm} tick={tick} viewed={viewedIds.has(alarm.id)} onView={() => markViewed(alarm.id)} />
               ))}
             </div>
