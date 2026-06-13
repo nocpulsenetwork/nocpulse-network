@@ -1,8 +1,8 @@
 /**
  * Alarm API Routes — mounted at /api/alarms
  *
- * All responses are derived from live snapshot-store data fed through the
- * alarm detector and reconciled by AlarmStore. No mock data, no DB.
+ * Single source of truth: all alarm data flows from the same live caches
+ * that the OLT/ONU discovery and health-poll endpoints write to.
  *
  * ─── Endpoints ────────────────────────────────────────────────────────────────
  *   GET    /api/alarms                     active + acknowledged alarms
@@ -13,68 +13,75 @@
  *   POST   /api/alarms/:id/acknowledge     acknowledge alarm (by: string in body)
  *   POST   /api/alarms/:id/clear           manually clear alarm (NOC override)
  *
+ * ─── Data sources ─────────────────────────────────────────────────────────────
+ *   OLTs → oltHealthCache (keyed by OLT ID) from POST /api/olts/poll-health
+ *   ONUs → onuDiscoveryCache (keyed by OLT ID) from POST /api/olts/discover-onus
+ *   These are the SAME caches that /api/olts/:id/health and /api/olts/:id/onus/real use.
+ *   No snapshot stores, no polling engine, no mock data.
+ *
  * ─── Reconcile strategy ──────────────────────────────────────────────────────
- *   Each GET request runs reconcile() before returning data. This is safe:
- *   reconcile reads from snapshot stores (in-memory, O(n)) and never writes SNMP.
+ *   Each GET request runs reconcile() before returning data.
+ *   reconcile reads from in-memory Maps (O(n)) and never writes SNMP.
  *   Cost: ~1 ms for hundreds of ONUs.
  *
- * ─── Data sources ─────────────────────────────────────────────────────────────
- *   OLTs → oltDetailStore (keyed by oltId) or oltListStore ("all")
- *   ONUs → onuListStore   (keyed by oltId) or onuListStore ("all")
- *   If no snapshot data exists yet (no poll has run), returns empty arrays with
- *   source: "no-data" so the frontend shows an empty-but-honest alarm list.
+ * ─── ONU offline alarm grouping ───────────────────────────────────────────────
+ *   ONE alarm per OLT for offline ONUs, never one per ONU.
+ *   e.g. "CDATA-01: 213 ONUs Offline" — avoids flooding the alarm center.
+ *   Individual threshold alarms (RX power, temperature) are still raised per ONU.
  */
 
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { alarmStore } from "../core/alarm-store";
-import { detectAllAlarms } from "../services/alarm-detector";
 import {
-  oltListStore,
-  oltDetailStore,
-  onuListStore,
-} from "../core/snapshot-store";
-import type { UniversalOLT, UniversalONU, ApiError } from "../types/universal.types";
+  detectOltHealthAlarms,
+  detectOnuGroupAlarms,
+} from "../services/alarm-detector";
+import {
+  onuDiscoveryCache,
+  oltHealthCache,
+  oltConnectionCache,
+} from "./olt.routes";
+import type { ApiError } from "../types/universal.types";
+import type { DetectedAlarm } from "../services/alarm-detector";
 
 export const alarmRouter = Router();
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Collect current OLT + ONU data from all snapshot stores. */
-function getLiveData(): { olts: UniversalOLT[]; onus: UniversalONU[] } {
-  // OLTs — try the list store first, fall back to individual detail entries.
-  let olts: UniversalOLT[] = [];
-  const listSnap = oltListStore.read("all");
-  if (listSnap?.data.length) {
-    olts = listSnap.data;
-  } else {
-    for (const key of oltDetailStore.keys()) {
-      const s = oltDetailStore.read(key);
-      if (s?.data) olts.push(s.data);
+/**
+ * Derive alarms from the live discovery + health caches.
+ * This is the single source of truth — same data the frontend OLT/ONU
+ * endpoints serve. If no discovery has been run yet, returns [].
+ */
+function detectFromLiveCaches(): DetectedAlarm[] {
+  const alarms: DetectedAlarm[] = [];
+  const now = Date.now();
+
+  for (const [oltId, conn] of oltConnectionCache.entries()) {
+    // ── OLT health alarms (temp / CPU / mem) ──────────────────────────────
+    const healthEntry = oltHealthCache.get(oltId);
+    if (healthEntry && now < healthEntry.expiresAt) {
+      alarms.push(...detectOltHealthAlarms(oltId, conn.ip, healthEntry.result));
+    }
+
+    // ── ONU grouped offline + individual threshold alarms ─────────────────
+    const discovery = onuDiscoveryCache.get(oltId);
+    if (discovery?.hasData) {
+      // Use the OLT's sysName (if captured at discovery) as the label.
+      // Falls back to the OLT ID so the alarm is always human-readable.
+      const oltLabel = discovery.sysName?.trim() || oltId;
+      alarms.push(...detectOnuGroupAlarms(oltId, oltLabel, discovery));
     }
   }
 
-  // ONUs — try the "all" key first, then per-OLT slices.
-  let onus: UniversalONU[] = [];
-  const onuAllSnap = onuListStore.read("all");
-  if (onuAllSnap?.data.length) {
-    onus = onuAllSnap.data;
-  } else {
-    for (const key of onuListStore.keys()) {
-      if (key === "all") continue;
-      const s = onuListStore.read(key);
-      if (s?.data?.length) onus = onus.concat(s.data);
-    }
-  }
-
-  return { olts, onus };
+  return alarms;
 }
 
-/** Run alarm detection + reconcile. Safe to call on every request. */
+/** Run alarm detection + reconcile against the alarm store. Safe to call on every request. */
 function runReconcile(): boolean {
-  const { olts, onus } = getLiveData();
-  if (olts.length === 0 && onus.length === 0) return false; // no data yet
-  const detected = detectAllAlarms(olts, onus);
+  if (oltConnectionCache.size === 0) return false; // no managed OLTs yet
+  const detected = detectFromLiveCaches();
   alarmStore.reconcile(detected);
   return true;
 }

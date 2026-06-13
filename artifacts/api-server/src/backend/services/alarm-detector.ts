@@ -14,6 +14,8 @@
  */
 
 import type { UniversalOLT, UniversalONU, AlarmType } from "../types/universal.types";
+import type { OltHealthResult } from "../snmp/real-snmp-client";
+import type { OnuDiscoveryResult } from "../types/onu-discovery.types";
 
 // ─── Thresholds ────────────────────────────────────────────────────────────
 
@@ -245,4 +247,162 @@ export function detectAlarmsForOnu(
   const onu = onus.find((o) => o.id === onuId);
   if (!onu) return [];
   return detectOnuAlarms(onu);
+}
+
+// ─── Live-cache based detection (single source of truth) ───────────────────
+//
+// These functions work directly with the OLT health cache and ONU discovery
+// cache data from olt.routes.ts. They are the PRIMARY detection path and
+// replace the UniversalOLT/ONU path for real devices.
+//
+// ONU offline alarms are GROUPED by OLT (one alarm per OLT, not per ONU)
+// to avoid flooding 213+ individual alarms when a fiber cut occurs.
+
+/**
+ * Detect OLT health alarms (temperature, CPU, memory) from a fresh health poll.
+ * Does NOT create an "OLT offline" alarm — that requires a dedicated failed-poll
+ * signal which is not in scope (no OLT health modification allowed).
+ */
+export function detectOltHealthAlarms(
+  oltId: string,
+  ip: string,
+  health: OltHealthResult,
+): DetectedAlarm[] {
+  const out: DetectedAlarm[] = [];
+  const base = {
+    oltId,
+    onuId: null,
+    deviceName: oltId,
+    source: "read-only" as const,
+    createdAt: health.polledAt,
+  };
+
+  if (health.temperatureC !== null) {
+    if (health.temperatureC > OLT_TEMP_CRIT_C) {
+      out.push({
+        ...base,
+        id: `olt-${oltId}-high-temp`,
+        type: "high-temp" as AlarmType,
+        severity: "critical" as const,
+        title: "OLT Critical Temperature",
+        message: `OLT ${ip} chassis is at ${health.temperatureC}°C — above critical threshold of ${OLT_TEMP_CRIT_C}°C. Check rack airflow.`,
+      });
+    } else if (health.temperatureC > OLT_TEMP_WARN_C) {
+      out.push({
+        ...base,
+        id: `olt-${oltId}-high-temp`,
+        type: "high-temp" as AlarmType,
+        severity: "warning" as const,
+        title: "OLT High Temperature",
+        message: `OLT ${ip} chassis is at ${health.temperatureC}°C — above warning threshold of ${OLT_TEMP_WARN_C}°C.`,
+      });
+    }
+  }
+
+  if (health.cpuPct !== null && health.cpuPct >= CPU_OVERLOAD_PCT) {
+    out.push({
+      ...base,
+      id: `olt-${oltId}-cpu-overload`,
+      type: "cpu-overload" as AlarmType,
+      severity: "warning" as const,
+      title: "OLT CPU Overload",
+      message: `OLT ${ip} CPU usage is ${health.cpuPct}%, above the ${CPU_OVERLOAD_PCT}% threshold.`,
+    });
+  }
+
+  if (health.memPct !== null && health.memPct >= MEM_OVERLOAD_PCT) {
+    out.push({
+      ...base,
+      id: `olt-${oltId}-mem-overload`,
+      type: "mem-overload" as AlarmType,
+      severity: "warning" as const,
+      title: "OLT Memory Overload",
+      message: `OLT ${ip} memory usage is ${health.memPct}%, above the ${MEM_OVERLOAD_PCT}% threshold.`,
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Detect ONU alarms from a discovery result.
+ *
+ * Offline alarm strategy — ONE grouped alarm per OLT (never one per ONU):
+ *   "CDATA-01: 213 ONUs Offline (42 online, 255 total)"
+ *
+ * Individual threshold alarms (RX power, temperature) are still raised
+ * per ONU since they are actionable and don't cause flooding.
+ */
+export function detectOnuGroupAlarms(
+  oltId: string,
+  oltLabel: string,
+  discovery: OnuDiscoveryResult,
+): DetectedAlarm[] {
+  const out: DetectedAlarm[] = [];
+  const ts = discovery.discoveredAt;
+
+  // ── Grouped offline alarm (ONE per OLT, not per ONU) ──────────────────
+  if (discovery.offlineOnus > 0) {
+    const count = discovery.offlineOnus;
+    out.push({
+      id: `olt-${oltId}-onus-offline`,
+      oltId,
+      onuId: null,
+      deviceName: oltLabel,
+      type: "link-down" as AlarmType,
+      severity: "critical" as const,
+      title: `${count} ONU${count > 1 ? "s" : ""} Offline`,
+      message: `${oltLabel}: ${count} ONU${count > 1 ? "s" : ""} offline out of ${discovery.totalOnus} total (${discovery.onlineOnus} online).`,
+      createdAt: ts,
+      source: "read-only",
+    });
+  }
+
+  // ── Individual threshold alarms (RX power, temperature) ───────────────
+  for (const onu of discovery.onus) {
+    const label = onu.name ?? onu.serial ?? `ONU ${onu.ponPort}/${onu.onuId}`;
+    const onuFullId = `${oltId}-${onu.ponPort}-${onu.onuId}`;
+    const base = {
+      oltId,
+      onuId: onuFullId,
+      deviceName: label,
+      source: "read-only" as const,
+      createdAt: ts,
+    };
+
+    if (onu.rxPowerDbm !== null) {
+      if (onu.rxPowerDbm < RX_POWER_CRIT_DBM) {
+        out.push({
+          ...base,
+          id: `onu-${onuFullId}-low-rx-power`,
+          type: "low-rx-power" as AlarmType,
+          severity: "critical" as const,
+          title: "ONU RX Power Critical",
+          message: `${label} RX power is ${onu.rxPowerDbm} dBm, below critical threshold of ${RX_POWER_CRIT_DBM} dBm.`,
+        });
+      } else if (onu.rxPowerDbm < RX_POWER_WARN_DBM) {
+        out.push({
+          ...base,
+          id: `onu-${onuFullId}-low-rx-power`,
+          type: "low-rx-power" as AlarmType,
+          severity: "warning" as const,
+          title: "ONU RX Power Low",
+          message: `${label} RX power is ${onu.rxPowerDbm} dBm, below warning threshold of ${RX_POWER_WARN_DBM} dBm.`,
+        });
+      }
+    }
+
+    if (onu.temperatureCelsius !== null && onu.temperatureCelsius > ONU_TEMP_WARN_C) {
+      out.push({
+        ...base,
+        id: `onu-${onuFullId}-high-temp`,
+        type: "high-temp" as AlarmType,
+        severity: "warning" as const,
+        title: "ONU High Temperature",
+        message: `${label} transceiver temperature is ${onu.temperatureCelsius}°C, above the ${ONU_TEMP_WARN_C}°C threshold.`,
+      });
+    }
+  }
+
+  return out;
 }

@@ -1,0 +1,84 @@
+PHASE 12 COMPLETION FIX – Alarm Engine Validation
+
+Current Problem:
+Dashboard, Notification Badge, Alarm Center, and Alarm Engine are not synchronized.
+
+Observed Issues:
+- Notification badge shows 5 alarms.
+- Sidebar alarm badge shows 5 alarms.
+- Dashboard Active Alarms shows 0.
+- Alarm Center shows no active alarms.
+- History shows empty.
+- Dashboard reports:
+    Offline OLTs = 1
+    Offline ONUs = 213
+  but no alarms are generated.
+
+Requirements:
+
+1. Single Source of Truth
+- Create one alarm store/service.
+- Dashboard, Notification Badge, Sidebar Badge, Alarm Center, and History must use the same data source.
+
+2. Dashboard Sync
+- Active Alarms count = total active alarms.
+- Critical count = active critical alarms.
+- Major count = active warning alarms.
+- Do not hardcode values.
+
+3. Notification Sync
+- Notification badge count must equal active alarms count.
+- Sidebar badge count must equal active alarms count.
+
+4. OLT Offline Alarm Validation
+- If OLT status is Offline:
+    create ONE active OLT offline alarm.
+- No duplicates.
+- If OLT becomes Online:
+    clear the alarm automatically.
+
+5. ONU Offline Alarm Validation
+- Generate alarms only from existing real offline ONU data.
+- Avoid flooding:
+    Group by OLT.
+    Example:
+    "CDATA-01: 213 ONUs Offline"
+
+6. History Validation
+- Cleared alarms move to History.
+- History must not be empty after alarms resolve.
+
+7. Duplicate Protection
+- Same device + same alarm type = only one active alarm.
+
+8. Remove Fake Badge Counts
+- Do not display badge counts that do not exist in alarm engine.
+
+STRICT RULES:
+- No new SNMP OIDs.
+- No discovery modifications.
+- No RX/TX modifications.
+- No OLT health modifications.
+- Read-only only.
+- Keep PM2 compatibility.
+- Minimal safe changes only.
+
+Acceptance Tests:
+
+✓ Dashboard Active Alarm count = Alarm Center Active count
+
+✓ Notification Badge = Alarm Center Active count
+
+✓ Sidebar Badge = Alarm Center Active count
+
+✓ Offline OLT generates one alarm
+
+✓ Offline OLT recovery clears alarm
+
+✓ Offline ONU alarms generated correctly
+
+✓ History populated after alarms clear
+
+✓ No duplicate alarms
+
+Only after all tests pass, mark Phase 12 Complete.

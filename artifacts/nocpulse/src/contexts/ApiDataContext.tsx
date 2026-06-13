@@ -2,17 +2,21 @@
  * ApiDataContext — provides fetched backend data app-wide.
  *
  * Rules:
- *  - Single fetch on mount via Promise.all; no intervals, no background refresh
+ *  - Single fetch on mount via Promise.all; no intervals for OLTs/ONUs
+ *  - Alarms refresh every 30 s so badges/counts stay in sync with AlarmCenter
  *  - Starts with mock data synchronously so pages never render empty
  *  - On API success: replaces data with live backend data
  *  - On API failure: keeps mock data, sets error for debugging
- *  - CPU safe: one effect, no timers, no polling loops
  *
  * Real OLT support:
  *  - Reads managed OLTs from localStorage (written by OltDetail when user adds a real OLT)
  *  - For each managed OLT, fetches cached real ONU discovery data from the backend
  *  - Merges real OLTs and real ONUs into the unified olts/onus arrays
  *  - All consumers (OnuManagement, OnuDetail, search, dropdowns) automatically see real data
+ *
+ * Single source of truth for alarm counts:
+ *  - Alarm counts come from /api/alarms (same endpoint AlarmCenter uses)
+ *  - Badge, sidebar badge, and Dashboard Active Alarms all derive from the same fetch
  */
 import {
   createContext,
@@ -207,6 +211,17 @@ export type ApiDataContextValue = ApiDataState & {
   refreshRealOnus: (oltId: string) => Promise<void>;
 };
 
+/**
+ * Alarm is "active" when:
+ *  - Backend Alarm: alarmStatus === "active"
+ *  - Legacy/mock Alarm: !acknowledged (no alarmStatus field)
+ * An acknowledged alarm is NOT counted as active (NOC has seen it).
+ */
+function isActiveAlarm(a: Alarm): boolean {
+  if (a.alarmStatus !== undefined) return a.alarmStatus === "active";
+  return !a.acknowledged;
+}
+
 function buildMetrics(
   olts: OltDevice[],
   onus: OnuDevice[],
@@ -218,16 +233,15 @@ function buildMetrics(
     totalOlts > 0
       ? Math.round((onlineOlts / totalOlts) * 1000) / 10
       : null;
+  const activeAlarms = alarms.filter(isActiveAlarm);
   return {
     totalOlts,
     totalOnus: onus.length,
     onlineOnus: onus.filter((o) => o.status === "Online").length,
     offlineOnus: onus.filter((o) => o.status === "Offline").length,
     offlineOlts: olts.filter((o) => o.status === "Offline").length,
-    activeAlarms: alarms.filter((a) => !a.acknowledged).length,
-    criticalAlarms: alarms.filter(
-      (a) => a.severity === "Critical" && !a.acknowledged
-    ).length,
+    activeAlarms: activeAlarms.length,
+    criticalAlarms: activeAlarms.filter((a) => a.severity === "Critical").length,
     networkUptime,
     bandwidthUsage: "42.5 Tbps",
   };
@@ -248,6 +262,7 @@ export function ApiDataProvider({ children }: { children: ReactNode }) {
     source: "mock",
   });
 
+  // ── Initial fetch: OLTs, ONUs, alarms ─────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
 
@@ -308,6 +323,29 @@ export function ApiDataProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearTimeout(safetyTimer);
     };
+  }, []);
+
+  // ── Alarm refresh every 30 s (single source of truth for all badge counts) ─
+  // Dashboard, notification badge, sidebar badge all read from context.alarms.
+  // AlarmCenter has its own 30 s refresh loop that calls the same endpoint.
+  // Both stay in sync because they hit the same /api/alarms endpoint which
+  // runs reconcile() on every request.
+  useEffect(() => {
+    const tick = async () => {
+      try {
+        const fresh = await fetchAlarms();
+        setState((prev) => ({
+          ...prev,
+          alarms: fresh,
+          metrics: buildMetrics(prev.olts, prev.onus, fresh),
+        }));
+      } catch {
+        // Silently keep existing alarm data on refresh failure.
+      }
+    };
+
+    const id = setInterval(() => { void tick(); }, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   const refreshRealOnus = useCallback(async (oltId: string): Promise<void> => {

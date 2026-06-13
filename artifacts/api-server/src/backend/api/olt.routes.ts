@@ -1200,3 +1200,9 @@ oltRouter.post("/:id/refresh", (req: Request, res: Response) => {
   };
   res.json(body);
 });
+
+// ─── Shared cache exports ──────────────────────────────────────────────────
+// Consumed by alarm.routes.ts so alarm detection reads the same live data
+// that the OLT/ONU discovery and health-poll endpoints serve.
+// Only these three route handlers write to these Maps; alarm detection is read-only.
+export { onuDiscoveryCache, oltHealthCache, oltConnectionCache };
