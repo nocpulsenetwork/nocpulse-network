@@ -74,35 +74,36 @@ serial = mac.replace(/:/g,"").toUpperCase() (EPON has no separate serial; MAC IS
 ## Per-PON online count OID (for reference / validation)
 `1.3.6.1.4.1.17409.2.3.3.1.1.8.1.0.{portSlot}` for portSlot 13–20
 
-## ONU optical power + distance (Phase 2 probe) — confirmed
+## ONU optical telemetry — Phase 2+3 (MIB-confirmed, implemented 2026-06-13)
 
-Confirmed OIDs (same `17409.2.3.4.1.1` table):
-- **col9**  → RX optical power
-- **col10** → TX optical power
-- **col11** → fiber distance (metres, integer, no scaling)
+**DO NOT use col9/col10/col11** — those were the old heuristic walk approach. Replaced.
 
-Confirmed encoding (validated by user against OLT web UI):
-- OLT UI -12.24 dBm = raw SNMP -1224  →  **0.01 dBm scale (÷100)**
-- OLT UI   2.70 dBm = raw SNMP   270  →  **0.01 dBm scale (÷100)**
-- Auto-detect: median of negative values in RX col; if < -500 → ÷100, else ÷10
-- TX is positive-only so auto-detect defaults wrong (÷10); fixed by inheriting rxDiv for txDiv
+All 5 fields use **direct SNMP GETs** (no walk), keyed by the 4-byte EponDeviceIndex.
 
-`isOpticalLike` heuristic requires `|val| > 10` to reject status-flag columns (raw 0, 1, 2).
+EponDeviceIndex = `(1 * 0x1000000) + (portSlot << 8) + onuSlot`
+→ PON-3 ONU-6: portSlot=15, onuSlot=6 → e = 16781062
 
-### CRITICAL: col9/10/11 use two-part OID index, NOT single-integer bigN
+### onuPonPortOpticalTransmissionPropertyTable — `17409.2.3.4.2.1`, 3-part index: `{e}.0.1`
 
-col7/col8 (Phase 1) instance suffix: `"3846"` — single integer `(portSlot<<8)|onuSlot`
-col9/10/11 (Phase 2) instance suffix: `"15.6"` — two-part `portSlot.onuSlot`
+| field | OID | raw → converted | validation |
+|-------|-----|-----------------|------------|
+| RX power | `17409.2.3.4.2.1.4.{e}.0.1` | raw / 100 = dBm | -1224 → -12.24 dBm |
+| TX power | `17409.2.3.4.2.1.5.{e}.0.1` | raw / 100 = dBm | 270 → 2.70 dBm |
+| Temperature | `17409.2.3.4.2.1.8.{e}.0.1` | raw / 100 = °C | 2968 → 29.68 °C |
 
-The old `walkIntCol` had `if (bigNStr.includes(".")) continue` — this silently dropped
-every row from col9/10/11, returning empty Maps → isOpticalLike returned false → all null.
+### onuInfoTable — `17409.2.3.4.1.1`, 1-part index: `{e}`
 
-Fix: `walkIntCol` now handles both formats. Two-part suffix is re-encoded as
-`bigN = (portSlot << 8) | onuSlot` so rxRaw/txRaw/distRaw keys match statusByBigN keys.
-Also added 32-bit sign extension: `if (val > 0x7FFFFFFF) val = val - 0x100000000`
-in case the OLT declares optical columns as Gauge32/Counter32 (unsigned).
+| field | OID | raw → converted | validation |
+|-------|-----|-----------------|------------|
+| Distance | `17409.2.3.4.1.1.15.{e}` | raw = meters | 985 → 985 m |
+| Register duration | `17409.2.3.4.1.1.18.{e}` | raw = seconds | — |
 
-Phase 3 (temperature/duration, cols 15–21) — OIDs not yet confirmed. Disabled (null/N/A).
+Sign-extend all raw values: `if (raw > 0x7FFFFFFF) raw -= 0x100000000` (Gauge32/Counter32 encoding).
+
+### Implementation
+- Batched parallel GETs (40 OIDs/batch = 8 ONUs × 5 OIDs) via `Promise.allSettled`
+- Only queries ONUs that will be in the output (up to `safeLimit`)
+- Internal bigN key for all Maps remains 2-byte `(portSlot<<8)|onuSlot`; EponDeviceIndex is only used to build the OID string
 
 ## OLT health OIDs — EasyPath V2 MIB (enterprise 34592)
 

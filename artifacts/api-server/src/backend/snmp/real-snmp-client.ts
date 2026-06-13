@@ -1658,158 +1658,94 @@ export class RealSnmpClient {
       };
     }
 
-    // ── Phase 2: Probe optical columns (col9=RX, col10=TX, col11=distance) ─────
+    // ── Phase 2+3: MIB-confirmed optical telemetry — direct GETs, no walks ──
     //
-    // Same 17409.2.3.4.1.1 table, same bigN index as col7/col8.
-    // Run in parallel — all are read-only GETBULK, BATCH=20 mandatory.
+    // V2 NSCRTV EPON MIB OIDs (confirmed against uploaded V2.zip, 2026-06-13).
+    // EponDeviceIndex (4-byte) = (0x01 << 24) | (portSlot << 8) | onuSlot
     //
-    // Expected encoding (if implemented by this firmware):
-    //   col9  → ONU RX power: signed INTEGER, 0.1 dBm units (e.g. -250 = -25.0 dBm)
-    //   col10 → ONU TX power: signed INTEGER, 0.1 dBm units
-    //   col11 → fiber distance: positive INTEGER, meters
+    // onuPonPortOpticalTransmissionPropertyTable — 3-part index: {eponIdx}.0.1
+    //   .17409.2.3.4.2.1.4.{e}.0.1  onuReceivedOpticalPower    centi-dBm ÷ 100
+    //   .17409.2.3.4.2.1.5.{e}.0.1  onuTramsmittedOpticalPower centi-dBm ÷ 100
+    //   .17409.2.3.4.2.1.8.{e}.0.1  onuWorkingTemperature      Centi-°C  ÷ 100
     //
-    // If a column returns 0 rows or values outside plausible range it is
-    // silently skipped — corresponding ONU fields stay null (→ "N/A" in UI).
+    // onuInfoTable — 1-part index: {eponIdx}
+    //   .17409.2.3.4.1.1.15.{e}     onuTestDistance            Meters    × 1
+    //   .17409.2.3.4.1.1.18.{e}     onuTimeSinceLastRegister   seconds   × 1 (Counter32)
+    //
+    // Validation targets for PON-3 ONU-6 (portSlot=15, onuSlot=6, eponIdx=16781062):
+    //   RX  raw -1224  → -12.24 dBm   TX  raw 270   → 2.70 dBm
+    //   Temp raw 2968  → 29.68 °C     Dist raw 985  → 985 m
 
-    const walkIntCol = async (colRoot: string): Promise<Map<number, number>> => {
-      const prefix = colRoot + ".";
-      const out    = new Map<number, number>();
-      let cursor   = colRoot;
-      let errors   = 0;
-      while (true) {
-        let batch: snmp.Varbind[];
-        try {
-          batch  = await this.snmpGetBulk([cursor], BATCH);
-          errors = 0;
-        } catch {
-          if (++errors >= 3) break;
-          continue;
-        }
-        const inTree = batch.filter((vb) => vb.oid.startsWith(prefix));
-        if (inTree.length === 0) {
-          break;
-        }
-        for (const vb of inTree) {
-          const suffix = vb.oid.slice(prefix.length);
+    const OPT_BASE  = "1.3.6.1.4.1.17409.2.3.4.2.1";
+    const INFO_BASE = "1.3.6.1.4.1.17409.2.3.4.1.1";
 
-          // EasyPath OID instances come in two formats depending on the column:
-          //   • Single integer:  "3846"   (portSlot<<8)|onuSlot  — used by col7/col8
-          //   • Two-part index:  "15.6"   portSlot.onuSlot       — used by col9/10/11
-          // Normalise both to the same bigN key so rxRaw/txRaw/distRaw can be
-          // looked up against the statusByBigN keys produced by Phase 1.
-          let bigN: number;
-          if (!suffix.includes(".")) {
-            // Single-integer instance
-            const n = parseInt(suffix, 10);
-            if (!Number.isFinite(n) || n < 0) continue;
-            const ps = (n >>> 8) & 0xFF;
-            if (ps < PORT_SLOT_MIN || ps > PORT_SLOT_MAX) continue;
-            bigN = n;
-          } else {
-            // Two-part portSlot.onuSlot instance — must have exactly one dot
-            const dotIdx = suffix.indexOf(".");
-            if (suffix.indexOf(".", dotIdx + 1) !== -1) continue;  // >2 parts → skip
-            const ps = parseInt(suffix.slice(0, dotIdx), 10);
-            const os = parseInt(suffix.slice(dotIdx + 1), 10);
-            if (!Number.isFinite(ps) || !Number.isFinite(os)) continue;
-            if (ps < PORT_SLOT_MIN || ps > PORT_SLOT_MAX) continue;
-            bigN = (ps << 8) | os;
-          }
-
-          let val = typeof vb.value === "number" ? vb.value
-                  : typeof vb.value === "bigint" ? Number(vb.value)
-                  : null;
-          if (val === null) continue;
-          // Sign-extend 32-bit: Gauge32/Counter32 encode negative dBm as unsigned.
-          // e.g. raw 4294966072 (0xFFFFFB18) → signed -1224  (= -12.24 dBm × 100)
-          if (val > 0x7FFFFFFF) val = val - 0x100000000;
-          out.set(bigN, val);
-        }
-        const lastOid = inTree[inTree.length - 1]!.oid;
-        if (lastOid === cursor) break;
-        cursor = lastOid;
-      }
-      return out;
-    };
-
-    // ── Phase 2: Optical columns — confirmed OIDs for EasyPath FD1208S-B0 ────
-    //
-    // col9  → ONU RX optical power
-    // col10 → ONU TX optical power
-    // col11 → fiber distance in metres
-    //
-    // Confirmed encoding (validated against OLT web UI):
-    //   OLT UI = -12.24 dBm, raw SNMP = -1224  →  0.01 dBm scale (÷100)
-    //   OLT UI =   2.70 dBm, raw SNMP =   270  →  0.01 dBm scale (÷100)
-    //   (auto-detect: median negative < -500 → ÷100, else ÷10)
-    //
-    // TX power is always positive on EPON, so dBmDiv() would incorrectly
-    // default to ÷10. Fix: derive txDiv from rxDiv (same table, same scale).
-    const [rxRaw, txRaw, distRaw] = await Promise.all([
-      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.9"),
-      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.10"),
-      walkIntCol("1.3.6.1.4.1.17409.2.3.4.1.1.11"),
-    ]);
-    // Validate: plausible optical power values in the column.
-    // Require |val| > 10 to reject status-flag columns (raw 0, 1, 2, …).
-    // Accept range [-5000, 2000] to cover both 0.1 dBm and 0.01 dBm encodings
-    // for the full practical EPON optical power range (−50 dBm to +20 dBm).
-    const isOpticalLike = (m: Map<number, number>): boolean => {
-      const vals = Array.from(m.values()).filter((v) => v !== 0);
-      if (vals.length === 0) return false;
-      const plausible = vals.filter((v) => v >= -5000 && v <= 2000 && Math.abs(v) > 10);
-      return plausible.length / vals.length >= 0.3;
-    };
-
-    // Validate: plausible fiber distance (meters, non-negative, ≤ 100 km).
-    const isDistanceLike = (m: Map<number, number>): boolean => {
-      const vals = Array.from(m.values());
-      if (vals.length === 0) return false;
-      return vals.filter((v) => v >= 0 && v <= 100_000).length / vals.length >= 0.8;
-    };
-
-    // Detect dBm scale from the RX column (which has negative values).
-    // If median negative raw < -500 the firmware uses 0.01 dBm units (÷100);
-    // otherwise 0.1 dBm units (÷10).
-    // TX shares the same table and scale, so txDiv is derived from rxDiv rather
-    // than auto-detected (TX values are positive → auto-detect would default to ÷10).
-    const dBmDivFromNeg = (m: Map<number, number>): number => {
-      const neg = Array.from(m.values()).filter((v) => v < 0).sort((a, b) => a - b);
-      if (neg.length === 0) return 10;
-      return (neg[Math.floor(neg.length / 2)]! < -500) ? 100 : 10;
-    };
-
-    const rxValid   = isOpticalLike(rxRaw);
-    const txValid   = isOpticalLike(txRaw);
-    const distValid = isDistanceLike(distRaw);
-    const rxDiv     = rxValid ? dBmDivFromNeg(rxRaw) : 10;
-    // TX is positive, so inherit the scale detected from the RX column.
-    const txDiv     = txValid ? rxDiv : 10;
-    // ── Phase 3: Probe integer cols 15–21 for temperature + register duration ─
-    //
-    // Same 17409.2.3.4.1.1 table, same bigN index.  Walk all candidate columns
-    // in parallel and use heuristics to identify which is temperature and which
-    // is register duration (seconds since last registration).
-    //
-    // Temperature detection: per-ONU module temp is typically 15–70 °C.
-    //   If stored as tenths of °C → raw values are 150–700.
-    //   Accept column if ≥70% of non-zero values are in [100, 1500].
-    //
-    // Register-duration detection: seconds since last PON registration.
-    //   Typical: minutes to days = hundreds to millions of seconds.
-    //   Accept column if ≥90% of values are in [0, 10_000_000] AND median > 0.
-
-    // ── Phase 3: Temperature / register-duration OIDs not yet verified ───────
-    // Cols 15–21 heuristic probe was implemented but the correct column numbers
-    // for this firmware have not been confirmed against live OLT web UI values.
-    // All fields remain null (→ "N/A" in UI) until OIDs are confirmed.
-    //
-    // TODO: when the correct OIDs are identified, replace these empty Maps with:
-    //   const PHASE3_COLS = [??, ??].map(c => `1.3.6.1.4.1.17409.2.3.4.1.1.${c}`);
-    //   const phase3Maps  = await Promise.all(PHASE3_COLS.map(walkIntCol));
-    //   ... auto-detect temperature and duration columns using isTempLike/isDurLike ...
+    const rxByBigN   = new Map<number, number>();
+    const txByBigN   = new Map<number, number>();
     const tempByBigN = new Map<number, number>();
+    const distByBigN = new Map<number, number>();
     const durByBigN  = new Map<number, number>();
+
+    // Collect only the bigN values that will appear in the output (up to safeLimit).
+    const targetBigNs: number[] = [];
+    for (const bigN of statusByBigN.keys()) {
+      if (targetBigNs.length >= safeLimit) break;
+      targetBigNs.push(bigN);
+    }
+
+    // Build OID→{bigN, field} lookup for all target ONUs.
+    type OptField = "rx" | "tx" | "temp" | "dist" | "dur";
+    const oidMeta = new Map<string, { bigN: number; field: OptField }>();
+
+    for (const bigN of targetBigNs) {
+      const portSlot = (bigN >>> 8) & 0xFF;
+      const onuSlot  = bigN & 0xFF;
+      // 4-byte EponDeviceIndex: byte[0]=OLT(1), byte[1]=card(0), byte[2]=slot, byte[3]=onu
+      const e = (1 * 0x1000000) + (portSlot << 8) + onuSlot;   // avoids JS sign issues
+
+      oidMeta.set(`${OPT_BASE}.4.${e}.0.1`,  { bigN, field: "rx"   });
+      oidMeta.set(`${OPT_BASE}.5.${e}.0.1`,  { bigN, field: "tx"   });
+      oidMeta.set(`${OPT_BASE}.8.${e}.0.1`,  { bigN, field: "temp" });
+      oidMeta.set(`${INFO_BASE}.15.${e}`,     { bigN, field: "dist" });
+      oidMeta.set(`${INFO_BASE}.18.${e}`,     { bigN, field: "dur"  });
+    }
+
+    // Split into batches of 40 OIDs (= 8 ONUs × 5 OIDs) and issue in parallel.
+    // Direct GET — one round-trip per batch, no walk loop.
+    const OPTICAL_BATCH = 40;
+    const allOids = [...oidMeta.keys()];
+    const oidBatches: string[][] = [];
+    for (let i = 0; i < allOids.length; i += OPTICAL_BATCH) {
+      oidBatches.push(allOids.slice(i, i + OPTICAL_BATCH));
+    }
+
+    const batchResults = await Promise.allSettled(
+      oidBatches.map((batch) => this.snmpGet(batch)),
+    );
+
+    for (const result of batchResults) {
+      if (result.status !== "fulfilled") continue;
+      for (const vb of result.value) {
+        if (snmp.isVarbindError(vb)) continue;
+        const meta = oidMeta.get(vb.oid);
+        if (!meta) continue;
+
+        let raw: number | null = typeof vb.value === "number" ? vb.value
+                               : typeof vb.value === "bigint" ? Number(vb.value)
+                               : null;
+        if (raw === null) continue;
+        // Sign-extend 32-bit unsigned → signed (Gauge32/Counter32 encoding of negative dBm).
+        // e.g. 0xFFFFFB18 (4294966072) → -1224 (= -12.24 dBm × 100)
+        if (raw > 0x7FFFFFFF) raw -= 0x100000000;
+
+        switch (meta.field) {
+          case "rx":   rxByBigN.set(meta.bigN,   raw); break;
+          case "tx":   txByBigN.set(meta.bigN,   raw); break;
+          case "temp": tempByBigN.set(meta.bigN, raw); break;
+          case "dist": distByBigN.set(meta.bigN, raw); break;
+          case "dur":  durByBigN.set(meta.bigN,  raw); break;
+        }
+      }
+    }
 
     const onus: SnmpOnu[] = [];
 
@@ -1826,10 +1762,9 @@ export class RealSnmpClient {
       // a serial number while `mac` retains the colon-separated display format.
       const serial = mac ? mac.replace(/:/g, "").toUpperCase() : null;
 
-      const rxPowRaw = rxValid   ? (rxRaw.get(bigN)   ?? null) : null;
-      const txPowRaw = txValid   ? (txRaw.get(bigN)   ?? null) : null;
-      const distMRaw = distValid ? (distRaw.get(bigN) ?? null) : null;
-
+      const rxPowRaw = rxByBigN.get(bigN)   ?? null;
+      const txPowRaw = txByBigN.get(bigN)   ?? null;
+      const distMRaw = distByBigN.get(bigN) ?? null;
       const tempRaw  = tempByBigN.get(bigN) ?? null;
       const durRaw   = durByBigN.get(bigN)  ?? null;
 
@@ -1846,12 +1781,15 @@ export class RealSnmpClient {
         status,
         type:              null,
         offlineReasonCode: null,
-        rxPowerDbm:        rxPowRaw !== null ? Math.round(rxPowRaw / rxDiv * 10) / 10 : null,
-        txPowerDbm:        txPowRaw !== null ? Math.round(txPowRaw / txDiv * 10) / 10 : null,
-        distanceMeters:    distMRaw,
-        rawInstanceOid:    String(bigN),
-        // Phase 3 probes — null when the column was not found or OLT didn't return data
-        temperatureC:        tempRaw !== null ? Math.round(tempRaw / 10 * 100) / 100 : null,
+        // MIB-confirmed scaling: all optical fields are centi-units (÷100).
+        //   RX/TX raw centi-dBm → dBm  (e.g. -1224 → -12.24, 270 → 2.70)
+        //   Temp   raw Centi-°C → °C   (e.g. 2968  → 29.68)
+        //   Dist   raw meters   → m    (no scaling)
+        rxPowerDbm:           rxPowRaw !== null ? rxPowRaw / 100 : null,
+        txPowerDbm:           txPowRaw !== null ? txPowRaw / 100 : null,
+        distanceMeters:       distMRaw,
+        rawInstanceOid:       String(bigN),
+        temperatureC:         tempRaw  !== null ? tempRaw  / 100 : null,
         registerDurationSecs: durRaw,
       });
     }
