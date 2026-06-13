@@ -1515,16 +1515,40 @@ export class RealSnmpClient {
         const inTree = batch.filter((vb) => vb.oid.startsWith(prefix));
         if (inTree.length === 0) break;
         for (const vb of inTree) {
-          const bigNStr = vb.oid.slice(prefix.length);
-          if (bigNStr.includes(".")) continue;
-          const bigN = parseInt(bigNStr, 10);
-          if (!Number.isFinite(bigN) || bigN < 0) continue;
-          const ps = (bigN >>> 8) & 0xFF;
-          if (ps < PORT_SLOT_MIN || ps > PORT_SLOT_MAX) continue;
-          const val = typeof vb.value === "number" ? vb.value
-                    : typeof vb.value === "bigint" ? Number(vb.value)
-                    : null;
-          if (val !== null) out.set(bigN, val);
+          const suffix = vb.oid.slice(prefix.length);
+
+          // EasyPath OID instances come in two formats depending on the column:
+          //   • Single integer:  "3846"   (portSlot<<8)|onuSlot  — used by col7/col8
+          //   • Two-part index:  "15.6"   portSlot.onuSlot       — used by col9/10/11
+          // Normalise both to the same bigN key so rxRaw/txRaw/distRaw can be
+          // looked up against the statusByBigN keys produced by Phase 1.
+          let bigN: number;
+          if (!suffix.includes(".")) {
+            // Single-integer instance
+            const n = parseInt(suffix, 10);
+            if (!Number.isFinite(n) || n < 0) continue;
+            const ps = (n >>> 8) & 0xFF;
+            if (ps < PORT_SLOT_MIN || ps > PORT_SLOT_MAX) continue;
+            bigN = n;
+          } else {
+            // Two-part portSlot.onuSlot instance — must have exactly one dot
+            const dotIdx = suffix.indexOf(".");
+            if (suffix.indexOf(".", dotIdx + 1) !== -1) continue;  // >2 parts → skip
+            const ps = parseInt(suffix.slice(0, dotIdx), 10);
+            const os = parseInt(suffix.slice(dotIdx + 1), 10);
+            if (!Number.isFinite(ps) || !Number.isFinite(os)) continue;
+            if (ps < PORT_SLOT_MIN || ps > PORT_SLOT_MAX) continue;
+            bigN = (ps << 8) | os;
+          }
+
+          let val = typeof vb.value === "number" ? vb.value
+                  : typeof vb.value === "bigint" ? Number(vb.value)
+                  : null;
+          if (val === null) continue;
+          // Sign-extend 32-bit: Gauge32/Counter32 encode negative dBm as unsigned.
+          // e.g. raw 4294966072 (0xFFFFFB18) → signed -1224  (= -12.24 dBm × 100)
+          if (val > 0x7FFFFFFF) val = val - 0x100000000;
+          out.set(bigN, val);
         }
         const lastOid = inTree[inTree.length - 1]!.oid;
         if (lastOid === cursor) break;

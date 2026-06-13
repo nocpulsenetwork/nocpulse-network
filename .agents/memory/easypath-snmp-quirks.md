@@ -76,7 +76,7 @@ serial = mac.replace(/:/g,"").toUpperCase() (EPON has no separate serial; MAC IS
 
 ## ONU optical power + distance (Phase 2 probe) — confirmed
 
-Confirmed OIDs (same `17409.2.3.4.1.1` table, same bigN index):
+Confirmed OIDs (same `17409.2.3.4.1.1` table):
 - **col9**  → RX optical power
 - **col10** → TX optical power
 - **col11** → fiber distance (metres, integer, no scaling)
@@ -88,7 +88,19 @@ Confirmed encoding (validated by user against OLT web UI):
 - TX is positive-only so auto-detect defaults wrong (÷10); fixed by inheriting rxDiv for txDiv
 
 `isOpticalLike` heuristic requires `|val| > 10` to reject status-flag columns (raw 0, 1, 2).
-Old bug: raw=1 passed the old `>= -5000 && <= 100` check; now rejected by abs threshold.
+
+### CRITICAL: col9/10/11 use two-part OID index, NOT single-integer bigN
+
+col7/col8 (Phase 1) instance suffix: `"3846"` — single integer `(portSlot<<8)|onuSlot`
+col9/10/11 (Phase 2) instance suffix: `"15.6"` — two-part `portSlot.onuSlot`
+
+The old `walkIntCol` had `if (bigNStr.includes(".")) continue` — this silently dropped
+every row from col9/10/11, returning empty Maps → isOpticalLike returned false → all null.
+
+Fix: `walkIntCol` now handles both formats. Two-part suffix is re-encoded as
+`bigN = (portSlot << 8) | onuSlot` so rxRaw/txRaw/distRaw keys match statusByBigN keys.
+Also added 32-bit sign extension: `if (val > 0x7FFFFFFF) val = val - 0x100000000`
+in case the OLT declares optical columns as Gauge32/Counter32 (unsigned).
 
 Phase 3 (temperature/duration, cols 15–21) — OIDs not yet confirmed. Disabled (null/N/A).
 
