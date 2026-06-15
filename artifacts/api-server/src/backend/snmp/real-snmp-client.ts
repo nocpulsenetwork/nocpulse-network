@@ -45,24 +45,24 @@ import type { UniversalONU } from "../types/universal.types";
 
 const OID = {
   // RFC 1213 / SNMPv2-MIB system group
-  sysDescr:    "1.3.6.1.2.1.1.1.0",
+  sysDescr: "1.3.6.1.2.1.1.1.0",
   sysObjectID: "1.3.6.1.2.1.1.2.0",
-  sysUpTime:   "1.3.6.1.2.1.1.3.0",
-  sysContact:  "1.3.6.1.2.1.1.4.0",
-  sysName:     "1.3.6.1.2.1.1.5.0",
+  sysUpTime: "1.3.6.1.2.1.1.3.0",
+  sysContact: "1.3.6.1.2.1.1.4.0",
+  sysName: "1.3.6.1.2.1.1.5.0",
   sysLocation: "1.3.6.1.2.1.1.6.0",
 
   // IF-MIB — interface table columns (walk these subtrees)
-  ifDescrCol:      "1.3.6.1.2.1.2.2.1.2",   // interface description strings
-  ifOperStatusCol: "1.3.6.1.2.1.2.2.1.8",   // 1=up 2=down 3=testing
-  ifAdminStatusCol:"1.3.6.1.2.1.2.2.1.7",   // 1=up 2=down (READ ONLY — never SET)
+  ifDescrCol: "1.3.6.1.2.1.2.2.1.2", // interface description strings
+  ifOperStatusCol: "1.3.6.1.2.1.2.2.1.8", // 1=up 2=down 3=testing
+  ifAdminStatusCol: "1.3.6.1.2.1.2.2.1.7", // 1=up 2=down (READ ONLY — never SET)
 } as const;
 
 // ─── Timeout / retry defaults ──────────────────────────────────────────────
 
 const DEFAULT_TIMEOUT_MS = 3_000;
-const DEFAULT_RETRIES    = 1;
-const DEFAULT_PORT       = 161;
+const DEFAULT_RETRIES = 1;
+const DEFAULT_PORT = 161;
 
 // Maximum number of varbinds per GETBULK request in a walk.
 // Kept low to avoid triggering OLT SNMP agent queue limits.
@@ -512,14 +512,14 @@ export interface OltPortStatus {
  * Any field that cannot be read returns null — never a fake value.
  */
 export interface OltHealthResult {
-  uptimeSecs:    number | null;
-  cpuPct:        number | null;
-  memPct:        number | null;
-  temperatureC:  number | null;
-  uplinkPorts:   OltPortStatus[];
+  uptimeSecs: number | null;
+  cpuPct: number | null;
+  memPct: number | null;
+  temperatureC: number | null;
+  uplinkPorts: OltPortStatus[];
   ethernetPorts: OltPortStatus[];
-  sfpPorts:      OltPortStatus[];
-  polledAt:  string;
+  sfpPorts: OltPortStatus[];
+  polledAt: string;
   latencyMs: number;
   source: "live-snmp";
 }
@@ -550,11 +550,11 @@ export class RealSnmpClient {
   private readonly retries: number;
 
   constructor(options: SnmpClientOptions) {
-    this.host      = options.host;
+    this.host = options.host;
     this.community = options.community;
-    this.port      = options.port      ?? DEFAULT_PORT;
+    this.port = options.port ?? DEFAULT_PORT;
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    this.retries   = options.retries   ?? DEFAULT_RETRIES;
+    this.retries = options.retries ?? DEFAULT_RETRIES;
   }
 
   // ─── Session factory ──────────────────────────────────────────────────
@@ -570,7 +570,7 @@ export class RealSnmpClient {
    */
   private createSession(): snmp.Session {
     return snmp.createSession(this.host, this.community, {
-      port:    this.port,
+      port: this.port,
       timeout: this.timeoutMs,
       retries: this.retries,
       version: snmp.Version2c,
@@ -609,8 +609,11 @@ export class RealSnmpClient {
    *
    * Returns seconds (unsigned Counter32), or null on any error / missing OID.
    */
-  async fetchRegisterDuration(portSlot: number, onuSlot: number): Promise<number | null> {
-    const e   = (1 * 0x1000000) + (portSlot << 8) + onuSlot;
+  async fetchRegisterDuration(
+    portSlot: number,
+    onuSlot: number,
+  ): Promise<number | null> {
+    const e = 1 * 0x1000000 + (portSlot << 8) + onuSlot;
     const oid = `1.3.6.1.4.1.17409.2.3.4.1.1.18.${e}`;
     try {
       const varbinds = await this.snmpGet([oid]);
@@ -619,9 +622,12 @@ export class RealSnmpClient {
         : varbinds;
       const vb = flat[0];
       if (!vb || snmp.isVarbindError(vb)) return null;
-      const raw = typeof vb.value === "number" ? vb.value
-                : typeof vb.value === "bigint"  ? Number(vb.value)
-                : null;
+      const raw =
+        typeof vb.value === "number"
+          ? vb.value
+          : typeof vb.value === "bigint"
+            ? Number(vb.value)
+            : null;
       if (raw === null || !Number.isFinite(raw)) return null;
       return raw < 0 ? raw + 0x100000000 : raw;
     } catch {
@@ -678,12 +684,15 @@ export class RealSnmpClient {
    * @param maxRepetitions  Max rows to retrieve per starting OID (≤ 50)
    * @throws SnmpTimeoutError | SnmpUnreachableError on failure
    */
-  private snmpGetBulk(startOids: string[], maxRepetitions: number): Promise<snmp.Varbind[]> {
+  private snmpGetBulk(
+    startOids: string[],
+    maxRepetitions: number,
+  ): Promise<snmp.Varbind[]> {
     return new Promise((resolve, reject) => {
       const session = this.createSession();
       session.getBulk(
         startOids,
-        0,               // nonRepeaters: 0 — all OIDs are repeating
+        0, // nonRepeaters: 0 — all OIDs are repeating
         maxRepetitions,
         (error: Error | null, varbinds: snmp.Varbind[]) => {
           session.close();
@@ -696,7 +705,9 @@ export class RealSnmpClient {
           //   repeater OIDs     → Array<Varbind> at top level (one per starting OID)
           // Normalize to a flat Varbind[] so all callers can iterate uniformly.
           const flat: snmp.Varbind[] = [];
-          for (const entry of varbinds as unknown as Array<snmp.Varbind | snmp.Varbind[]>) {
+          for (const entry of varbinds as unknown as Array<
+            snmp.Varbind | snmp.Varbind[]
+          >) {
             if (Array.isArray(entry)) {
               flat.push(...entry);
             } else {
@@ -722,11 +733,14 @@ export class RealSnmpClient {
    */
   async testConnection(): Promise<SnmpTestResult> {
     const start = Date.now();
-    const base: Pick<SnmpTestResult, "host" | "port" | "community" | "version"> = {
-      host:      this.host,
-      port:      this.port,
+    const base: Pick<
+      SnmpTestResult,
+      "host" | "port" | "community" | "version"
+    > = {
+      host: this.host,
+      port: this.port,
       community: this.community,
-      version:   "v2c",
+      version: "v2c",
     };
 
     try {
@@ -742,19 +756,19 @@ export class RealSnmpClient {
 
       return {
         ...base,
-        success:        true,
+        success: true,
         responseTimeMs,
-        sysDescr:       stringVal(parsed[OID.sysDescr]),
-        sysName:        stringVal(parsed[OID.sysName]),
-        sysObjectID:    oidVal(parsed[OID.sysObjectID]),
-        sysUpTimeSecs:  timeTicksToSecs(parsed[OID.sysUpTime]),
+        sysDescr: stringVal(parsed[OID.sysDescr]),
+        sysName: stringVal(parsed[OID.sysName]),
+        sysObjectID: oidVal(parsed[OID.sysObjectID]),
+        sysUpTimeSecs: timeTicksToSecs(parsed[OID.sysUpTime]),
       };
     } catch (err) {
       return {
         ...base,
-        success:        false,
+        success: false,
         responseTimeMs: Date.now() - start,
-        error:          err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err),
       };
     }
   }
@@ -781,12 +795,12 @@ export class RealSnmpClient {
     const v = indexVarbinds(varbinds);
 
     return {
-      sysDescr:      stringVal(v[OID.sysDescr])    ?? "",
-      sysObjectID:   oidVal(v[OID.sysObjectID])    ?? "",
+      sysDescr: stringVal(v[OID.sysDescr]) ?? "",
+      sysObjectID: oidVal(v[OID.sysObjectID]) ?? "",
       sysUpTimeSecs: timeTicksToSecs(v[OID.sysUpTime]) ?? 0,
-      sysContact:    stringVal(v[OID.sysContact])  ?? "",
-      sysName:       stringVal(v[OID.sysName])     ?? "",
-      sysLocation:   stringVal(v[OID.sysLocation]) ?? "",
+      sysContact: stringVal(v[OID.sysContact]) ?? "",
+      sysName: stringVal(v[OID.sysName]) ?? "",
+      sysLocation: stringVal(v[OID.sysLocation]) ?? "",
     };
   }
 
@@ -899,13 +913,13 @@ export class RealSnmpClient {
    * Does NOT throw. All errors are caught; unreadable fields return null.
    */
   async getOltHealth(): Promise<OltHealthResult> {
-    const start    = Date.now();
+    const start = Date.now();
     const polledAt = new Date().toISOString();
 
-    const CPU_OID       = "1.3.6.1.4.1.34592.1.3.100.1.8.1.0";
+    const CPU_OID = "1.3.6.1.4.1.34592.1.3.100.1.8.1.0";
     const MEM_TOTAL_OID = "1.3.6.1.4.1.34592.1.3.100.1.8.2.0";
-    const MEM_FREE_OID  = "1.3.6.1.4.1.34592.1.3.100.1.8.3.0";
-    const TEMP_OID      = "1.3.6.1.4.1.34592.1.3.100.1.8.6.0";
+    const MEM_FREE_OID = "1.3.6.1.4.1.34592.1.3.100.1.8.3.0";
+    const TEMP_OID = "1.3.6.1.4.1.34592.1.3.100.1.8.6.0";
 
     // Hard deadline: the entire poll must complete within 4 500 ms.
     // Each SNMP task also has its own 2 s per-PDU timeout, but a sequential
@@ -913,14 +927,16 @@ export class RealSnmpClient {
     // the caller always gets a response even if a task stalls mid-walk.
     const HEALTH_DEADLINE_MS = 4_500;
     const deadlinePromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("health-poll-deadline")), HEALTH_DEADLINE_MS),
+      setTimeout(
+        () => reject(new Error("health-poll-deadline")),
+        HEALTH_DEADLINE_MS,
+      ),
     );
 
     // Run all three SNMP tasks in parallel.
     // Promise.allSettled — a timeout on one task never blocks the others.
     const [uptimeResult, scalarsResult, ifResult] = await Promise.race([
       Promise.allSettled([
-
         // ── Task A: sysUpTime (1 GET) ────────────────────────────────────
         this.snmpGet([OID.sysUpTime]),
 
@@ -933,19 +949,22 @@ export class RealSnmpClient {
         // and has no bounded total time. One GETBULK with maxRepetitions=40
         // captures all interfaces on a typical OLT in a single round-trip.
         (async () => {
-          const bulk   = await this.snmpGetBulk([OID.ifDescrCol], 40);
+          const bulk = await this.snmpGetBulk([OID.ifDescrCol], 40);
           const prefix = OID.ifDescrCol + ".";
-          const ifMap  = new Map<number, string>();
+          const ifMap = new Map<number, string>();
           for (const vb of bulk) {
             if (!vb.oid.startsWith(prefix)) break; // left the ifDescr subtree
             const idx = ifIndexFromOid(vb.oid);
             if (idx !== null) ifMap.set(idx, stringVal(vb) ?? "");
           }
-          if (ifMap.size === 0) return { ifMap, sv: {} as Record<string, snmp.Varbind> };
-          const idxList   = [...ifMap.keys()];
-          const operOids  = idxList.map(i => `${OID.ifOperStatusCol}.${i}`);
-          const adminOids = idxList.map(i => `${OID.ifAdminStatusCol}.${i}`);
-          const sv = indexVarbinds(await this.snmpGet([...operOids, ...adminOids]));
+          if (ifMap.size === 0)
+            return { ifMap, sv: {} as Record<string, snmp.Varbind> };
+          const idxList = [...ifMap.keys()];
+          const operOids = idxList.map((i) => `${OID.ifOperStatusCol}.${i}`);
+          const adminOids = idxList.map((i) => `${OID.ifAdminStatusCol}.${i}`);
+          const sv = indexVarbinds(
+            await this.snmpGet([...operOids, ...adminOids]),
+          );
           return { ifMap, sv };
         })(),
       ]),
@@ -955,24 +974,29 @@ export class RealSnmpClient {
     // ── Extract: uptime ────────────────────────────────────────────────────
     let uptimeSecs: number | null = null;
     if (uptimeResult.status === "fulfilled") {
-      uptimeSecs = timeTicksToSecs(indexVarbinds(uptimeResult.value)[OID.sysUpTime]) ?? null;
+      uptimeSecs =
+        timeTicksToSecs(indexVarbinds(uptimeResult.value)[OID.sysUpTime]) ??
+        null;
     }
 
     // ── Extract: scalars ──────────────────────────────────────────────────
-    let cpuPct:       number | null = null;
-    let memPct:       number | null = null;
+    let cpuPct: number | null = null;
+    let memPct: number | null = null;
     let temperatureC: number | null = null;
     if (scalarsResult.status === "fulfilled") {
-      const pv          = indexVarbinds(scalarsResult.value);
-      const rawCpu      = intVal(pv[CPU_OID]);
+      const pv = indexVarbinds(scalarsResult.value);
+      const rawCpu = intVal(pv[CPU_OID]);
       const rawMemTotal = intVal(pv[MEM_TOTAL_OID]);
-      const rawMemFree  = intVal(pv[MEM_FREE_OID]);
-      const rawTemp     = intVal(pv[TEMP_OID]);
+      const rawMemFree = intVal(pv[MEM_FREE_OID]);
+      const rawTemp = intVal(pv[TEMP_OID]);
 
       if (rawCpu !== undefined && rawCpu >= 0 && rawCpu <= 100) cpuPct = rawCpu;
       if (
-        rawMemTotal !== undefined && rawMemFree !== undefined &&
-        rawMemTotal > 0 && rawMemFree >= 0 && rawMemFree <= rawMemTotal
+        rawMemTotal !== undefined &&
+        rawMemFree !== undefined &&
+        rawMemTotal > 0 &&
+        rawMemFree >= 0 &&
+        rawMemFree <= rawMemTotal
       ) {
         memPct = Math.round(((rawMemTotal - rawMemFree) / rawMemTotal) * 100);
       }
@@ -982,25 +1006,26 @@ export class RealSnmpClient {
     }
 
     // ── Extract: ports ────────────────────────────────────────────────────
-    const uplinkPorts:   OltPortStatus[] = [];
+    const uplinkPorts: OltPortStatus[] = [];
     const ethernetPorts: OltPortStatus[] = [];
-    const sfpPorts:      OltPortStatus[] = [];
+    const sfpPorts: OltPortStatus[] = [];
     if (ifResult.status === "fulfilled") {
       const { ifMap, sv } = ifResult.value;
       for (const [ifIndex, descr] of ifMap) {
         if (isPonPort(descr)) continue;
-        const operRaw  = intVal(sv[`${OID.ifOperStatusCol}.${ifIndex}`]);
+        const operRaw = intVal(sv[`${OID.ifOperStatusCol}.${ifIndex}`]);
         const adminRaw = intVal(sv[`${OID.ifAdminStatusCol}.${ifIndex}`]);
         const port: OltPortStatus = {
           ifIndex,
           description: descr,
-          operStatus:  operStatusToString(operRaw ?? 4),
-          adminStatus: adminRaw === 1 ? "up" : adminRaw === 2 ? "down" : "unknown",
+          operStatus: operStatusToString(operRaw ?? 4),
+          adminStatus:
+            adminRaw === 1 ? "up" : adminRaw === 2 ? "down" : "unknown",
         };
         const kind = classifyOltInterface(descr);
-        if      (kind === "uplink")   uplinkPorts.push(port);
+        if (kind === "uplink") uplinkPorts.push(port);
         else if (kind === "ethernet") ethernetPorts.push(port);
-        else if (kind === "sfp")      sfpPorts.push(port);
+        else if (kind === "sfp") sfpPorts.push(port);
       }
     }
 
@@ -1036,20 +1061,26 @@ export class RealSnmpClient {
   async getOnuListMockFallback(oltId?: string): Promise<OnuListResult> {
     try {
       const varbinds = await this.snmpGet([OID.sysDescr, OID.sysObjectID]);
-      const v        = indexVarbinds(varbinds);
-      const descr    = stringVal(v[OID.sysDescr]) ?? "";
-      const objId    = oidVal(v[OID.sysObjectID]) ?? "";
-      const vendor   = detectVendor(descr, objId);
+      const v = indexVarbinds(varbinds);
+      const descr = stringVal(v[OID.sysDescr]) ?? "";
+      const objId = oidVal(v[OID.sysObjectID]) ?? "";
+      const vendor = detectVendor(descr, objId);
 
       const onuRootOid = vendorOnuTableOid(vendor);
       if (!onuRootOid) {
-        return mockFallback(oltId, `No ONU table OID known for vendor "${vendor}"`);
+        return mockFallback(
+          oltId,
+          `No ONU table OID known for vendor "${vendor}"`,
+        );
       }
 
       // Walk the vendor ONU table — short timeout to keep response fast
       const onuVbs = await this.snmpWalk(onuRootOid);
       if (onuVbs.length === 0) {
-        return mockFallback(oltId, "ONU table walk returned 0 entries (device may use different OID tree)");
+        return mockFallback(
+          oltId,
+          "ONU table walk returned 0 entries (device may use different OID tree)",
+        );
       }
 
       // We have real ONU table entries but parsing is vendor-specific.
@@ -1058,7 +1089,7 @@ export class RealSnmpClient {
       return mockFallback(
         oltId,
         `Live walk returned ${onuVbs.length} raw ONU OIDs. ` +
-        "Vendor-specific parsing is not yet implemented — using mock data.",
+          "Vendor-specific parsing is not yet implemented — using mock data.",
       );
     } catch (err) {
       return mockFallback(
@@ -1096,14 +1127,15 @@ export class RealSnmpClient {
     const mib = VENDOR_ONU_MIBS[vendor];
     if (!mib) {
       return {
-        success:    false,
+        success: false,
         vendor,
         totalFound: 0,
-        onus:       [],
-        message:    `No ONU table MIB defined for vendor "${vendor}". ` +
-                    "Supported vendors: Huawei, ZTE, BDCOM, VSOL, CDATA.",
-        latencyMs:  Date.now() - start,
-        mibUsed:    "none",
+        onus: [],
+        message:
+          `No ONU table MIB defined for vendor "${vendor}". ` +
+          "Supported vendors: Huawei, ZTE, BDCOM, VSOL, CDATA.",
+        latencyMs: Date.now() - start,
+        mibUsed: "none",
       };
     }
 
@@ -1115,18 +1147,18 @@ export class RealSnmpClient {
       indexVbs = await this.snmpGetBulk([indexColOid], cappedLimit);
     } catch (err) {
       return {
-        success:    false,
+        success: false,
         vendor,
         totalFound: 0,
-        onus:       [],
-        message:    err instanceof Error ? err.message : "SNMP GETBULK failed",
-        latencyMs:  Date.now() - start,
-        mibUsed:    mib.mibName,
+        onus: [],
+        message: err instanceof Error ? err.message : "SNMP GETBULK failed",
+        latencyMs: Date.now() - start,
+        mibUsed: mib.mibName,
       };
     }
 
     // Filter: keep only varbinds within the index column subtree
-    const indexPrefix    = indexColOid + ".";
+    const indexPrefix = indexColOid + ".";
     const onuInstances: string[] = [];
     for (const vb of indexVbs) {
       if (!vb.oid.startsWith(indexPrefix)) continue;
@@ -1136,24 +1168,29 @@ export class RealSnmpClient {
 
     if (onuInstances.length === 0) {
       return {
-        success:    true,
+        success: true,
         vendor,
         totalFound: 0,
-        onus:       [],
-        message:    `GETBULK on ${mib.mibName} (${indexColOid}) returned 0 entries within the index column. ` +
-                    "The OLT may use a different MIB firmware path, or the table is empty.",
-        latencyMs:  Date.now() - start,
-        mibUsed:    mib.mibName,
+        onus: [],
+        message:
+          `GETBULK on ${mib.mibName} (${indexColOid}) returned 0 entries within the index column. ` +
+          "The OLT may use a different MIB firmware path, or the table is empty.",
+        latencyMs: Date.now() - start,
+        mibUsed: mib.mibName,
       };
     }
 
     // ── Phase 2: Single GET for all attribute OIDs across all found ONUs ────
     const attrOids: string[] = [];
     for (const inst of onuInstances) {
-      if (mib.colSerial !== null) attrOids.push(`${mib.tableRoot}.${mib.colSerial}.${inst}`);
-      if (mib.colStatus !== null) attrOids.push(`${mib.tableRoot}.${mib.colStatus}.${inst}`);
-      if (mib.colType   !== null) attrOids.push(`${mib.tableRoot}.${mib.colType}.${inst}`);
-      if (mib.colMac    !== null) attrOids.push(`${mib.tableRoot}.${mib.colMac}.${inst}`);
+      if (mib.colSerial !== null)
+        attrOids.push(`${mib.tableRoot}.${mib.colSerial}.${inst}`);
+      if (mib.colStatus !== null)
+        attrOids.push(`${mib.tableRoot}.${mib.colStatus}.${inst}`);
+      if (mib.colType !== null)
+        attrOids.push(`${mib.tableRoot}.${mib.colType}.${inst}`);
+      if (mib.colMac !== null)
+        attrOids.push(`${mib.tableRoot}.${mib.colMac}.${inst}`);
     }
 
     let attrMap: Record<string, snmp.Varbind> = {};
@@ -1169,35 +1206,46 @@ export class RealSnmpClient {
     // ── Build normalised ONU list ──────────────────────────────────────────
     const onus: SnmpOnu[] = [];
     for (const inst of onuInstances) {
-      const parsed    = mib.parseInstance(inst);
-      const serialOid = mib.colSerial !== null ? `${mib.tableRoot}.${mib.colSerial}.${inst}` : null;
-      const statusOid = mib.colStatus !== null ? `${mib.tableRoot}.${mib.colStatus}.${inst}` : null;
-      const typeOid   = mib.colType   !== null ? `${mib.tableRoot}.${mib.colType}.${inst}`   : null;
-      const macOid    = mib.colMac    !== null ? `${mib.tableRoot}.${mib.colMac}.${inst}`    : null;
+      const parsed = mib.parseInstance(inst);
+      const serialOid =
+        mib.colSerial !== null
+          ? `${mib.tableRoot}.${mib.colSerial}.${inst}`
+          : null;
+      const statusOid =
+        mib.colStatus !== null
+          ? `${mib.tableRoot}.${mib.colStatus}.${inst}`
+          : null;
+      const typeOid =
+        mib.colType !== null ? `${mib.tableRoot}.${mib.colType}.${inst}` : null;
+      const macOid =
+        mib.colMac !== null ? `${mib.tableRoot}.${mib.colMac}.${inst}` : null;
 
       const rawStatus = statusOid ? attrMap[statusOid] : undefined;
 
       onus.push({
-        onuId:          parsed?.onuId    ?? (inst.split(".").pop() ?? inst),
-        ponPort:        parsed?.ponPort  ?? inst,
-        serial:         serialOid ? parseGponSerial(attrMap[serialOid]?.value)  : null,
-        mac:            macOid    ? parseMacAddress(attrMap[macOid]?.value)     : null,
-        status:         rawStatus ? mib.parseStatus(intVal(rawStatus) ?? 2)     : "unknown",
-        type:           typeOid   ? (stringVal(attrMap[typeOid]) ?? null)       : null,
+        onuId: parsed?.onuId ?? inst.split(".").pop() ?? inst,
+        ponPort: parsed?.ponPort ?? inst,
+        serial: serialOid ? parseGponSerial(attrMap[serialOid]?.value) : null,
+        mac: macOid ? parseMacAddress(attrMap[macOid]?.value) : null,
+        status: rawStatus ? mib.parseStatus(intVal(rawStatus) ?? 2) : "unknown",
+        type: typeOid ? (stringVal(attrMap[typeOid]) ?? null) : null,
         rawInstanceOid: inst,
       });
     }
 
     const onlineCount = onus.filter((o) => o.status === "online").length;
     return {
-      success:    true,
+      success: true,
       vendor,
       totalFound: onus.length,
       onus,
-      message:    `Found ${onus.length} ONU${onus.length !== 1 ? "s" : ""} in ${mib.mibName}` +
-                  (onus.length > 0 ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown)` : ""),
-      latencyMs:  Date.now() - start,
-      mibUsed:    mib.mibName,
+      message:
+        `Found ${onus.length} ONU${onus.length !== 1 ? "s" : ""} in ${mib.mibName}` +
+        (onus.length > 0
+          ? ` (${onlineCount} online, ${onus.length - onlineCount} offline/unknown)`
+          : ""),
+      latencyMs: Date.now() - start,
+      mibUsed: mib.mibName,
     };
   }
 
@@ -1215,52 +1263,52 @@ export class RealSnmpClient {
    * @param batchSize GETBULK maxRepetitions per PDU (default 20)
    */
   async debugWalkSubtree(
-    rootOid:   string,
-    maxOids:   number = 1_000,
+    rootOid: string,
+    maxOids: number = 1_000,
     batchSize: number = 20,
   ): Promise<{
-    totalOids:    number;
-    walkMs:       number;
-    batches:      number;
+    totalOids: number;
+    walkMs: number;
+    batches: number;
     rows: Array<{
-      oid:      string;
+      oid: string;
       typeName: string;
-      typeNum:  number;
-      hex:      string | null;   // binary values as hex
-      text:     string | null;   // printable string (if applicable)
-      num:      number | null;   // numeric value (if applicable)
-      isMac:    boolean;         // 6-byte OctetString = likely ONU MAC/LLID
+      typeNum: number;
+      hex: string | null; // binary values as hex
+      text: string | null; // printable string (if applicable)
+      num: number | null; // numeric value (if applicable)
+      isMac: boolean; // 6-byte OctetString = likely ONU MAC/LLID
     }>;
     subtrees: Array<{
-      prefix:      string;        // depth-11 OID prefix
-      rowCount:    number;
-      hasMac:      boolean;
-      typeNames:   string;        // comma-separated distinct type names
-      samples:     string[];      // up to 3 sample value strings
+      prefix: string; // depth-11 OID prefix
+      rowCount: number;
+      hasMac: boolean;
+      typeNames: string; // comma-separated distinct type names
+      samples: string[]; // up to 3 sample value strings
     }>;
   }> {
     const start = Date.now();
 
     // SNMP ObjectType name map (net-snmp numeric codes → human names)
     const TYPE_NAMES: Record<number, string> = {
-      2:   "INTEGER",
-      4:   "OctetString",
-      5:   "Null",
-      6:   "OID",
-      64:  "IpAddress",
-      65:  "Counter32",
-      66:  "Gauge32",
-      67:  "TimeTicks",
-      68:  "Opaque",
-      70:  "Counter64",
+      2: "INTEGER",
+      4: "OctetString",
+      5: "Null",
+      6: "OID",
+      64: "IpAddress",
+      65: "Counter32",
+      66: "Gauge32",
+      67: "TimeTicks",
+      68: "Opaque",
+      70: "Counter64",
       128: "NoSuchObject",
       129: "NoSuchInstance",
       130: "EndOfMibView",
     };
 
     const allVbs: snmp.Varbind[] = [];
-    let   cursor  = rootOid;
-    let   batches = 0;
+    let cursor = rootOid;
+    let batches = 0;
 
     while (allVbs.length < maxOids) {
       let batch: snmp.Varbind[];
@@ -1279,24 +1327,27 @@ export class RealSnmpClient {
       // the subtree boundary.
       cursor = inTree[inTree.length - 1].oid;
       // Stop if the device signals end-of-MIB on the last varbind
-      const lastType = (batch[batch.length - 1] as unknown as { type?: number }).type;
+      const lastType = (batch[batch.length - 1] as unknown as { type?: number })
+        .type;
       if (lastType === 130) break; // EndOfMibView
     }
 
     // ── Format each varbind ────────────────────────────────────────────────
     const rows = allVbs.map((vb) => {
-      const typeNum  = (vb as unknown as { type?: number }).type ?? -1;
+      const typeNum = (vb as unknown as { type?: number }).type ?? -1;
       const typeName = TYPE_NAMES[typeNum] ?? `type(${typeNum})`;
 
-      let hex:  string | null = null;
+      let hex: string | null = null;
       let text: string | null = null;
-      let num:  number | null = null;
+      let num: number | null = null;
       let isMac = false;
 
       if (Buffer.isBuffer(vb.value)) {
         const buf = vb.value as Buffer;
         isMac = buf.length === 6;
-        hex   = Array.from(buf).map((b) => b.toString(16).padStart(2, "0")).join(":");
+        hex = Array.from(buf)
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(":");
         const str = buf.toString("utf8");
         if (/^[\x20-\x7e]+$/.test(str)) text = str;
       } else if (typeof vb.value === "number" || typeof vb.value === "bigint") {
@@ -1311,7 +1362,7 @@ export class RealSnmpClient {
     // ── Group by depth-11 OID prefix ──────────────────────────────────────
     const groupMap = new Map<string, typeof rows>();
     for (const row of rows) {
-      const key   = row.oid.split(".").slice(0, 11).join(".");
+      const key = row.oid.split(".").slice(0, 11).join(".");
       const group = groupMap.get(key) ?? [];
       group.push(row);
       groupMap.set(key, group);
@@ -1319,16 +1370,26 @@ export class RealSnmpClient {
 
     const subtrees = [...groupMap.entries()]
       .map(([prefix, items]) => {
-        const hasMac    = items.some((r) => r.isMac);
+        const hasMac = items.some((r) => r.isMac);
         const typeNames = [...new Set(items.map((r) => r.typeName))].join(", ");
-        const samples   = items
+        const samples = items
           .slice(0, 3)
-          .map((r) => r.text ?? (r.isMac ? `MAC:${r.hex}` : r.hex ?? String(r.num ?? "?")));
+          .map(
+            (r) =>
+              r.text ??
+              (r.isMac ? `MAC:${r.hex}` : (r.hex ?? String(r.num ?? "?"))),
+          );
         return { prefix, rowCount: items.length, hasMac, typeNames, samples };
       })
       .sort((a, b) => b.rowCount - a.rowCount);
 
-    return { totalOids: allVbs.length, walkMs: Date.now() - start, batches, rows, subtrees };
+    return {
+      totalOids: allVbs.length,
+      walkMs: Date.now() - start,
+      batches,
+      rows,
+      subtrees,
+    };
   }
 
   // ── readCdataEponOnusProbe ────────────────────────────────────────────────
@@ -1358,7 +1419,7 @@ export class RealSnmpClient {
    * @param limit  Max ONUs to return (clamped to 50).
    */
   async readCdataEponOnusProbe(limit: number): Promise<ReadOnuTableResult> {
-    const start       = Date.now();
+    const start = Date.now();
     const cappedLimit = Math.min(limit, 50);
 
     // ── Iterative GETBULK walk of the full C-DATA enterprise subtree ─────────
@@ -1373,24 +1434,28 @@ export class RealSnmpClient {
     // The MAC-containing group identifies the ONU table column.
 
     const ENTERPRISE_ROOT = "1.3.6.1.4.1.34592";
-    const BATCH           = 20;
-    const MAX_OIDS        = 500;
-    const MAC_THRESHOLD   = 3;
+    const BATCH = 20;
+    const MAX_OIDS = 500;
+    const MAC_THRESHOLD = 3;
 
     const allVbs: snmp.Varbind[] = [];
-    const walkLog: string[]      = [];
-    let   cursor                 = ENTERPRISE_ROOT;
+    const walkLog: string[] = [];
+    let cursor = ENTERPRISE_ROOT;
 
     walkLoop: while (allVbs.length < MAX_OIDS) {
       let batch: snmp.Varbind[];
       try {
         batch = await this.snmpGetBulk([cursor], BATCH);
       } catch (err) {
-        walkLog.push(`ERR cursor=${cursor}: ${err instanceof Error ? err.message : String(err)}`);
+        walkLog.push(
+          `ERR cursor=${cursor}: ${err instanceof Error ? err.message : String(err)}`,
+        );
         break;
       }
 
-      const inSubtree = batch.filter((vb) => vb.oid.startsWith(ENTERPRISE_ROOT + "."));
+      const inSubtree = batch.filter((vb) =>
+        vb.oid.startsWith(ENTERPRISE_ROOT + "."),
+      );
       allVbs.push(...inSubtree);
 
       if (inSubtree.length === 0) break; // walked past enterprise branch
@@ -1412,14 +1477,18 @@ export class RealSnmpClient {
     // enough to distinguish individual table columns.
     const groupMap = new Map<string, snmp.Varbind[]>();
     for (const vb of allVbs) {
-      const key   = vb.oid.split(".").slice(0, 11).join(".");
+      const key = vb.oid.split(".").slice(0, 11).join(".");
       const group = groupMap.get(key) ?? [];
       group.push(vb);
       groupMap.set(key, group);
     }
     for (const [subtree, vbs] of groupMap) {
-      const hasMacs = vbs.some((vb) => Buffer.isBuffer(vb.value) && vb.value.length === 6);
-      walkLog.push(`oid=${subtree} rows=${vbs.length}${hasMacs ? " [MAC]" : ""}`);
+      const hasMacs = vbs.some(
+        (vb) => Buffer.isBuffer(vb.value) && vb.value.length === 6,
+      );
+      walkLog.push(
+        `oid=${subtree} rows=${vbs.length}${hasMacs ? " [MAC]" : ""}`,
+      );
     }
 
     // ── Find MAC varbinds ─────────────────────────────────────────────────
@@ -1429,16 +1498,17 @@ export class RealSnmpClient {
 
     if (macVbs.length === 0) {
       return {
-        success:    true,
-        vendor:     "CDATA-EPON",
+        success: true,
+        vendor: "CDATA-EPON",
         totalFound: 0,
-        onus:       [],
+        onus: [],
         message:
           `CDATA enterprise walk (root=${ENTERPRISE_ROOT}, walked=${allVbs.length} OIDs): ` +
           "no 6-byte OctetStrings (ONU MAC/LLID) found. " +
-          "Walk log: " + (walkLog.join(" | ") || "(empty — no OIDs in subtree)"),
+          "Walk log: " +
+          (walkLog.join(" | ") || "(empty — no OIDs in subtree)"),
         latencyMs: Date.now() - start,
-        mibUsed:   `cdataWalk(walked=${allVbs.length})`,
+        mibUsed: `cdataWalk(walked=${allVbs.length})`,
       };
     }
 
@@ -1456,18 +1526,20 @@ export class RealSnmpClient {
     // We try instance depths of 2 (ponPort.onuId) and 1 (onuId) and pick the
     // depth that gives a consistent prefix across all MAC varbinds.
 
-    const firstOid   = macVbs[0]!.oid;
+    const firstOid = macVbs[0]!.oid;
     const firstParts = firstOid.split(".");
 
-    let macColPrefix  = "";
+    let macColPrefix = "";
     let instanceDepth = 2;
 
     for (const depth of [2, 1, 3]) {
       if (firstParts.length <= depth) continue;
       const candidatePrefix = firstParts.slice(0, -depth).join(".");
-      const consistent      = macVbs.every((vb) => vb.oid.startsWith(candidatePrefix + "."));
+      const consistent = macVbs.every((vb) =>
+        vb.oid.startsWith(candidatePrefix + "."),
+      );
       if (consistent) {
-        macColPrefix  = candidatePrefix;
+        macColPrefix = candidatePrefix;
         instanceDepth = depth;
         break;
       }
@@ -1475,26 +1547,30 @@ export class RealSnmpClient {
 
     // Last resort: use depth 2 even if not fully consistent
     if (!macColPrefix) {
-      macColPrefix  = firstParts.slice(0, -2).join(".");
+      macColPrefix = firstParts.slice(0, -2).join(".");
       instanceDepth = 2;
     }
 
     // Derive table root (strip the column number from the prefix)
-    const prefixParts  = macColPrefix.split(".");
-    const macColNum    = Number(prefixParts[prefixParts.length - 1]);
-    const tableRoot    = prefixParts.slice(0, -1).join(".");
-    const statusColNum = macColNum + 1;  // column immediately after MAC → status
-    const typeColNum   = macColNum + 2;  // two columns after MAC → type/model
+    const prefixParts = macColPrefix.split(".");
+    const macColNum = Number(prefixParts[prefixParts.length - 1]);
+    const tableRoot = prefixParts.slice(0, -1).join(".");
+    const statusColNum = macColNum + 1; // column immediately after MAC → status
+    const typeColNum = macColNum + 2; // two columns after MAC → type/model
 
     // ── Extract instance OIDs (everything after the MAC column prefix) ─────
     const instances = macVbs.slice(0, cappedLimit).map((vb) => ({
       instance: vb.oid.slice(macColPrefix.length + 1), // e.g. "1.5"
-      mac:      parseMacAddress(vb.value),
+      mac: parseMacAddress(vb.value),
     }));
 
     // ── GET status + type from adjacent columns ────────────────────────────
-    const statusOids = instances.map((inst) => `${tableRoot}.${statusColNum}.${inst.instance}`);
-    const typeOids   = instances.map((inst) => `${tableRoot}.${typeColNum}.${inst.instance}`);
+    const statusOids = instances.map(
+      (inst) => `${tableRoot}.${statusColNum}.${inst.instance}`,
+    );
+    const typeOids = instances.map(
+      (inst) => `${tableRoot}.${typeColNum}.${inst.instance}`,
+    );
 
     let attrMap: Record<string, snmp.Varbind> = {};
     try {
@@ -1505,18 +1581,19 @@ export class RealSnmpClient {
 
     // ── Build normalised ONU list ──────────────────────────────────────────
     const onus: SnmpOnu[] = instances.map((inst) => {
-      const statusVb  = attrMap[`${tableRoot}.${statusColNum}.${inst.instance}`];
-      const typeVb    = attrMap[`${tableRoot}.${typeColNum}.${inst.instance}`];
+      const statusVb = attrMap[`${tableRoot}.${statusColNum}.${inst.instance}`];
+      const typeVb = attrMap[`${tableRoot}.${typeColNum}.${inst.instance}`];
       const rawStatus = statusVb !== undefined ? intVal(statusVb) : undefined;
       const instParts = inst.instance.split(".");
 
       return {
-        onuId:          instParts[instParts.length - 1] ?? inst.instance,
-        ponPort:        instParts.length > 1 ? instParts.slice(0, -1).join(".") : "0",
-        serial:         null,
-        mac:            inst.mac,
-        status:         rawStatus === 1 ? "online" : rawStatus === 2 ? "offline" : "unknown",
-        type:           typeVb !== undefined ? (stringVal(typeVb) ?? null) : null,
+        onuId: instParts[instParts.length - 1] ?? inst.instance,
+        ponPort: instParts.length > 1 ? instParts.slice(0, -1).join(".") : "0",
+        serial: null,
+        mac: inst.mac,
+        status:
+          rawStatus === 1 ? "online" : rawStatus === 2 ? "offline" : "unknown",
+        type: typeVb !== undefined ? (stringVal(typeVb) ?? null) : null,
         rawInstanceOid: inst.instance,
       };
     });
@@ -1524,8 +1601,8 @@ export class RealSnmpClient {
     const onlineCount = onus.filter((o) => o.status === "online").length;
 
     return {
-      success:    true,
-      vendor:     "CDATA-EPON",
+      success: true,
+      vendor: "CDATA-EPON",
       totalFound: onus.length,
       onus,
       message:
@@ -1537,7 +1614,7 @@ export class RealSnmpClient {
             ` Walk log: ${walkLog.join(" | ")}`
           : ""),
       latencyMs: Date.now() - start,
-      mibUsed:   `cdataWalk(table=${tableRoot} macCol=${macColNum} walked=${allVbs.length})`,
+      mibUsed: `cdataWalk(table=${tableRoot} macCol=${macColNum} walked=${allVbs.length})`,
     };
   }
 
@@ -1578,9 +1655,9 @@ export class RealSnmpClient {
    * Safety: GETBULK read-only — no SET operations.
    */
   async readEasyPathOnuTable(limit: number): Promise<ReadOnuTableResult> {
-    const start     = Date.now();
+    const start = Date.now();
     const safeLimit = Math.min(limit, 500);
-    const BATCH     = 20;  // FD1208S-B0 V1.6.0 rejects maxRepetitions ≥ 50
+    const BATCH = 20; // FD1208S-B0 V1.6.0 rejects maxRepetitions ≥ 50
 
     const PORT_SLOT_MIN = 13;
     const PORT_SLOT_MAX = 28;
@@ -1595,14 +1672,14 @@ export class RealSnmpClient {
     //
     // Both cover ALL provisioned ONUs (~356 rows).  No 34592 MAC table walk needed.
 
-    const STATUS_ROOT   = "1.3.6.1.4.1.17409.2.3.4.1.1.8";
+    const STATUS_ROOT = "1.3.6.1.4.1.17409.2.3.4.1.1.8";
     const STATUS_PREFIX = STATUS_ROOT + ".";
-    const MAC_COL_ROOT  = "1.3.6.1.4.1.17409.2.3.4.1.1.7";
+    const MAC_COL_ROOT = "1.3.6.1.4.1.17409.2.3.4.1.1.7";
     const MAC_COL_PREFIX = MAC_COL_ROOT + ".";
-    const MIB_NAME       = "EasyPath17409.2.3.4(col7=mac,col8=status)";
+    const MIB_NAME = "EasyPath17409.2.3.4(col7=mac,col8=status)";
 
     const statusByBigN = new Map<number, "online" | "offline">();
-    const macByBigN    = new Map<number, string>();
+    const macByBigN = new Map<number, string>();
 
     const walkCol8 = async (): Promise<void> => {
       let cursor = STATUS_ROOT;
@@ -1623,11 +1700,14 @@ export class RealSnmpClient {
           if (bigNStr.includes(".")) continue;
           const bigN = parseInt(bigNStr, 10);
           if (!Number.isFinite(bigN) || bigN < 0) continue;
-          const portSlot = (bigN >>> 8) & 0xFF;
+          const portSlot = (bigN >>> 8) & 0xff;
           if (portSlot < PORT_SLOT_MIN || portSlot > PORT_SLOT_MAX) continue;
-          const statusVal = typeof vb.value === "number" ? vb.value
-                          : typeof vb.value === "bigint" ? Number(vb.value)
-                          : null;
+          const statusVal =
+            typeof vb.value === "number"
+              ? vb.value
+              : typeof vb.value === "bigint"
+                ? Number(vb.value)
+                : null;
           if (statusVal === null) continue;
           statusByBigN.set(bigN, statusVal === 1 ? "online" : "offline");
         }
@@ -1656,7 +1736,7 @@ export class RealSnmpClient {
           if (bigNStr.includes(".")) continue;
           const bigN = parseInt(bigNStr, 10);
           if (!Number.isFinite(bigN) || bigN < 0) continue;
-          const portSlot = (bigN >>> 8) & 0xFF;
+          const portSlot = (bigN >>> 8) & 0xff;
           if (portSlot < PORT_SLOT_MIN || portSlot > PORT_SLOT_MAX) continue;
           if (!Buffer.isBuffer(vb.value) || vb.value.length !== 6) continue;
           const mac = parseMacAddress(vb.value);
@@ -1677,13 +1757,13 @@ export class RealSnmpClient {
 
     if (statusByBigN.size === 0) {
       return {
-        success:    false,
-        vendor:     "CDATA",
+        success: false,
+        vendor: "CDATA",
         totalFound: 0,
-        onus:       [],
-        message:    `GETBULK walk of ${MIB_NAME} returned 0 ONU entries — check SNMP community and OID.`,
-        latencyMs:  Date.now() - start,
-        mibUsed:    MIB_NAME,
+        onus: [],
+        message: `GETBULK walk of ${MIB_NAME} returned 0 ONU entries — check SNMP community and OID.`,
+        latencyMs: Date.now() - start,
+        mibUsed: MIB_NAME,
       };
     }
 
@@ -1705,14 +1785,14 @@ export class RealSnmpClient {
     //   RX  raw -1224  → -12.24 dBm   TX  raw 270   → 2.70 dBm
     //   Temp raw 2968  → 29.68 °C     Dist raw 985  → 985 m
 
-    const OPT_BASE  = "1.3.6.1.4.1.17409.2.3.4.2.1";
+    const OPT_BASE = "1.3.6.1.4.1.17409.2.3.4.2.1";
     const INFO_BASE = "1.3.6.1.4.1.17409.2.3.4.1.1";
 
-    const rxByBigN   = new Map<number, number>();
-    const txByBigN   = new Map<number, number>();
+    const rxByBigN = new Map<number, number>();
+    const txByBigN = new Map<number, number>();
     const tempByBigN = new Map<number, number>();
     const distByBigN = new Map<number, number>();
-    const durByBigN  = new Map<number, number>();
+    const durByBigN = new Map<number, number>();
 
     // Collect only the bigN values that will appear in the output (up to safeLimit).
     const targetBigNs: number[] = [];
@@ -1731,16 +1811,16 @@ export class RealSnmpClient {
     const oidMeta = new Map<string, { bigN: number; field: OptField }>();
 
     for (const bigN of targetBigNs) {
-      const portSlot = (bigN >>> 8) & 0xFF;
-      const onuSlot  = bigN & 0xFF;
+      const portSlot = (bigN >>> 8) & 0xff;
+      const onuSlot = bigN & 0xff;
       // 4-byte EponDeviceIndex: byte[0]=OLT(1), byte[1]=card(0), byte[2]=slot, byte[3]=onu
-      const e = (1 * 0x1000000) + (portSlot << 8) + onuSlot;   // avoids JS sign issues
+      const e = 1 * 0x1000000 + (portSlot << 8) + onuSlot; // avoids JS sign issues
 
-      oidMeta.set(`${OPT_BASE}.4.${e}${optSuffix}`,  { bigN, field: "rx"   });
-      oidMeta.set(`${OPT_BASE}.5.${e}${optSuffix}`,  { bigN, field: "tx"   });
-      oidMeta.set(`${OPT_BASE}.8.${e}${optSuffix}`,  { bigN, field: "temp" });
-      oidMeta.set(`${INFO_BASE}.15.${e}`,             { bigN, field: "dist" });
-      oidMeta.set(`${INFO_BASE}.18.${e}`,             { bigN, field: "dur"  });
+      oidMeta.set(`${OPT_BASE}.4.${e}${optSuffix}`, { bigN, field: "rx" });
+      oidMeta.set(`${OPT_BASE}.5.${e}${optSuffix}`, { bigN, field: "tx" });
+      oidMeta.set(`${OPT_BASE}.8.${e}${optSuffix}`, { bigN, field: "temp" });
+      oidMeta.set(`${INFO_BASE}.15.${e}`, { bigN, field: "dist" });
+      oidMeta.set(`${INFO_BASE}.18.${e}`, { bigN, field: "dur" });
     }
 
     // Split into batches of 40 OIDs (= 8 ONUs × 5 OIDs) and issue in parallel.
@@ -1767,20 +1847,33 @@ export class RealSnmpClient {
         const meta = oidMeta.get(vb.oid);
         if (!meta) continue;
 
-        let raw: number | null = typeof vb.value === "number" ? vb.value
-                               : typeof vb.value === "bigint" ? Number(vb.value)
-                               : null;
+        let raw: number | null =
+          typeof vb.value === "number"
+            ? vb.value
+            : typeof vb.value === "bigint"
+              ? Number(vb.value)
+              : null;
         if (raw === null) continue;
         // Sign-extend 32-bit unsigned → signed (Gauge32/Counter32 encoding of negative dBm).
         // e.g. 0xFFFFFB18 (4294966072) → -1224 (= -12.24 dBm × 100)
-        if (raw > 0x7FFFFFFF) raw -= 0x100000000;
+        if (raw > 0x7fffffff) raw -= 0x100000000;
 
         switch (meta.field) {
-          case "rx":   rxByBigN.set(meta.bigN,   raw); break;
-          case "tx":   txByBigN.set(meta.bigN,   raw); break;
-          case "temp": tempByBigN.set(meta.bigN, raw); break;
-          case "dist": distByBigN.set(meta.bigN, raw); break;
-          case "dur":  durByBigN.set(meta.bigN,  raw); break;
+          case "rx":
+            rxByBigN.set(meta.bigN, raw);
+            break;
+          case "tx":
+            txByBigN.set(meta.bigN, raw);
+            break;
+          case "temp":
+            tempByBigN.set(meta.bigN, raw);
+            break;
+          case "dist":
+            distByBigN.set(meta.bigN, raw);
+            break;
+          case "dur":
+            durByBigN.set(meta.bigN, raw);
+            break;
         }
       }
     }
@@ -1790,54 +1883,54 @@ export class RealSnmpClient {
     for (const [bigN, status] of statusByBigN) {
       if (onus.length >= safeLimit) break;
 
-      const portSlot  = (bigN >>> 8) & 0xFF;
-      const onuSlot   = bigN & 0xFF;
+      const portSlot = (bigN >>> 8) & 0xff;
+      const onuSlot = bigN & 0xff;
       const portIndex = portSlot - PORT_SLOT_MIN;
-      const mac       = macByBigN.get(bigN) ?? null;
+      const mac = macByBigN.get(bigN) ?? null;
 
       // On EPON, the MAC address IS the ONU serial equivalent.
       // Store it without colons (AABBCCDDEEFF format) so it is searchable as
       // a serial number while `mac` retains the colon-separated display format.
       const serial = mac ? mac.replace(/:/g, "").toUpperCase() : null;
 
-      const rxPowRaw = rxByBigN.get(bigN)   ?? null;
-      const txPowRaw = txByBigN.get(bigN)   ?? null;
+      const rxPowRaw = rxByBigN.get(bigN) ?? null;
+      const txPowRaw = txByBigN.get(bigN) ?? null;
       const distMRaw = distByBigN.get(bigN) ?? null;
-      const tempRaw  = tempByBigN.get(bigN) ?? null;
-      const durRaw   = durByBigN.get(bigN)  ?? null;
+      const tempRaw = tempByBigN.get(bigN) ?? null;
+      const durRaw = durByBigN.get(bigN) ?? null;
 
       onus.push({
         // Use the explicit two-part SNMP index "portSlot.onuSlot" as the ONU ID.
         // This is the canonical identifier on C-DATA/EasyPath EPON firmware and
         // allows the frontend to unambiguously recover portSlot and onuSlot
         // without bit-masking the encoded bigN integer.
-        onuId:   `${portSlot}.${onuSlot}`,
+        onuId: `${portSlot}.${onuSlot}`,
         ponPort: `port-${portIndex}`,
         serial,
         mac,
-        name:              null,  // ONU descriptions not exposed via SNMP community=public
+        name: serial ?? mac ?? null,
         status,
-        type:              null,
+        type: null,
         offlineReasonCode: null,
         // MIB-confirmed scaling: all optical fields are centi-units (÷100).
         //   RX/TX raw centi-dBm → dBm  (e.g. -1224 → -12.24, 270 → 2.70)
         //   Temp   raw Centi-°C → °C   (e.g. 2968  → 29.68)
         //   Dist   raw meters   → m    (no scaling)
-        rxPowerDbm:           rxPowRaw !== null ? rxPowRaw / 100 : null,
-        txPowerDbm:           txPowRaw !== null ? txPowRaw / 100 : null,
-        distanceMeters:       distMRaw,
-        rawInstanceOid:       String(bigN),
-        temperatureCelsius:   tempRaw  !== null ? tempRaw  / 100 : null,
+        rxPowerDbm: rxPowRaw !== null ? rxPowRaw / 100 : null,
+        txPowerDbm: txPowRaw !== null ? txPowRaw / 100 : null,
+        distanceMeters: distMRaw,
+        rawInstanceOid: String(bigN),
+        temperatureCelsius: tempRaw !== null ? tempRaw / 100 : null,
         registerDurationSecs: durRaw,
       });
     }
 
-    const onlineCount  = onus.filter((o) => o.status === "online").length;
+    const onlineCount = onus.filter((o) => o.status === "online").length;
     const offlineCount = onus.filter((o) => o.status === "offline").length;
 
     return {
-      success:    true,
-      vendor:     "CDATA",
+      success: true,
+      vendor: "CDATA",
       totalFound: onus.length,
       onus,
       message:
@@ -1846,7 +1939,7 @@ export class RealSnmpClient {
         ` MAC OID: 17409.2.3.4.1.1.7.{bigN};` +
         ` Status OID: 17409.2.3.4.1.1.8.{bigN} (1=online, 2=offline).`,
       latencyMs: Date.now() - start,
-      mibUsed:   MIB_NAME,
+      mibUsed: MIB_NAME,
     };
   }
 
@@ -1867,12 +1960,12 @@ export class RealSnmpClient {
    */
   async readEasyPathPhysicalPorts(): Promise<number> {
     const IF_DESCR_COL = "1.3.6.1.2.1.2.2.1.2";
-    const prefix       = IF_DESCR_COL + ".";
-    let   cursor       = IF_DESCR_COL;
-    let   ponCount     = 0;
-    let   total        = 0;
-    const MAX_IFS      = 128;  // safety cap — even a 32-port OLT has < 128 interfaces total
-    const PON_RE       = /pon|epon|gpon/i;
+    const prefix = IF_DESCR_COL + ".";
+    let cursor = IF_DESCR_COL;
+    let ponCount = 0;
+    let total = 0;
+    const MAX_IFS = 128; // safety cap — even a 32-port OLT has < 128 interfaces total
+    const PON_RE = /pon|epon|gpon/i;
 
     while (total < MAX_IFS) {
       let batch: snmp.Varbind[];
@@ -1888,12 +1981,11 @@ export class RealSnmpClient {
       for (const vb of inTree) {
         if (total >= MAX_IFS) break;
         total++;
-        const desc =
-          Buffer.isBuffer(vb.value)
-            ? vb.value.toString("ascii")
-            : typeof vb.value === "string"
-              ? vb.value
-              : "";
+        const desc = Buffer.isBuffer(vb.value)
+          ? vb.value.toString("ascii")
+          : typeof vb.value === "string"
+            ? vb.value
+            : "";
         if (PON_RE.test(desc)) ponCount++;
       }
 
@@ -1926,40 +2018,60 @@ export class RealSnmpClient {
    *                    Huawei, "123.7" for ZTE).  Use {@link buildOnuInstance}
    *                    to construct this from ponPort + onuId.
    */
-  async readOnuDetails(vendor: string, instanceOid: string): Promise<ReadOnuDetailResult> {
+  async readOnuDetails(
+    vendor: string,
+    instanceOid: string,
+  ): Promise<ReadOnuDetailResult> {
     const start = Date.now();
     const mib = VENDOR_ONU_MIBS[vendor];
 
     if (!mib) {
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `No MIB configuration for vendor "${vendor}". Supported: ${Object.keys(VENDOR_ONU_MIBS).join(", ")}`,
+        onu: null,
+        message: `No MIB configuration for vendor "${vendor}". Supported: ${Object.keys(VENDOR_ONU_MIBS).join(", ")}`,
         latencyMs: Date.now() - start,
-        mibUsed:   "none",
+        mibUsed: "none",
       };
     }
 
     // Build per-field OIDs (null for unsupported columns)
     const colMap = {
-      serial: mib.colSerial !== null ? `${mib.tableRoot}.${mib.colSerial}.${instanceOid}` : null,
-      status: mib.colStatus !== null ? `${mib.tableRoot}.${mib.colStatus}.${instanceOid}` : null,
-      type:   mib.colType   !== null ? `${mib.tableRoot}.${mib.colType}.${instanceOid}`   : null,
-      mac:    mib.colMac    !== null ? `${mib.tableRoot}.${mib.colMac}.${instanceOid}`    : null,
-      desc:   mib.colDesc   !== null ? `${mib.tableRoot}.${mib.colDesc}.${instanceOid}`   : null,
+      serial:
+        mib.colSerial !== null
+          ? `${mib.tableRoot}.${mib.colSerial}.${instanceOid}`
+          : null,
+      status:
+        mib.colStatus !== null
+          ? `${mib.tableRoot}.${mib.colStatus}.${instanceOid}`
+          : null,
+      type:
+        mib.colType !== null
+          ? `${mib.tableRoot}.${mib.colType}.${instanceOid}`
+          : null,
+      mac:
+        mib.colMac !== null
+          ? `${mib.tableRoot}.${mib.colMac}.${instanceOid}`
+          : null,
+      desc:
+        mib.colDesc !== null
+          ? `${mib.tableRoot}.${mib.colDesc}.${instanceOid}`
+          : null,
     };
 
-    const oids: string[] = Object.values(colMap).filter((v): v is string => v !== null);
+    const oids: string[] = Object.values(colMap).filter(
+      (v): v is string => v !== null,
+    );
 
     if (oids.length === 0) {
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `MIB config for "${vendor}" has no readable detail columns.`,
+        onu: null,
+        message: `MIB config for "${vendor}" has no readable detail columns.`,
         latencyMs: Date.now() - start,
-        mibUsed:   mib.mibName,
+        mibUsed: mib.mibName,
       };
     }
 
@@ -1970,12 +2082,12 @@ export class RealSnmpClient {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `SNMP GET failed for ONU instance ${instanceOid}: ${msg}`,
+        onu: null,
+        message: `SNMP GET failed for ONU instance ${instanceOid}: ${msg}`,
         latencyMs: Date.now() - start,
-        mibUsed:   mib.mibName,
+        mibUsed: mib.mibName,
       };
     }
 
@@ -1999,28 +2111,32 @@ export class RealSnmpClient {
     const rawStatus = colMap.status ? attrMap[colMap.status] : undefined;
 
     const onu: SnmpOnuDetail = {
-      onuId:           parsed?.onuId   ?? instanceOid.split(".").pop() ?? instanceOid,
-      ponPort:         parsed?.ponPort ?? instanceOid,
-      serial:          colMap.serial   ? parseGponSerial(attrMap[colMap.serial]?.value)  : null,
-      mac:             colMap.mac      ? parseMacAddress(attrMap[colMap.mac]?.value)      : null,
-      clientMac:       null,
-      type:            colMap.type     ? (stringVal(attrMap[colMap.type])  ?? null)       : null,
-      description:     colMap.desc     ? (stringVal(attrMap[colMap.desc])  ?? null)       : null,
-      status:          rawStatus       ? mib.parseStatus(intVal(rawStatus) ?? 2)          : "unknown",
+      onuId: parsed?.onuId ?? instanceOid.split(".").pop() ?? instanceOid,
+      ponPort: parsed?.ponPort ?? instanceOid,
+      serial: colMap.serial
+        ? parseGponSerial(attrMap[colMap.serial]?.value)
+        : null,
+      mac: colMap.mac ? parseMacAddress(attrMap[colMap.mac]?.value) : null,
+      clientMac: null,
+      type: colMap.type ? (stringVal(attrMap[colMap.type]) ?? null) : null,
+      description: colMap.desc
+        ? (stringVal(attrMap[colMap.desc]) ?? null)
+        : null,
+      status: rawStatus ? mib.parseStatus(intVal(rawStatus) ?? 2) : "unknown",
       distanceMeters,
-      onuUptimeSecs:   null,
-      lastOnlineTime:  null,
+      onuUptimeSecs: null,
+      lastOnlineTime: null,
       lastOfflineTime: null,
-      rawInstanceOid:  instanceOid,
+      rawInstanceOid: instanceOid,
     };
 
     return {
-      success:   true,
+      success: true,
       vendor,
       onu,
-      message:   `ONU ${onu.onuId} on port ${onu.ponPort} read from ${mib.mibName}`,
+      message: `ONU ${onu.onuId} on port ${onu.ponPort} read from ${mib.mibName}`,
       latencyMs: Date.now() - start,
-      mibUsed:   mib.mibName,
+      mibUsed: mib.mibName,
     };
   }
 
@@ -2041,43 +2157,61 @@ export class RealSnmpClient {
    * @param instanceOid OID instance suffix (same format as readOnuDetails).
    *                    Use {@link buildOnuInstance} to construct from ponPort + onuId.
    */
-  async readOnuOptical(vendor: string, instanceOid: string): Promise<ReadOnuOpticalResult> {
+  async readOnuOptical(
+    vendor: string,
+    instanceOid: string,
+  ): Promise<ReadOnuOpticalResult> {
     const start = Date.now();
     const mib = VENDOR_OPTICAL_MIBS[vendor];
 
     if (!mib) {
       const configured = Object.keys(VENDOR_OPTICAL_MIBS).join(", ");
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `Optical power MIB not available for vendor "${vendor}". ` +
-                   (configured
-                     ? `Currently configured: ${configured}.`
-                     : `No vendors configured yet — see TODO comments in VENDOR_OPTICAL_MIBS.`),
+        onu: null,
+        message:
+          `Optical power MIB not available for vendor "${vendor}". ` +
+          (configured
+            ? `Currently configured: ${configured}.`
+            : `No vendors configured yet — see TODO comments in VENDOR_OPTICAL_MIBS.`),
         latencyMs: Date.now() - start,
-        mibUsed:   "none",
+        mibUsed: "none",
       };
     }
 
     // Build per-field OIDs (null entries skipped — columns unsupported by this vendor)
     const colMap = {
-      rxPower:     mib.colRxPower     !== null ? `${mib.tableRoot}.${mib.colRxPower}.${instanceOid}`     : null,
-      txPower:     mib.colTxPower     !== null ? `${mib.tableRoot}.${mib.colTxPower}.${instanceOid}`     : null,
-      oltRxPower:  mib.colOltRxPower  !== null ? `${mib.tableRoot}.${mib.colOltRxPower}.${instanceOid}`  : null,
-      temperature: mib.colTemperature !== null ? `${mib.tableRoot}.${mib.colTemperature}.${instanceOid}` : null,
+      rxPower:
+        mib.colRxPower !== null
+          ? `${mib.tableRoot}.${mib.colRxPower}.${instanceOid}`
+          : null,
+      txPower:
+        mib.colTxPower !== null
+          ? `${mib.tableRoot}.${mib.colTxPower}.${instanceOid}`
+          : null,
+      oltRxPower:
+        mib.colOltRxPower !== null
+          ? `${mib.tableRoot}.${mib.colOltRxPower}.${instanceOid}`
+          : null,
+      temperature:
+        mib.colTemperature !== null
+          ? `${mib.tableRoot}.${mib.colTemperature}.${instanceOid}`
+          : null,
     };
 
-    const oids: string[] = Object.values(colMap).filter((v): v is string => v !== null);
+    const oids: string[] = Object.values(colMap).filter(
+      (v): v is string => v !== null,
+    );
 
     if (oids.length === 0) {
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `Optical MIB config for "${vendor}" has no readable columns.`,
+        onu: null,
+        message: `Optical MIB config for "${vendor}" has no readable columns.`,
         latencyMs: Date.now() - start,
-        mibUsed:   mib.mibName,
+        mibUsed: mib.mibName,
       };
     }
 
@@ -2088,49 +2222,65 @@ export class RealSnmpClient {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `SNMP GET failed for ONU optical instance ${instanceOid}: ${msg}`,
+        onu: null,
+        message: `SNMP GET failed for ONU optical instance ${instanceOid}: ${msg}`,
         latencyMs: Date.now() - start,
-        mibUsed:   mib.mibName,
+        mibUsed: mib.mibName,
       };
     }
 
     // ── Scale raw SNMP integers to dBm / °C ──────────────────────────────
-    const rawRx    = colMap.rxPower     ? intVal(attrMap[colMap.rxPower])     : undefined;
-    const rawTx    = colMap.txPower     ? intVal(attrMap[colMap.txPower])     : undefined;
-    const rawOltRx = colMap.oltRxPower  ? intVal(attrMap[colMap.oltRxPower])  : undefined;
-    const rawTemp  = colMap.temperature ? intVal(attrMap[colMap.temperature]) : undefined;
+    const rawRx = colMap.rxPower ? intVal(attrMap[colMap.rxPower]) : undefined;
+    const rawTx = colMap.txPower ? intVal(attrMap[colMap.txPower]) : undefined;
+    const rawOltRx = colMap.oltRxPower
+      ? intVal(attrMap[colMap.oltRxPower])
+      : undefined;
+    const rawTemp = colMap.temperature
+      ? intVal(attrMap[colMap.temperature])
+      : undefined;
 
     // Round to 2 decimal places for power, 1 for temperature — avoids float noise.
-    const rxPowerDbm    = rawRx    !== undefined ? Math.round(rawRx    * mib.powerScale       * 100) / 100 : null;
-    const txPowerDbm    = rawTx    !== undefined ? Math.round(rawTx    * mib.powerScale       * 100) / 100 : null;
-    const oltRxPowerDbm = rawOltRx !== undefined ? Math.round(rawOltRx * mib.powerScale       * 100) / 100 : null;
-    const temperatureC  = rawTemp  !== undefined ? Math.round(rawTemp  * mib.temperatureScale * 10)  / 10  : null;
+    const rxPowerDbm =
+      rawRx !== undefined
+        ? Math.round(rawRx * mib.powerScale * 100) / 100
+        : null;
+    const txPowerDbm =
+      rawTx !== undefined
+        ? Math.round(rawTx * mib.powerScale * 100) / 100
+        : null;
+    const oltRxPowerDbm =
+      rawOltRx !== undefined
+        ? Math.round(rawOltRx * mib.powerScale * 100) / 100
+        : null;
+    const temperatureC =
+      rawTemp !== undefined
+        ? Math.round(rawTemp * mib.temperatureScale * 10) / 10
+        : null;
 
     // ── Parse instance OID into human-readable port + onuId ──────────────
     const onuMib = VENDOR_ONU_MIBS[vendor];
     const parsed = onuMib ? onuMib.parseInstance(instanceOid) : null;
 
     const onu: SnmpOnuOptical = {
-      onuId:          parsed?.onuId   ?? instanceOid.split(".").pop() ?? instanceOid,
-      ponPort:        parsed?.ponPort ?? instanceOid,
+      onuId: parsed?.onuId ?? instanceOid.split(".").pop() ?? instanceOid,
+      ponPort: parsed?.ponPort ?? instanceOid,
       rxPowerDbm,
       txPowerDbm,
       oltRxPowerDbm,
       temperatureC,
-      opticalStatus:  deriveOpticalStatus(rxPowerDbm),
+      opticalStatus: deriveOpticalStatus(rxPowerDbm),
       rawInstanceOid: instanceOid,
     };
 
     return {
-      success:   true,
+      success: true,
       vendor,
       onu,
-      message:   `ONU ${onu.onuId} optical data read from ${mib.mibName}`,
+      message: `ONU ${onu.onuId} optical data read from ${mib.mibName}`,
       latencyMs: Date.now() - start,
-      mibUsed:   mib.mibName,
+      mibUsed: mib.mibName,
     };
   }
 
@@ -2160,10 +2310,11 @@ export class RealSnmpClient {
     instanceOid: string,
     ifIndex?: number,
   ): Promise<ReadOnuTrafficResult> {
-    const start   = Date.now();
-    const onuMib  = VENDOR_ONU_MIBS[vendor];
-    const parsed  = onuMib ? onuMib.parseInstance(instanceOid) : null;
-    const resolvedId   = parsed?.onuId   ?? instanceOid.split(".").pop() ?? instanceOid;
+    const start = Date.now();
+    const onuMib = VENDOR_ONU_MIBS[vendor];
+    const parsed = onuMib ? onuMib.parseInstance(instanceOid) : null;
+    const resolvedId =
+      parsed?.onuId ?? instanceOid.split(".").pop() ?? instanceOid;
     const resolvedPort = parsed?.ponPort ?? instanceOid;
 
     // ── Path A: Standard IF-MIB ──────────────────────────────────────────
@@ -2181,45 +2332,50 @@ export class RealSnmpClient {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return {
-          success:   false,
+          success: false,
           vendor,
-          onu:       null,
-          message:   `SNMP GET failed for IF-MIB ifIndex ${ifIndex}: ${msg}`,
+          onu: null,
+          message: `SNMP GET failed for IF-MIB ifIndex ${ifIndex}: ${msg}`,
           latencyMs: Date.now() - start,
-          mibUsed:   "IF-MIB",
+          mibUsed: "IF-MIB",
         };
       }
 
       // 64-bit preferred; fall back to 32-bit when HC is absent
-      const hcIn   = parseCounter64(attrMap[`${IF_HC_IN_OCTETS}.${ifIndex}`]?.value);
-      const hcOut  = parseCounter64(attrMap[`${IF_HC_OUT_OCTETS}.${ifIndex}`]?.value);
-      const in32   = intVal(attrMap[`${IF_IN_OCTETS}.${ifIndex}`]);
-      const out32  = intVal(attrMap[`${IF_OUT_OCTETS}.${ifIndex}`]);
+      const hcIn = parseCounter64(
+        attrMap[`${IF_HC_IN_OCTETS}.${ifIndex}`]?.value,
+      );
+      const hcOut = parseCounter64(
+        attrMap[`${IF_HC_OUT_OCTETS}.${ifIndex}`]?.value,
+      );
+      const in32 = intVal(attrMap[`${IF_IN_OCTETS}.${ifIndex}`]);
+      const out32 = intVal(attrMap[`${IF_OUT_OCTETS}.${ifIndex}`]);
 
-      const downloadBytes = hcIn  ?? in32  ?? null;
-      const uploadBytes   = hcOut ?? out32 ?? null;
+      const downloadBytes = hcIn ?? in32 ?? null;
+      const uploadBytes = hcOut ?? out32 ?? null;
 
       const onu: SnmpOnuTraffic = {
-        onuId:            resolvedId,
-        ponPort:          resolvedPort,
+        onuId: resolvedId,
+        ponPort: resolvedPort,
         downloadBytes,
         uploadBytes,
-        totalBytes:       downloadBytes !== null && uploadBytes !== null
-                            ? downloadBytes + uploadBytes
-                            : null,
+        totalBytes:
+          downloadBytes !== null && uploadBytes !== null
+            ? downloadBytes + uploadBytes
+            : null,
         downloadRateKbps: null, // rates require two timed readings — not available in single GET
-        uploadRateKbps:   null,
+        uploadRateKbps: null,
         ifIndex,
-        rawInstanceOid:   instanceOid,
+        rawInstanceOid: instanceOid,
       };
 
       return {
-        success:   true,
+        success: true,
         vendor,
         onu,
-        message:   `ONU ${resolvedId} traffic counters read via IF-MIB (ifIndex ${ifIndex})`,
+        message: `ONU ${resolvedId} traffic counters read via IF-MIB (ifIndex ${ifIndex})`,
         latencyMs: Date.now() - start,
-        mibUsed:   "IF-MIB",
+        mibUsed: "IF-MIB",
       };
     }
 
@@ -2229,40 +2385,49 @@ export class RealSnmpClient {
     if (!mib) {
       const configured = Object.keys(VENDOR_TRAFFIC_MIBS).join(", ");
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `No traffic MIB configured for vendor "${vendor}". ` +
-                   (configured
-                     ? `Configured: ${configured}. `
-                     : "") +
-                   `Alternatively, pass an ifIndex to use IF-MIB directly (works for any vendor).`,
+        onu: null,
+        message:
+          `No traffic MIB configured for vendor "${vendor}". ` +
+          (configured ? `Configured: ${configured}. ` : "") +
+          `Alternatively, pass an ifIndex to use IF-MIB directly (works for any vendor).`,
         latencyMs: Date.now() - start,
-        mibUsed:   "none",
+        mibUsed: "none",
       };
     }
 
     const colMap = {
-      downloadBytes:    mib.colDownloadBytes    !== null
-                          ? `${mib.tableRoot}.${mib.colDownloadBytes}.${instanceOid}`    : null,
-      uploadBytes:      mib.colUploadBytes      !== null
-                          ? `${mib.tableRoot}.${mib.colUploadBytes}.${instanceOid}`      : null,
-      downloadRateKbps: mib.colDownloadRateKbps !== null
-                          ? `${mib.tableRoot}.${mib.colDownloadRateKbps}.${instanceOid}` : null,
-      uploadRateKbps:   mib.colUploadRateKbps   !== null
-                          ? `${mib.tableRoot}.${mib.colUploadRateKbps}.${instanceOid}`   : null,
+      downloadBytes:
+        mib.colDownloadBytes !== null
+          ? `${mib.tableRoot}.${mib.colDownloadBytes}.${instanceOid}`
+          : null,
+      uploadBytes:
+        mib.colUploadBytes !== null
+          ? `${mib.tableRoot}.${mib.colUploadBytes}.${instanceOid}`
+          : null,
+      downloadRateKbps:
+        mib.colDownloadRateKbps !== null
+          ? `${mib.tableRoot}.${mib.colDownloadRateKbps}.${instanceOid}`
+          : null,
+      uploadRateKbps:
+        mib.colUploadRateKbps !== null
+          ? `${mib.tableRoot}.${mib.colUploadRateKbps}.${instanceOid}`
+          : null,
     };
 
-    const oids: string[] = Object.values(colMap).filter((v): v is string => v !== null);
+    const oids: string[] = Object.values(colMap).filter(
+      (v): v is string => v !== null,
+    );
 
     if (oids.length === 0) {
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `Traffic MIB for "${vendor}" has no readable columns. Pass an ifIndex to use IF-MIB instead.`,
+        onu: null,
+        message: `Traffic MIB for "${vendor}" has no readable columns. Pass an ifIndex to use IF-MIB instead.`,
         latencyMs: Date.now() - start,
-        mibUsed:   mib.mibName,
+        mibUsed: mib.mibName,
       };
     }
 
@@ -2272,49 +2437,56 @@ export class RealSnmpClient {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
-        success:   false,
+        success: false,
         vendor,
-        onu:       null,
-        message:   `SNMP GET failed for ONU traffic instance ${instanceOid}: ${msg}`,
+        onu: null,
+        message: `SNMP GET failed for ONU traffic instance ${instanceOid}: ${msg}`,
         latencyMs: Date.now() - start,
-        mibUsed:   mib.mibName,
+        mibUsed: mib.mibName,
       };
     }
 
     // Vendor counters may be Counter32 or Counter64 — try both parsers
-    const rawDl    = colMap.downloadBytes
-                       ? (parseCounter64(attrMap[colMap.downloadBytes]?.value) ?? intVal(attrMap[colMap.downloadBytes]))
-                       : undefined;
-    const rawUl    = colMap.uploadBytes
-                       ? (parseCounter64(attrMap[colMap.uploadBytes]?.value)   ?? intVal(attrMap[colMap.uploadBytes]))
-                       : undefined;
-    const rawDlRps = colMap.downloadRateKbps ? intVal(attrMap[colMap.downloadRateKbps]) : undefined;
-    const rawUlRps = colMap.uploadRateKbps   ? intVal(attrMap[colMap.uploadRateKbps])   : undefined;
+    const rawDl = colMap.downloadBytes
+      ? (parseCounter64(attrMap[colMap.downloadBytes]?.value) ??
+        intVal(attrMap[colMap.downloadBytes]))
+      : undefined;
+    const rawUl = colMap.uploadBytes
+      ? (parseCounter64(attrMap[colMap.uploadBytes]?.value) ??
+        intVal(attrMap[colMap.uploadBytes]))
+      : undefined;
+    const rawDlRps = colMap.downloadRateKbps
+      ? intVal(attrMap[colMap.downloadRateKbps])
+      : undefined;
+    const rawUlRps = colMap.uploadRateKbps
+      ? intVal(attrMap[colMap.uploadRateKbps])
+      : undefined;
 
     const downloadBytes = rawDl ?? null;
-    const uploadBytes   = rawUl ?? null;
+    const uploadBytes = rawUl ?? null;
 
     const onu: SnmpOnuTraffic = {
-      onuId:            resolvedId,
-      ponPort:          resolvedPort,
+      onuId: resolvedId,
+      ponPort: resolvedPort,
       downloadBytes,
       uploadBytes,
-      totalBytes:       downloadBytes !== null && uploadBytes !== null
-                          ? downloadBytes + uploadBytes
-                          : null,
+      totalBytes:
+        downloadBytes !== null && uploadBytes !== null
+          ? downloadBytes + uploadBytes
+          : null,
       downloadRateKbps: rawDlRps ?? null,
-      uploadRateKbps:   rawUlRps ?? null,
-      ifIndex:          null,
-      rawInstanceOid:   instanceOid,
+      uploadRateKbps: rawUlRps ?? null,
+      ifIndex: null,
+      rawInstanceOid: instanceOid,
     };
 
     return {
-      success:   true,
+      success: true,
       vendor,
       onu,
-      message:   `ONU ${resolvedId} traffic read from ${mib.mibName}`,
+      message: `ONU ${resolvedId} traffic read from ${mib.mibName}`,
       latencyMs: Date.now() - start,
-      mibUsed:   mib.mibName,
+      mibUsed: mib.mibName,
     };
   }
 }
@@ -2387,13 +2559,28 @@ function isPonPort(descr: string): boolean {
 }
 
 /** Classify a non-PON interface into a display category for OLT health. */
-function classifyOltInterface(descr: string): "uplink" | "ethernet" | "sfp" | "other" {
+function classifyOltInterface(
+  descr: string,
+): "uplink" | "ethernet" | "sfp" | "other" {
   const d = descr.toLowerCase();
-  if (d.includes("10ge") || d.includes("xge") || d.startsWith("ten") ||
-      d.includes("uplink") || d.includes("10g-eth")) return "uplink";
+  if (
+    d.includes("10ge") ||
+    d.includes("xge") ||
+    d.startsWith("ten") ||
+    d.includes("uplink") ||
+    d.includes("10g-eth")
+  )
+    return "uplink";
   if (d.includes("sfp")) return "sfp";
-  if (d.includes("ge") || d.includes("gigabit") || d.includes("ethernet") ||
-      d.startsWith("eth") || d.startsWith("fe") || d.startsWith("fastethernet")) return "ethernet";
+  if (
+    d.includes("ge") ||
+    d.includes("gigabit") ||
+    d.includes("ethernet") ||
+    d.startsWith("eth") ||
+    d.startsWith("fe") ||
+    d.startsWith("fastethernet")
+  )
+    return "ethernet";
   return "other";
 }
 
@@ -2420,7 +2607,10 @@ function classifyError(err: Error, host: string, timeoutMs: number): Error {
  * Exported so callers (e.g. snmp-test.routes.ts) can re-use the result from
  * an already-fetched SysInfo without issuing a second SNMP round-trip.
  */
-export function detectVendorFromSysInfo(sysDescr: string, sysObjectID: string): string {
+export function detectVendorFromSysInfo(
+  sysDescr: string,
+  sysObjectID: string,
+): string {
   return detectVendor(sysDescr, sysObjectID);
 }
 
@@ -2451,7 +2641,9 @@ export function extractModelFromDescr(sysDescr: string): string {
  * Returns "unknown" rather than guessing when the type cannot be determined.
  * Callers should try GPON first and EPON as fallback, or vice versa.
  */
-export function detectCdataPonType(sysDescr: string): "EPON" | "GPON" | "unknown" {
+export function detectCdataPonType(
+  sysDescr: string,
+): "EPON" | "GPON" | "unknown" {
   const d = sysDescr.toLowerCase();
 
   // Explicit technology keywords (fastest path)
@@ -2459,12 +2651,12 @@ export function detectCdataPonType(sysDescr: string): "EPON" | "GPON" | "unknown
   if (d.includes("gpon")) return "GPON";
 
   // GPON model suffixes: FD1616GS, FD8920, FD1204SN
-  if (/\bFD\d{4}GS\b/i.test(sysDescr)) return "GPON";   // e.g. FD1616GS
-  if (/\bFD\d{4}SN\b/i.test(sysDescr)) return "GPON";   // e.g. FD1204SN
-  if (/\bFD89\d{2}\b/i.test(sysDescr)) return "GPON";   // e.g. FD8920
+  if (/\bFD\d{4}GS\b/i.test(sysDescr)) return "GPON"; // e.g. FD1616GS
+  if (/\bFD\d{4}SN\b/i.test(sysDescr)) return "GPON"; // e.g. FD1204SN
+  if (/\bFD89\d{2}\b/i.test(sysDescr)) return "GPON"; // e.g. FD8920
 
   // EPON model patterns: FD1208S-B0, FD1104S-xx, FD1204S-xx (dash variant)
-  if (/\bFD\d{4}S-/i.test(sysDescr))        return "EPON";
+  if (/\bFD\d{4}S-/i.test(sysDescr)) return "EPON";
   // EPON models without dash suffix but also without GS/SN
   if (/\bFD1[12]\d{2}S\b/i.test(sysDescr)) return "EPON";
 
@@ -2475,15 +2667,42 @@ function detectVendor(sysDescr: string, sysObjectID: string): string {
   const d = sysDescr.toLowerCase();
   const o = sysObjectID;
 
-  if (d.includes("huawei") || d.includes("ma5800") || d.includes("ma5600") || o.startsWith("1.3.6.1.4.1.2011"))
+  if (
+    d.includes("huawei") ||
+    d.includes("ma5800") ||
+    d.includes("ma5600") ||
+    o.startsWith("1.3.6.1.4.1.2011")
+  )
     return "Huawei";
-  if (d.includes("zte") || d.includes("zxa10") || d.includes("c300") || d.includes("c600") || o.startsWith("1.3.6.1.4.1.3902"))
+  if (
+    d.includes("zte") ||
+    d.includes("zxa10") ||
+    d.includes("c300") ||
+    d.includes("c600") ||
+    o.startsWith("1.3.6.1.4.1.3902")
+  )
     return "ZTE";
-  if (d.includes("bdcom") || d.includes("p3310") || d.includes("p3608") || o.startsWith("1.3.6.1.4.1.3320"))
+  if (
+    d.includes("bdcom") ||
+    d.includes("p3310") ||
+    d.includes("p3608") ||
+    o.startsWith("1.3.6.1.4.1.3320")
+  )
     return "BDCOM";
-  if (d.includes("vsol") || d.includes("v1600") || d.includes("v2801") || o.startsWith("1.3.6.1.4.1.37950"))
+  if (
+    d.includes("vsol") ||
+    d.includes("v1600") ||
+    d.includes("v2801") ||
+    o.startsWith("1.3.6.1.4.1.37950")
+  )
     return "VSOL";
-  if (d.includes("c-data") || d.includes("cdata") || d.includes("fd1616") || d.includes("fd8920") || o.startsWith("1.3.6.1.4.1.34592"))
+  if (
+    d.includes("c-data") ||
+    d.includes("cdata") ||
+    d.includes("fd1616") ||
+    d.includes("fd8920") ||
+    o.startsWith("1.3.6.1.4.1.34592")
+  )
     return "CDATA";
   // EasyPath Ethernet-PON (FD1208S-B0 V1.6.0) — same vendor, different firmware OID tree
   if (d.includes("easypath") || o.startsWith("1.3.6.1.4.1.17409"))
@@ -2533,20 +2752,27 @@ function extractModel(sysDescr: string): string {
  */
 function vendorOnuTableOid(vendor: string): string | null {
   switch (vendor) {
-    case "Huawei": return "1.3.6.1.4.1.2011.6.139.9.3.8.100.1.1";  // hwGponOnuTable
-    case "ZTE":    return "1.3.6.1.4.1.3902.3.101.13.10.1.1";        // zxAnGponOnuTable
-    case "BDCOM":  return "1.3.6.1.4.1.3320.9.1.3.3.1";              // bdEponOnuTable
-    case "VSOL":   return "1.3.6.1.4.1.37950.2.1.1.1";               // tentative
-    case "CDATA":  return "1.3.6.1.4.1.34592.5.1.3.1";               // cdataGponOnuTable
-    default:       return null;
+    case "Huawei":
+      return "1.3.6.1.4.1.2011.6.139.9.3.8.100.1.1"; // hwGponOnuTable
+    case "ZTE":
+      return "1.3.6.1.4.1.3902.3.101.13.10.1.1"; // zxAnGponOnuTable
+    case "BDCOM":
+      return "1.3.6.1.4.1.3320.9.1.3.3.1"; // bdEponOnuTable
+    case "VSOL":
+      return "1.3.6.1.4.1.37950.2.1.1.1"; // tentative
+    case "CDATA":
+      return "1.3.6.1.4.1.34592.5.1.3.1"; // cdataGponOnuTable
+    default:
+      return null;
   }
 }
 
 /** Build the mock-fallback OnuListResult. */
-function mockFallback(oltId: string | undefined, reason: string): OnuListResult {
-  const onus = oltId
-    ? MOCK_ONUS.filter((o) => o.oltId === oltId)
-    : MOCK_ONUS;
+function mockFallback(
+  oltId: string | undefined,
+  reason: string,
+): OnuListResult {
+  const onus = oltId ? MOCK_ONUS.filter((o) => o.oltId === oltId) : MOCK_ONUS;
   return {
     source: "mock",
     onus,
@@ -2620,20 +2846,19 @@ interface VendorOnuMib {
  * TODO: Confirm VSOL and CDATA OIDs against multiple firmware versions.
  */
 const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
-
   // ── Huawei MA5800-X7 / MA5800-X15 / MA5600T GPON ───────────────────────
   // MIB: HUAWEI-XPON-MIB::hwGponOnuMngTable
   // Instance index: {frame}.{slot}.{port}.{onuId}  — e.g. "0.4.3.5"
   // Confirmed columns: 1=index, 2=desc, 3=SN, 4=type, 5=runState
   Huawei: {
-    tableRoot:   "1.3.6.1.4.1.2011.6.139.9.3.8.100.1",
-    mibName:     "hwGponOnuMngTable",
-    colIndex:    1,    // hwGponOnuMngAttrIndex
-    colSerial:   3,    // hwGponOnuMngAttrSN — OCTET STRING 8 bytes (4 ASCII + 4 hex)
-    colStatus:   5,    // hwGponOnuMngAttrRunState — 1=online, 2=offline
-    colType:     4,    // hwGponOnuMngAttrType — ONU model string
-    colMac:      null,
-    colDesc:     2,    // hwGponOnuMngAttrDesc — operator-assigned description
+    tableRoot: "1.3.6.1.4.1.2011.6.139.9.3.8.100.1",
+    mibName: "hwGponOnuMngTable",
+    colIndex: 1, // hwGponOnuMngAttrIndex
+    colSerial: 3, // hwGponOnuMngAttrSN — OCTET STRING 8 bytes (4 ASCII + 4 hex)
+    colStatus: 5, // hwGponOnuMngAttrRunState — 1=online, 2=offline
+    colType: 4, // hwGponOnuMngAttrType — ONU model string
+    colMac: null,
+    colDesc: 2, // hwGponOnuMngAttrDesc — operator-assigned description
     // Distance is in a separate optical interface table; OID unconfirmed across
     // firmware versions — left null until validated on production hardware.
     // TODO: validate 1.3.6.1.4.1.2011.6.139.4.1.3.1.3 (hwGponOnuDistance)
@@ -2643,7 +2868,7 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
       if (p.length < 4) return null;
       return { ponPort: `${p[0]}/${p[1]}/${p[2]}`, onuId: p[3] ?? suffix };
     },
-    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+    parseStatus: (v) => (v === 1 ? "online" : v === 2 ? "offline" : "unknown"),
   },
 
   // ── ZTE C300 / C320 / C600 / C650 GPON ─────────────────────────────────
@@ -2651,64 +2876,64 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   // Instance index: {gponIfIndex}.{onuId}  — e.g. "123.7"
   // Confirmed columns: 1=index, 2=SN, 7=operStatus
   ZTE: {
-    tableRoot:   "1.3.6.1.4.1.3902.3.101.13.10.1",
-    mibName:     "zxAnGponOnuTable",
-    colIndex:    1,    // zxAnGponOnuIndex
-    colSerial:   2,    // zxAnGponOnuSN — OCTET STRING 8 bytes (GPON SN format)
-    colStatus:   7,    // zxAnGponOnuOperStatus — 1=online, 2=offline
-    colType:     null,
-    colMac:      null,
-    colDesc:     null, // No description column in confirmed ZTE GPON ONU MIB
+    tableRoot: "1.3.6.1.4.1.3902.3.101.13.10.1",
+    mibName: "zxAnGponOnuTable",
+    colIndex: 1, // zxAnGponOnuIndex
+    colSerial: 2, // zxAnGponOnuSN — OCTET STRING 8 bytes (GPON SN format)
+    colStatus: 7, // zxAnGponOnuOperStatus — 1=online, 2=offline
+    colType: null,
+    colMac: null,
+    colDesc: null, // No description column in confirmed ZTE GPON ONU MIB
     distanceOid: null, // TODO: zxAnGponOnuStatTable distance col (unconfirmed OID)
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
-      const onuId  = p[p.length - 1]!;
-      const port   = p.slice(0, -1).join(".");
+      const onuId = p[p.length - 1]!;
+      const port = p.slice(0, -1).join(".");
       return { ponPort: `gpon-ifIndex:${port}`, onuId };
     },
-    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+    parseStatus: (v) => (v === 1 ? "online" : v === 2 ? "offline" : "unknown"),
   },
 
   // ── BDCOM P3310C / P3608 / GP3600 EPON ──────────────────────────────────
   // MIB: BDCOM-EPON-ONU-MIB (enterprise OID space 1.3.6.1.4.1.3320)
   // Instance index: {ponPort}.{onuId} — tentative; verify per firmware
   BDCOM: {
-    tableRoot:   "1.3.6.1.4.1.3320.9.1.3.3.1",
-    mibName:     "bdEponOnuTable",
-    colIndex:    1,
-    colSerial:   null,
-    colStatus:   3,    // 1=online, 2=offline (tentative — verify per firmware)
-    colType:     null,
-    colMac:      2,    // 6-byte MAC address
-    colDesc:     null, // No description column in confirmed BDCOM EPON ONU MIB
+    tableRoot: "1.3.6.1.4.1.3320.9.1.3.3.1",
+    mibName: "bdEponOnuTable",
+    colIndex: 1,
+    colSerial: null,
+    colStatus: 3, // 1=online, 2=offline (tentative — verify per firmware)
+    colType: null,
+    colMac: 2, // 6-byte MAC address
+    colDesc: null, // No description column in confirmed BDCOM EPON ONU MIB
     distanceOid: null, // TODO: BDCOM distance OID unconfirmed
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
       return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
     },
-    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+    parseStatus: (v) => (v === 1 ? "online" : v === 2 ? "offline" : "unknown"),
   },
 
   // ── VSOL V1600 / V2801 / V2802 GPON ─────────────────────────────────────
   // Tentative OIDs — verify against device-specific MIB before production use
   VSOL: {
-    tableRoot:   "1.3.6.1.4.1.37950.2.1.1.1",
-    mibName:     "vsolGponOnuTable",
-    colIndex:    1,
-    colSerial:   3,
-    colStatus:   5,    // tentative
-    colType:     null,
-    colMac:      2,
-    colDesc:     null, // TODO: confirm description column for VSOL MIB
+    tableRoot: "1.3.6.1.4.1.37950.2.1.1.1",
+    mibName: "vsolGponOnuTable",
+    colIndex: 1,
+    colSerial: 3,
+    colStatus: 5, // tentative
+    colType: null,
+    colMac: 2,
+    colDesc: null, // TODO: confirm description column for VSOL MIB
     distanceOid: null, // TODO: VSOL distance OID unconfirmed
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
       return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
     },
-    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+    parseStatus: (v) => (v === 1 ? "online" : v === 2 ? "offline" : "unknown"),
   },
 
   // ── C-DATA FD1616GS / FD8920 / FD1204SN GPON ────────────────────────────
@@ -2716,40 +2941,40 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   // Note: Use "CDATA-GPON" or "CDATA-EPON" for explicit PON-type dispatch.
   //       "CDATA" is kept as a backward-compat alias for the GPON table.
   CDATA: {
-    tableRoot:   "1.3.6.1.4.1.34592.5.1.3.1",
-    mibName:     "cdataGponOnuTable",
-    colIndex:    1,
-    colSerial:   3,
-    colStatus:   7,    // tentative
-    colType:     4,
-    colMac:      null,
-    colDesc:     null,
+    tableRoot: "1.3.6.1.4.1.34592.5.1.3.1",
+    mibName: "cdataGponOnuTable",
+    colIndex: 1,
+    colSerial: 3,
+    colStatus: 7, // tentative
+    colType: 4,
+    colMac: null,
+    colDesc: null,
     distanceOid: null,
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
       return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
     },
-    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+    parseStatus: (v) => (v === 1 ? "online" : v === 2 ? "offline" : "unknown"),
   },
 
   // ── C-DATA GPON — explicit alias (same as CDATA above) ──────────────────
   "CDATA-GPON": {
-    tableRoot:   "1.3.6.1.4.1.34592.5.1.3.1",
-    mibName:     "cdataGponOnuTable",
-    colIndex:    1,
-    colSerial:   3,
-    colStatus:   7,    // tentative
-    colType:     4,
-    colMac:      null,
-    colDesc:     null,
+    tableRoot: "1.3.6.1.4.1.34592.5.1.3.1",
+    mibName: "cdataGponOnuTable",
+    colIndex: 1,
+    colSerial: 3,
+    colStatus: 7, // tentative
+    colType: 4,
+    colMac: null,
+    colDesc: null,
     distanceOid: null,
     parseInstance: (suffix) => {
       const p = suffix.split(".");
       if (p.length < 2) return null;
       return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
     },
-    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+    parseStatus: (v) => (v === 1 ? "online" : v === 2 ? "offline" : "unknown"),
   },
 
   // ── C-DATA EPON — FD1208S / FD1104S / FD1204S / FD8000-EPON series ──────
@@ -2768,14 +2993,14 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
   //
   // TODO: Confirm column offsets across FD12xx vs FD8000 EPON firmware lines.
   "CDATA-EPON": {
-    tableRoot:   "1.3.6.1.4.1.34592.1.1.3.1",
-    mibName:     "cdataEponOnuTable",
-    colIndex:    1,
-    colSerial:   null,  // EPON uses MAC/LLID, not GPON SN format
-    colStatus:   3,     // tentative: 1=online, 2=offline
-    colType:     4,     // tentative: ONU model/type string
-    colMac:      2,     // EPON ONU MAC address (6-byte OCTET STRING)
-    colDesc:     null,
+    tableRoot: "1.3.6.1.4.1.34592.1.1.3.1",
+    mibName: "cdataEponOnuTable",
+    colIndex: 1,
+    colSerial: null, // EPON uses MAC/LLID, not GPON SN format
+    colStatus: 3, // tentative: 1=online, 2=offline
+    colType: 4, // tentative: ONU model/type string
+    colMac: 2, // EPON ONU MAC address (6-byte OCTET STRING)
+    colDesc: null,
     distanceOid: null,
     parseInstance: (suffix) => {
       // Instance: {ponPortIndex}.{llid} — e.g. "1.3" → ponPort "1", onuId "3"
@@ -2783,7 +3008,7 @@ const VENDOR_ONU_MIBS: Record<string, VendorOnuMib | undefined> = {
       if (p.length < 2) return null;
       return { ponPort: p.slice(0, -1).join("."), onuId: p[p.length - 1]! };
     },
-    parseStatus: (v) => v === 1 ? "online" : v === 2 ? "offline" : "unknown",
+    parseStatus: (v) => (v === 1 ? "online" : v === 2 ? "offline" : "unknown"),
   },
 };
 
@@ -2839,20 +3064,19 @@ interface VendorOpticalMib {
  * TODO: Add BDCOM, VSOL, and C-DATA optical tables once OIDs are confirmed.
  */
 const VENDOR_OPTICAL_MIBS: Record<string, VendorOpticalMib | undefined> = {
-
   // ── Huawei MA5800-X7 / MA5800-X15 / MA5600T GPON ───────────────────────
   // MIB: HUAWEI-XPON-MIB::hwGponOnuOptIfInfoTable
   // Instance index: {frame}.{slot}.{port}.{onuId} — same as hwGponOnuMngTable
   // Confirmed: cols 2, 3, 4 (RX / TX / OLT-RX) @ 0.01 dBm resolution
   // Temperature col 9 is tentative — verify per firmware version
   Huawei: {
-    tableRoot:        "1.3.6.1.4.1.2011.6.139.4.1.4.1",
-    mibName:          "hwGponOnuOptIfInfoTable",
-    colRxPower:       2,    // hwGponOnuOptIfInfoRxPower    — 0.01 dBm
-    colTxPower:       3,    // hwGponOnuOptIfInfoTxPower    — 0.01 dBm
-    colOltRxPower:    4,    // hwGponOnuOptIfInfoOltRxPower — 0.01 dBm
-    colTemperature:   9,    // hwGponOnuOptIfInfoTemperature — tentative, 0.1 °C
-    powerScale:       0.01,
+    tableRoot: "1.3.6.1.4.1.2011.6.139.4.1.4.1",
+    mibName: "hwGponOnuOptIfInfoTable",
+    colRxPower: 2, // hwGponOnuOptIfInfoRxPower    — 0.01 dBm
+    colTxPower: 3, // hwGponOnuOptIfInfoTxPower    — 0.01 dBm
+    colOltRxPower: 4, // hwGponOnuOptIfInfoOltRxPower — 0.01 dBm
+    colTemperature: 9, // hwGponOnuOptIfInfoTemperature — tentative, 0.1 °C
+    powerScale: 0.01,
     temperatureScale: 0.1,
   },
 
@@ -2862,13 +3086,13 @@ const VENDOR_OPTICAL_MIBS: Record<string, VendorOpticalMib | undefined> = {
   // TODO: Validate all column assignments against production device MIB file.
   //       Column numbers vary significantly across C300 vs C320 firmware lines.
   ZTE: {
-    tableRoot:        "1.3.6.1.4.1.3902.3.101.13.10.8.1",
-    mibName:          "zxAnGponOnuPerfTable",
-    colRxPower:       4,    // tentative — zxAnGponOnuRxPower (0.01 dBm)
-    colTxPower:       5,    // tentative — zxAnGponOnuTxPower (0.01 dBm)
-    colOltRxPower:    6,    // tentative — zxAnGponOltRxPower (0.01 dBm)
-    colTemperature:   null, // not confirmed in publicly available ZTE GPON MIBs
-    powerScale:       0.01,
+    tableRoot: "1.3.6.1.4.1.3902.3.101.13.10.8.1",
+    mibName: "zxAnGponOnuPerfTable",
+    colRxPower: 4, // tentative — zxAnGponOnuRxPower (0.01 dBm)
+    colTxPower: 5, // tentative — zxAnGponOnuTxPower (0.01 dBm)
+    colOltRxPower: 6, // tentative — zxAnGponOltRxPower (0.01 dBm)
+    colTemperature: null, // not confirmed in publicly available ZTE GPON MIBs
+    powerScale: 0.01,
     temperatureScale: 1,
   },
 
@@ -2883,10 +3107,10 @@ const VENDOR_OPTICAL_MIBS: Record<string, VendorOpticalMib | undefined> = {
 // These are vendor-agnostic and work on any SNMP-capable device.
 // Append .{ifIndex} to form a complete OID (e.g. "...6.12" for ifIndex 12).
 
-const IF_HC_IN_OCTETS  = "1.3.6.1.2.1.31.1.1.1.6";   // ifHCInOctets  — Counter64 (64-bit preferred)
-const IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10";  // ifHCOutOctets — Counter64 (64-bit preferred)
-const IF_IN_OCTETS     = "1.3.6.1.2.1.2.2.1.10";     // ifInOctets    — Counter32 (32-bit fallback)
-const IF_OUT_OCTETS    = "1.3.6.1.2.1.2.2.1.16";     // ifOutOctets   — Counter32 (32-bit fallback)
+const IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"; // ifHCInOctets  — Counter64 (64-bit preferred)
+const IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"; // ifHCOutOctets — Counter64 (64-bit preferred)
+const IF_IN_OCTETS = "1.3.6.1.2.1.2.2.1.10"; // ifInOctets    — Counter32 (32-bit fallback)
+const IF_OUT_OCTETS = "1.3.6.1.2.1.2.2.1.16"; // ifOutOctets   — Counter32 (32-bit fallback)
 
 // ─── Vendor traffic statistics MIB definitions ────────────────────────────
 
@@ -2926,19 +3150,18 @@ interface VendorTrafficMib {
 }
 
 const VENDOR_TRAFFIC_MIBS: Record<string, VendorTrafficMib | undefined> = {
-
   // ── Huawei MA5800 / MA5600 GPON ─────────────────────────────────────────
   // MIB: HUAWEI-XPON-MIB::hwGponOnuStatTable (tentative OIDs)
   // Instance index: {frame}.{slot}.{port}.{onuId} — same as hwGponOnuMngTable
   // TODO: Confirm all column assignments against production firmware MIB file.
   //       Counter width (32-bit vs 64-bit) varies across MA5800/MA5600 firmware.
   Huawei: {
-    tableRoot:           "1.3.6.1.4.1.2011.6.139.4.1.5.1",
-    mibName:             "hwGponOnuStatTable",
-    colDownloadBytes:    2,    // tentative — hwGponOnuStatRxBytes
-    colUploadBytes:      3,    // tentative — hwGponOnuStatTxBytes
-    colDownloadRateKbps: 4,    // tentative — hwGponOnuStatRxRate (kbps)
-    colUploadRateKbps:   5,    // tentative — hwGponOnuStatTxRate (kbps)
+    tableRoot: "1.3.6.1.4.1.2011.6.139.4.1.5.1",
+    mibName: "hwGponOnuStatTable",
+    colDownloadBytes: 2, // tentative — hwGponOnuStatRxBytes
+    colUploadBytes: 3, // tentative — hwGponOnuStatTxBytes
+    colDownloadRateKbps: 4, // tentative — hwGponOnuStatRxRate (kbps)
+    colUploadRateKbps: 5, // tentative — hwGponOnuStatTxRate (kbps)
   },
 
   // ── ZTE C300 / C320 / C600 / C650 GPON ─────────────────────────────────
@@ -2946,12 +3169,12 @@ const VENDOR_TRAFFIC_MIBS: Record<string, VendorTrafficMib | undefined> = {
   // Instance index: {gponIfIndex}.{onuId} — same as zxAnGponOnuTable
   // TODO: Validate column numbers across C300 vs C320 firmware lines.
   ZTE: {
-    tableRoot:           "1.3.6.1.4.1.3902.3.101.13.10.9.1",
-    mibName:             "zxAnGponOnuTrafficTable",
-    colDownloadBytes:    2,    // tentative
-    colUploadBytes:      3,    // tentative
+    tableRoot: "1.3.6.1.4.1.3902.3.101.13.10.9.1",
+    mibName: "zxAnGponOnuTrafficTable",
+    colDownloadBytes: 2, // tentative
+    colUploadBytes: 3, // tentative
     colDownloadRateKbps: null, // not confirmed in publicly available ZTE MIBs
-    colUploadRateKbps:   null, // not confirmed
+    colUploadRateKbps: null, // not confirmed
   },
 
   // BDCOM / VSOL / CDATA: traffic table OIDs not yet confirmed.
@@ -2973,8 +3196,11 @@ const VENDOR_TRAFFIC_MIBS: Record<string, VendorTrafficMib | undefined> = {
 function parseGponSerial(value: unknown): string | null {
   if (Buffer.isBuffer(value)) {
     if (value.length < 4) return value.toString("hex").toUpperCase() || null;
-    const vendor = value.slice(0, 4).toString("ascii").replace(/[^\x20-\x7E]/g, "?");
-    const hex    = value.slice(4).toString("hex").toUpperCase();
+    const vendor = value
+      .slice(0, 4)
+      .toString("ascii")
+      .replace(/[^\x20-\x7E]/g, "?");
+    const hex = value.slice(4).toString("hex").toUpperCase();
     return `${vendor}${hex}` || null;
   }
   if (typeof value === "string") return value.trim() || null;
@@ -3010,7 +3236,8 @@ function parseMacAddress(value: unknown): string | null {
       .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
       .join(":");
   }
-  if (typeof value === "string" && value.includes(":")) return value.toUpperCase();
+  if (typeof value === "string" && value.includes(":"))
+    return value.toUpperCase();
   return null;
 }
 
@@ -3030,7 +3257,11 @@ function parseMacAddress(value: unknown): string | null {
  *
  * Falls back to just `onuId` when `ponPort` is not provided.
  */
-export function buildOnuInstance(vendor: string, onuId: string, ponPort?: string): string {
+export function buildOnuInstance(
+  vendor: string,
+  onuId: string,
+  ponPort?: string,
+): string {
   if (!ponPort) return onuId;
 
   switch (vendor) {
@@ -3058,10 +3289,12 @@ export function buildOnuInstance(vendor: string, onuId: string, ponPort?: string
  * Thresholds are based on ITU-T G.984.2 Class B+ which specifies −28 dBm
  * as the minimum ONT receiver sensitivity at 1490 nm.
  */
-function deriveOpticalStatus(rxPowerDbm: number | null): "good" | "weak" | "critical" | "unknown" {
+function deriveOpticalStatus(
+  rxPowerDbm: number | null,
+): "good" | "weak" | "critical" | "unknown" {
   if (rxPowerDbm === null) return "unknown";
-  if (rxPowerDbm >= -28)   return "good";
-  if (rxPowerDbm >= -30)   return "weak";
+  if (rxPowerDbm >= -28) return "good";
+  if (rxPowerDbm >= -30) return "weak";
   return "critical";
 }
 
@@ -3082,7 +3315,7 @@ function parseCounter64(value: unknown): number | null {
   if (Buffer.isBuffer(value)) {
     if (value.length === 8) {
       const high = value.readUInt32BE(0);
-      const low  = value.readUInt32BE(4);
+      const low = value.readUInt32BE(4);
       return high * 4294967296 + low;
     }
     if (value.length > 0) {
