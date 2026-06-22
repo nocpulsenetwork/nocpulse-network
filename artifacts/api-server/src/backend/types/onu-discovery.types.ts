@@ -71,6 +71,9 @@ export interface OnuDiscoverySummary {
    * Format for display: "{d}d {h}h {m}m {s}s" or the OLT-style "X day Y hour …".
    */
   registerDurationSecs: number | null;
+  lastOfflineTime?: string | null;
+  lastOfflineReason?: string | null;
+  lastOfflineRxPower?: number | null;
 }
 
 /** Per-PON-port summary derived from the ONU discovery list. */

@@ -69,6 +69,8 @@ interface ApiONU {
   distance: number | null;
   uptime: number | null;
   lastOfflineReason: string | null;
+  lastOfflineTime?: string | null;
+  lastOfflineRxPower?: number | null;
   lastOnlineTime: string | null;
 }
 
@@ -214,7 +216,10 @@ function transformOnu(o: ApiONU): OnuDevice {
     ponPort: `PON-${o.onuIndex}`,
     vlanId: o.vlan,
     oltPort: o.oltPort,
-    lastOfflineRxPower: o.status !== "online" ? rxPower : null,
+    
+    lastOfflineTime: o.lastOfflineTime ?? null,
+    lastOfflineReason: o.lastOfflineReason ?? null,
+    lastOfflineRxPower: o.lastOfflineRxPower ?? null,
     signalStability: deriveSignalStability(o.rxPower, o.status),
     onuType,
   };

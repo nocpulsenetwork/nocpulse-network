@@ -96,7 +96,11 @@ class DisconnectTracker {
               offlineReasonCode:  onu.offlineReasonCode   ?? null,
             };
             this.snapshots.set(mapKey, snap);
-            logger.info({ oltId, onuKey, rawOnuId: onu.onuId }, "disconnect-tracker:offline");
+            console.log({
+              oltId,
+              onuKey,
+              rawOnuId: onu.onuId,
+            }, "disconnect-tracker:offline");
 
           } else if (prev.status === "offline" && cur !== "offline") {
             // ── Offline → Online (or unknown) ─────────────────────────────
